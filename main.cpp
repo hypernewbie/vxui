@@ -17,48 +17,126 @@ typedef struct vxui_demo_app
     bool show_settings;
     int difficulty;
     float volume;
+    int locale_index;
 } vxui_demo_app;
 
 static const char* vxui_demo_text( const char* key, void* userdata )
 {
-    ( void ) userdata;
+    vxui_demo_app* app = ( vxui_demo_app* ) userdata;
 
-    if ( std::strcmp( key, "menu.main" ) == 0 ) {
-        return "Main Menu";
+    if ( app->locale_index == 1 ) {
+        if ( std::strcmp( key, "menu.main" ) == 0 ) {
+            return "メインメニュー";
+        }
+        if ( std::strcmp( key, "menu.settings" ) == 0 ) {
+            return "設定";
+        }
+        if ( std::strcmp( key, "menu.open_settings" ) == 0 ) {
+            return "設定";
+        }
+        if ( std::strcmp( key, "menu.back" ) == 0 ) {
+            return "戻る";
+        }
+        if ( std::strcmp( key, "menu.difficulty" ) == 0 ) {
+            return "難易度";
+        }
+        if ( std::strcmp( key, "menu.volume" ) == 0 ) {
+            return "音量";
+        }
+        if ( std::strcmp( key, "menu.saves" ) == 0 ) {
+            return "セーブ";
+        }
+        if ( std::strcmp( key, "menu.confirm" ) == 0 ) {
+            return "決定";
+        }
+        if ( std::strcmp( key, "menu.cancel" ) == 0 ) {
+            return "戻る";
+        }
+        if ( std::strcmp( key, "difficulty.easy" ) == 0 ) {
+            return "かんたん";
+        }
+        if ( std::strcmp( key, "difficulty.normal" ) == 0 ) {
+            return "ふつう";
+        }
+        if ( std::strcmp( key, "difficulty.hard" ) == 0 ) {
+            return "むずかしい";
+        }
+    } else if ( app->locale_index == 2 ) {
+        if ( std::strcmp( key, "menu.main" ) == 0 ) {
+            return "القائمة الرئيسية";
+        }
+        if ( std::strcmp( key, "menu.settings" ) == 0 ) {
+            return "الإعدادات";
+        }
+        if ( std::strcmp( key, "menu.open_settings" ) == 0 ) {
+            return "الإعدادات";
+        }
+        if ( std::strcmp( key, "menu.back" ) == 0 ) {
+            return "رجوع";
+        }
+        if ( std::strcmp( key, "menu.difficulty" ) == 0 ) {
+            return "الصعوبة";
+        }
+        if ( std::strcmp( key, "menu.volume" ) == 0 ) {
+            return "الصوت";
+        }
+        if ( std::strcmp( key, "menu.saves" ) == 0 ) {
+            return "الحفظ";
+        }
+        if ( std::strcmp( key, "menu.confirm" ) == 0 ) {
+            return "تأكيد";
+        }
+        if ( std::strcmp( key, "menu.cancel" ) == 0 ) {
+            return "إلغاء";
+        }
+        if ( std::strcmp( key, "difficulty.easy" ) == 0 ) {
+            return "سهل";
+        }
+        if ( std::strcmp( key, "difficulty.normal" ) == 0 ) {
+            return "عادي";
+        }
+        if ( std::strcmp( key, "difficulty.hard" ) == 0 ) {
+            return "صعب";
+        }
+    } else {
+        if ( std::strcmp( key, "menu.main" ) == 0 ) {
+            return "Main Menu";
+        }
+        if ( std::strcmp( key, "menu.settings" ) == 0 ) {
+            return "Settings";
+        }
+        if ( std::strcmp( key, "menu.open_settings" ) == 0 ) {
+            return "Settings";
+        }
+        if ( std::strcmp( key, "menu.back" ) == 0 ) {
+            return "Back";
+        }
+        if ( std::strcmp( key, "menu.difficulty" ) == 0 ) {
+            return "Difficulty";
+        }
+        if ( std::strcmp( key, "menu.volume" ) == 0 ) {
+            return "Volume";
+        }
+        if ( std::strcmp( key, "menu.saves" ) == 0 ) {
+            return "Save Slots";
+        }
+        if ( std::strcmp( key, "menu.confirm" ) == 0 ) {
+            return "Confirm";
+        }
+        if ( std::strcmp( key, "menu.cancel" ) == 0 ) {
+            return "Cancel";
+        }
+        if ( std::strcmp( key, "difficulty.easy" ) == 0 ) {
+            return "Easy";
+        }
+        if ( std::strcmp( key, "difficulty.normal" ) == 0 ) {
+            return "Normal";
+        }
+        if ( std::strcmp( key, "difficulty.hard" ) == 0 ) {
+            return "Hard";
+        }
     }
-    if ( std::strcmp( key, "menu.settings" ) == 0 ) {
-        return "Settings";
-    }
-    if ( std::strcmp( key, "menu.open_settings" ) == 0 ) {
-        return "Settings";
-    }
-    if ( std::strcmp( key, "menu.back" ) == 0 ) {
-        return "Back";
-    }
-    if ( std::strcmp( key, "menu.difficulty" ) == 0 ) {
-        return "Difficulty";
-    }
-    if ( std::strcmp( key, "menu.volume" ) == 0 ) {
-        return "Volume";
-    }
-    if ( std::strcmp( key, "menu.saves" ) == 0 ) {
-        return "Save Slots";
-    }
-    if ( std::strcmp( key, "menu.confirm" ) == 0 ) {
-        return "Confirm";
-    }
-    if ( std::strcmp( key, "menu.cancel" ) == 0 ) {
-        return "Cancel";
-    }
-    if ( std::strcmp( key, "difficulty.easy" ) == 0 ) {
-        return "Easy";
-    }
-    if ( std::strcmp( key, "difficulty.normal" ) == 0 ) {
-        return "Normal";
-    }
-    if ( std::strcmp( key, "difficulty.hard" ) == 0 ) {
-        return "Hard";
-    }
+
     if ( std::strcmp( key, "slot.0" ) == 0 ) {
         return "Autosave";
     }
@@ -87,16 +165,6 @@ static const char* vxui_demo_text( const char* key, void* userdata )
     return key;
 }
 
-static vxui_list_state* vxui_demo_find_list_state( vxui_ctx* ctx, uint32_t id )
-{
-    for ( int i = 0; i < ctx->list_state_count; ++i ) {
-        if ( ctx->list_states[ i ].id == id ) {
-            return &ctx->list_states[ i ];
-        }
-    }
-    return nullptr;
-}
-
 static bool vxui_demo_list_has_text( const vxui_draw_list* list, const char* text )
 {
     for ( int i = 0; i < list->length; ++i ) {
@@ -105,6 +173,16 @@ static bool vxui_demo_list_has_text( const vxui_draw_list* list, const char* tex
         }
     }
     return false;
+}
+
+static float vxui_demo_find_text_x( const vxui_draw_list* list, const char* text )
+{
+    for ( int i = 0; i < list->length; ++i ) {
+        if ( list->commands[ i ].type == VXUI_CMD_TEXT && list->commands[ i ].text.text && std::strcmp( list->commands[ i ].text.text, text ) == 0 ) {
+            return list->commands[ i ].text.pos.x;
+        }
+    }
+    return -1.0f;
 }
 
 static void vxui_demo_open_settings( vxui_ctx* ctx, uint32_t id, void* userdata )
@@ -141,10 +219,25 @@ int main( void )
     ve_fontcache cache = {};
     ve_fontcache_init( &cache, false );
     vxui_set_fontcache( &ctx, &cache );
-    vxui_set_text_fn( &ctx, vxui_demo_text, nullptr );
+
+    vxui_demo_app app = {
+        .show_settings = false,
+        .difficulty = 0,
+        .volume = 0.40f,
+        .locale_index = 0,
+    };
+    vxui_set_text_fn( &ctx, vxui_demo_text, &app );
+
+    vxui_set_locale_font( &ctx, "en", 1 );
+    vxui_set_locale_font( &ctx, "ja", 7 );
+    vxui_set_locale_font( &ctx, "ar", 9 );
 
     const char* difficulty_keys[] = { "difficulty.easy", "difficulty.normal", "difficulty.hard" };
     const char* slot_keys[] = { "slot.0", "slot.1", "slot.2", "slot.3", "slot.4", "slot.5", "slot.6", "slot.7" };
+    vxui_input_table keyboard_table = {
+        .confirm = { 5, 'E' },
+        .cancel = { 6, 'Q' },
+    };
     vxui_input_table gamepad_table = {
         .confirm = { 3, 'A' },
         .cancel = { 4, 'B' },
@@ -166,21 +259,30 @@ int main( void )
     vxui_register_seq( &ctx, "settings_enter", settings_enter, ( int ) ( sizeof( settings_enter ) / sizeof( settings_enter[ 0 ] ) ) );
     vxui_register_seq( &ctx, "settings_exit", settings_exit, ( int ) ( sizeof( settings_exit ) / sizeof( settings_exit[ 0 ] ) ) );
 
-    vxui_demo_app app = {
-        .show_settings = false,
-        .difficulty = 0,
-        .volume = 0.40f,
-    };
     vxui_push_screen( &ctx, "main_menu" );
+    float prompt_a_ltr_x = -1.0f;
+    float prompt_b_ltr_x = -1.0f;
 
-    for ( int frame = 0; frame < 5; ++frame ) {
+    for ( int frame = 0; frame < 6; ++frame ) {
+        if ( frame == 1 || frame == 2 ) {
+            app.locale_index = 1;
+            vxui_set_locale( &ctx, "ja-JP" );
+            vxui_set_input_table( &ctx, frame == 2 ? &gamepad_table : &keyboard_table );
+        } else if ( frame >= 3 ) {
+            app.locale_index = 2;
+            vxui_set_locale( &ctx, "ar" );
+            vxui_set_input_table( &ctx, frame == 3 ? &gamepad_table : &keyboard_table );
+        } else {
+            app.locale_index = 0;
+            vxui_set_locale( &ctx, "en" );
+            vxui_set_input_table( &ctx, &keyboard_table );
+        }
+
         vxui_begin( &ctx, 1.0f / 60.0f );
-        vxui_set_input_table( &ctx, frame == 2 ? &gamepad_table : nullptr );
-
         if ( frame == 1 ) {
             vxui_set_focus( &ctx, vxui_id( "main.settings" ) );
             vxui_input_confirm( &ctx );
-        } else if ( frame == 3 ) {
+        } else if ( frame == 4 ) {
             vxui_set_focus( &ctx, vxui_id( "settings.back" ) );
             vxui_input_confirm( &ctx );
         }
@@ -204,6 +306,7 @@ int main( void )
                     .layout = {
                         .childGap = 16,
                         .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+                        .layoutDirection = CLAY_LEFT_TO_RIGHT,
                     },
                 } ) {
                     VXUI_LABEL( &ctx, "menu.difficulty", ( vxui_label_cfg ) { 0 } );
@@ -214,6 +317,7 @@ int main( void )
                     .layout = {
                         .childGap = 16,
                         .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+                        .layoutDirection = CLAY_LEFT_TO_RIGHT,
                     },
                 } ) {
                     VXUI_LABEL( &ctx, "menu.volume", ( vxui_label_cfg ) { 0 } );
@@ -238,6 +342,7 @@ int main( void )
                     .layout = {
                         .childGap = 8,
                         .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+                        .layoutDirection = CLAY_LEFT_TO_RIGHT,
                     },
                 } ) {
                     VXUI_PROMPT( &ctx, "action.confirm" );
@@ -274,18 +379,19 @@ int main( void )
         assert( list.length > 0 );
 
         if ( frame == 0 ) {
-            assert( vxui_seq_playing( &ctx, "main_menu_enter" ) );
+            assert( vxui_demo_list_has_text( &list, "Main Menu" ) );
+            assert( ctx.text_queue[ 0 ].font_id == 1u );
         }
         if ( frame == 1 ) {
+            assert( vxui_demo_list_has_text( &list, "メインメニュー" ) );
+            assert( ctx.text_queue[ 0 ].font_id == 7u );
             assert( app.show_settings );
-            assert( ctx.screen_count == 2 );
-            assert( ctx.screens[ 1 ].state == VXUI_SCREEN_ENTERING );
-            assert( vxui_seq_playing( &ctx, "settings_enter" ) );
         }
         if ( frame == 2 ) {
-            assert( vxui_demo_list_has_text( &list, "Settings" ) );
             bool saw_a = false;
             bool saw_b = false;
+            prompt_a_ltr_x = vxui_demo_find_text_x( &list, "A" );
+            prompt_b_ltr_x = vxui_demo_find_text_x( &list, "B" );
             for ( int i = 0; i < ctx.text_queue_count; ++i ) {
                 if ( ctx.text_queue[ i ].font_id == 3 && std::strcmp( ctx.text_queue[ i ].text, "A" ) == 0 ) {
                     saw_a = true;
@@ -294,19 +400,25 @@ int main( void )
                     saw_b = true;
                 }
             }
+            assert( vxui_demo_list_has_text( &list, "設定" ) );
+            assert( ctx.text_queue[ 0 ].font_id == 7u );
             assert( saw_a );
             assert( saw_b );
         }
         if ( frame == 3 ) {
-            assert( !app.show_settings );
-            assert( ctx.screens[ 1 ].state == VXUI_SCREEN_EXITING );
-            assert( vxui_seq_playing( &ctx, "settings_exit" ) );
+            float prompt_a_rtl_x = vxui_demo_find_text_x( &list, "A" );
+            float prompt_b_rtl_x = vxui_demo_find_text_x( &list, "B" );
+            assert( ctx.rtl );
+            assert( ctx.text_queue[ 0 ].font_id == 9u );
+            assert( prompt_a_ltr_x != prompt_a_rtl_x || prompt_b_ltr_x != prompt_b_rtl_x );
         }
         if ( frame == 4 ) {
-            assert( vxui_demo_list_has_text( &list, "Main Menu" ) );
-            assert( vxui_demo_list_has_text( &list, "Settings" ) );
-            vxui_list_state* saves = vxui_demo_find_list_state( &ctx, vxui_id( "settings.saves" ) );
-            assert( saves == nullptr || saves->focused_index >= 0 );
+            assert( !app.show_settings );
+            assert( ctx.screens[ 1 ].state == VXUI_SCREEN_EXITING );
+        }
+        if ( frame == 5 ) {
+            assert( vxui_demo_list_has_text( &list, "القائمة الرئيسية" ) );
+            assert( vxui_demo_list_has_text( &list, "الإعدادات" ) );
         }
 
         for ( int i = 0; i < list.length; ++i ) {

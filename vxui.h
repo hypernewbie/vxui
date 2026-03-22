@@ -13,7 +13,7 @@
 typedef struct ve_fontcache ve_fontcache;
 
 #define VXUI( ctx, id_str, ... ) \
-    CLAY( CLAY_ID( id_str ), __VA_ARGS__ )
+    CLAY( CLAY_ID( id_str ), vxui__rtl_decl( ( ctx ), ( Clay_ElementDeclaration ) __VA_ARGS__ ) )
 
 #define VXUI_DEFAULT_STIFFNESS 200.0f
 #define VXUI_DEFAULT_DAMPING 20.0f
@@ -49,6 +49,7 @@ typedef struct vxui_arena
 } vxui_arena;
 
 typedef struct vxui_ctx vxui_ctx;
+static inline Clay_ElementDeclaration vxui__rtl_decl( vxui_ctx* ctx, Clay_ElementDeclaration decl );
 
 typedef void ( *vxui_action_fn )( vxui_ctx* ctx, uint32_t id, void* userdata );
 typedef void ( *vxui_int_change_fn )( vxui_ctx* ctx, int value, void* userdata );
@@ -109,17 +110,31 @@ typedef struct vxui_list_cfg
     float scroll_damping;
 } vxui_list_cfg;
 
-typedef struct vxui_prompt_binding
+typedef struct vxui_input_glyph
 {
     uint32_t font_id;
     uint32_t glyph;
-} vxui_prompt_binding;
+} vxui_input_glyph;
+
+typedef vxui_input_glyph vxui_prompt_binding;
 
 typedef struct vxui_input_table
 {
-    vxui_prompt_binding confirm;
-    vxui_prompt_binding cancel;
+    vxui_input_glyph confirm;
+    vxui_input_glyph cancel;
+    vxui_input_glyph tab_left;
+    vxui_input_glyph tab_right;
+    vxui_input_glyph up;
+    vxui_input_glyph down;
+    vxui_input_glyph left;
+    vxui_input_glyph right;
 } vxui_input_table;
+
+typedef struct vxui_locale_font
+{
+    char locale[ 16 ];
+    uint32_t font_id;
+} vxui_locale_font;
 
 typedef enum vxui_dir
 {
@@ -461,6 +476,11 @@ typedef struct vxui_ctx
     int list_state_count;
     int list_state_capacity;
     const vxui_input_table* input_table;
+    char locale[ 16 ];
+    vxui_locale_font* locale_fonts;
+    int locale_font_count;
+    int locale_font_capacity;
+    bool rtl;
 
     vxui_screen* screens;
     int screen_count;
@@ -473,6 +493,12 @@ typedef struct vxui_ctx
     int active_seq_capacity;
     uint64_t elapsed_ms;
 } vxui_ctx;
+
+static inline Clay_ElementDeclaration vxui__rtl_decl( vxui_ctx* ctx, Clay_ElementDeclaration decl )
+{
+    ( void ) ctx;
+    return decl;
+}
 
 uint64_t vxui_min_memory_size( void );
 vxui_arena vxui_create_arena( uint64_t size, void* memory );
@@ -489,6 +515,8 @@ void vxui_input_tab( vxui_ctx* ctx, int direction );
 uint32_t vxui_focused_id( vxui_ctx* ctx );
 void vxui_set_focus( vxui_ctx* ctx, uint32_t id );
 void vxui_set_input_table( vxui_ctx* ctx, const vxui_input_table* table );
+void vxui_set_locale( vxui_ctx* ctx, const char* locale_code );
+void vxui_set_locale_font( vxui_ctx* ctx, const char* locale_code, uint32_t font_id );
 void vxui_push_screen( vxui_ctx* ctx, const char* name );
 void vxui_pop_screen( vxui_ctx* ctx );
 void vxui_replace_screen( vxui_ctx* ctx, const char* name );
@@ -542,6 +570,12 @@ enum
 static const vxui_input_table vxui__input_keyboard = {
     .confirm = { 0, 'E' },
     .cancel = { 0, 'Q' },
+    .tab_left = { 0, '[' },
+    .tab_right = { 0, ']' },
+    .up = { 0, '^' },
+    .down = { 0, 'v' },
+    .left = { 0, '<' },
+    .right = { 0, '>' },
 };
 
 static void* vxui__arena_alloc( vxui_arena* arena, uint64_t size, uint64_t align );
@@ -551,6 +585,7 @@ static Clay_String vxui__clay_string_from_cstr( const char* text );
 static Clay_ElementId vxui__clay_id_from_hash( uint32_t id );
 static vxui_rect vxui__rect_from_clay_box( Clay_BoundingBox box );
 static vxui_rect vxui__rect_union( vxui_rect a, vxui_rect b );
+static Clay_ElementDeclaration vxui__rtl_decl( vxui_ctx* ctx, Clay_ElementDeclaration decl );
 static vxui_rect vxui__transform_rect( vxui_rect rect, const vxui_anim_state* st );
 static vxui_color vxui__color_from_clay( Clay_Color color );
 static vxui_color vxui__apply_anim_color( vxui_color color, const vxui_anim_state* st );
@@ -563,6 +598,9 @@ static vxui_decl* vxui__push_decl( vxui_ctx* ctx );
 static const char* vxui__push_frame_string( vxui_ctx* ctx, const char* text, size_t length );
 static const char* vxui__copy_slice_text( vxui_ctx* ctx, Clay_StringSlice text );
 static const char* vxui__resolve_text( vxui_ctx* ctx, const char* key );
+static uint32_t vxui__font_for_locale( vxui_ctx* ctx );
+static bool vxui__locale_is_rtl( const char* locale );
+static Clay_LayoutDirection vxui__resolve_dir( Clay_LayoutDirection dir, bool rtl );
 static uint32_t vxui__effective_font_id( vxui_ctx* ctx, uint32_t font_id );
 static float vxui__effective_font_size( vxui_ctx* ctx, float font_size );
 static vxui_color vxui__effective_text_color( vxui_ctx* ctx, vxui_color color );
@@ -600,6 +638,7 @@ static void vxui__snapshot_from_draw_list( vxui_ctx* ctx, vxui_snapshot* dst, co
 static void vxui__emit_snapshot( vxui_ctx* ctx, const vxui_screen* screen );
 static void vxui__compact_dead_screens( vxui_ctx* ctx );
 static void vxui__update_screen_states( vxui_ctx* ctx );
+static void vxui__mirror_rtl_commands( vxui_ctx* ctx );
 static bool vxui__option_step( int* value, int count, int delta, bool wrap );
 static float vxui__clamp01( float t );
 static void vxui__register_decl( vxui_ctx* ctx, vxui_decl_kind kind, uint32_t id, uint32_t nav_up, uint32_t nav_down, uint32_t nav_left, uint32_t nav_right, bool focusable, bool disabled, bool no_focus_ring, vxui_action_fn on_confirm, void* userdata );
@@ -893,9 +932,55 @@ static const char* vxui__resolve_text( vxui_ctx* ctx, const char* key )
     return key;
 }
 
+static bool vxui__locale_is_rtl( const char* locale )
+{
+    if ( !locale ) {
+        return false;
+    }
+
+    return std::strncmp( locale, "ar", 2 ) == 0 ||
+           std::strncmp( locale, "he", 2 ) == 0 ||
+           std::strncmp( locale, "fa", 2 ) == 0 ||
+           std::strncmp( locale, "ur", 2 ) == 0;
+}
+
+static Clay_LayoutDirection vxui__resolve_dir( Clay_LayoutDirection dir, bool rtl )
+{
+    ( void ) rtl;
+    return dir;
+}
+
+static uint32_t vxui__font_for_locale( vxui_ctx* ctx )
+{
+    if ( !ctx || ctx->locale[ 0 ] == '\0' ) {
+        return ctx ? ctx->default_font_id : 0;
+    }
+
+    for ( int i = 0; i < ctx->locale_font_count; ++i ) {
+        if ( std::strcmp( ctx->locale_fonts[ i ].locale, ctx->locale ) == 0 ) {
+            return ctx->locale_fonts[ i ].font_id;
+        }
+    }
+
+    for ( int i = 0; i < ctx->locale_font_count; ++i ) {
+        size_t prefix_length = std::strlen( ctx->locale_fonts[ i ].locale );
+        if ( prefix_length == 0 ) {
+            continue;
+        }
+        if ( std::strncmp( ctx->locale_fonts[ i ].locale, ctx->locale, prefix_length ) != 0 ) {
+            continue;
+        }
+        if ( ctx->locale[ prefix_length ] == '-' || ctx->locale[ prefix_length ] == '_' ) {
+            return ctx->locale_fonts[ i ].font_id;
+        }
+    }
+
+    return ctx->default_font_id;
+}
+
 static uint32_t vxui__effective_font_id( vxui_ctx* ctx, uint32_t font_id )
 {
-    return font_id != 0 ? font_id : ctx->default_font_id;
+    return font_id != 0 ? font_id : vxui__font_for_locale( ctx );
 }
 
 static float vxui__effective_font_size( vxui_ctx* ctx, float font_size )
@@ -1058,14 +1143,24 @@ static vxui_prompt_binding vxui__resolve_prompt_binding( vxui_ctx* ctx, const ch
 
     if ( std::strcmp( action_name, "action.confirm" ) == 0 ) {
         binding = ctx->input_table->confirm;
-        if ( found ) {
-            *found = binding.glyph != 0;
-        }
     } else if ( std::strcmp( action_name, "action.cancel" ) == 0 ) {
         binding = ctx->input_table->cancel;
-        if ( found ) {
-            *found = binding.glyph != 0;
-        }
+    } else if ( std::strcmp( action_name, "action.tab_left" ) == 0 ) {
+        binding = ctx->input_table->tab_left;
+    } else if ( std::strcmp( action_name, "action.tab_right" ) == 0 ) {
+        binding = ctx->input_table->tab_right;
+    } else if ( std::strcmp( action_name, "action.up" ) == 0 ) {
+        binding = ctx->input_table->up;
+    } else if ( std::strcmp( action_name, "action.down" ) == 0 ) {
+        binding = ctx->input_table->down;
+    } else if ( std::strcmp( action_name, "action.left" ) == 0 ) {
+        binding = ctx->input_table->left;
+    } else if ( std::strcmp( action_name, "action.right" ) == 0 ) {
+        binding = ctx->input_table->right;
+    }
+
+    if ( found ) {
+        *found = binding.glyph != 0;
     }
 
     return binding;
@@ -1329,6 +1424,47 @@ static void vxui__update_screen_states( vxui_ctx* ctx )
     }
 
     vxui__compact_dead_screens( ctx );
+}
+
+static void vxui__mirror_rtl_commands( vxui_ctx* ctx )
+{
+    if ( !ctx->rtl ) {
+        return;
+    }
+
+    for ( int i = 0; i < ctx->command_count; ++i ) {
+        vxui_cmd* cmd = &ctx->commands[ i ];
+        switch ( cmd->type ) {
+            case VXUI_CMD_RECT:
+                cmd->rect.bounds.x = ( float ) ctx->cfg.screen_width - cmd->rect.bounds.x - cmd->rect.bounds.w;
+                break;
+
+            case VXUI_CMD_RECT_ROUNDED:
+                cmd->rect_rounded.bounds.x = ( float ) ctx->cfg.screen_width - cmd->rect_rounded.bounds.x - cmd->rect_rounded.bounds.w;
+                break;
+
+            case VXUI_CMD_BORDER:
+                cmd->border.bounds.x = ( float ) ctx->cfg.screen_width - cmd->border.bounds.x - cmd->border.bounds.w;
+                break;
+
+            case VXUI_CMD_IMAGE:
+                cmd->image.bounds.x = ( float ) ctx->cfg.screen_width - cmd->image.bounds.x - cmd->image.bounds.w;
+                break;
+
+            case VXUI_CMD_TEXT:
+                cmd->text.pos.x = ( float ) ctx->cfg.screen_width - cmd->text.pos.x;
+                break;
+
+            case VXUI_CMD_CLIP_PUSH:
+            case VXUI_CMD_CLIP_POP:
+                cmd->clip.rect.x = ( float ) ctx->cfg.screen_width - cmd->clip.rect.x - cmd->clip.rect.w;
+                break;
+        }
+
+        if ( cmd->clip_rect.w > 0.0f || cmd->clip_rect.h > 0.0f ) {
+            cmd->clip_rect.x = ( float ) ctx->cfg.screen_width - cmd->clip_rect.x - cmd->clip_rect.w;
+        }
+    }
 }
 
 static vxui_anim_slot* vxui__get_anim_slot( vxui_ctx* ctx, uint32_t id, bool create )
@@ -2218,9 +2354,10 @@ uint64_t vxui_min_memory_size( void )
     uint64_t snapshot_text_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SCREENS * ( uint64_t ) VXUI__DEFAULT_SNAPSHOT_TEXT_BYTES;
     uint64_t registered_seq_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SEQUENCES * ( uint64_t ) sizeof( vxui_registered_seq );
     uint64_t active_seq_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ACTIVE_SEQS * ( uint64_t ) sizeof( vxui_active_seq );
+    uint64_t locale_font_bytes = 32u * ( uint64_t ) sizeof( vxui_locale_font );
     uint64_t frame_bytes = ( uint64_t ) VXUI__DEFAULT_FRAME_STRING_BYTES;
     uint64_t slack_bytes = 64u * 1024u;
-    return clay_bytes + command_bytes + command_id_bytes + text_bytes + clip_bytes + decl_bytes + owner_bytes + list_scope_bytes + list_state_bytes + anim_bytes + retained_cmd_bytes + retained_valid_bytes + retained_text_bytes + screen_bytes + snapshot_cmd_bytes + snapshot_id_bytes + snapshot_text_bytes + registered_seq_bytes + active_seq_bytes + frame_bytes + slack_bytes;
+    return clay_bytes + command_bytes + command_id_bytes + text_bytes + clip_bytes + decl_bytes + owner_bytes + list_scope_bytes + list_state_bytes + anim_bytes + retained_cmd_bytes + retained_valid_bytes + retained_text_bytes + screen_bytes + snapshot_cmd_bytes + snapshot_id_bytes + snapshot_text_bytes + registered_seq_bytes + active_seq_bytes + locale_font_bytes + frame_bytes + slack_bytes;
 }
 
 vxui_arena vxui_create_arena( uint64_t size, void* memory )
@@ -2435,6 +2572,19 @@ void vxui_init( vxui_ctx* ctx, vxui_arena arena, vxui_config cfg )
         ctx->active_seq_capacity = 0;
     }
 
+    ctx->locale_font_capacity = 32;
+    ctx->locale_fonts = ( vxui_locale_font* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->locale_font_capacity * ( uint64_t ) sizeof( vxui_locale_font ),
+        ( uint64_t ) alignof( vxui_locale_font ) );
+    if ( ctx->locale_fonts ) {
+        std::memset( ctx->locale_fonts, 0, ( size_t ) ctx->locale_font_capacity * sizeof( vxui_locale_font ) );
+    } else {
+        ctx->locale_font_capacity = 0;
+    }
+    std::snprintf( ctx->locale, sizeof( ctx->locale ), "%s", "en" );
+    ctx->rtl = false;
+
     vxui__reset_frame_buffers( ctx );
 }
 
@@ -2485,6 +2635,7 @@ vxui_draw_list vxui_end( vxui_ctx* ctx )
             vxui__emit_snapshot( ctx, &ctx->screens[ i ] );
         }
     }
+    vxui__mirror_rtl_commands( ctx );
     vxui__update_screen_states( ctx );
 
     list.commands = ctx->commands;
@@ -2545,6 +2696,34 @@ void vxui_set_focus( vxui_ctx* ctx, uint32_t id )
 void vxui_set_input_table( vxui_ctx* ctx, const vxui_input_table* table )
 {
     ctx->input_table = table ? table : &vxui__input_keyboard;
+}
+
+void vxui_set_locale( vxui_ctx* ctx, const char* locale_code )
+{
+    std::snprintf( ctx->locale, sizeof( ctx->locale ), "%s", locale_code ? locale_code : "" );
+    ctx->rtl = vxui__locale_is_rtl( ctx->locale );
+}
+
+void vxui_set_locale_font( vxui_ctx* ctx, const char* locale_code, uint32_t font_id )
+{
+    if ( !locale_code || locale_code[ 0 ] == '\0' ) {
+        return;
+    }
+
+    for ( int i = 0; i < ctx->locale_font_count; ++i ) {
+        if ( std::strcmp( ctx->locale_fonts[ i ].locale, locale_code ) == 0 ) {
+            ctx->locale_fonts[ i ].font_id = font_id;
+            return;
+        }
+    }
+
+    if ( ctx->locale_font_count >= ctx->locale_font_capacity ) {
+        return;
+    }
+
+    vxui_locale_font* entry = &ctx->locale_fonts[ ctx->locale_font_count++ ];
+    std::snprintf( entry->locale, sizeof( entry->locale ), "%s", locale_code );
+    entry->font_id = font_id;
 }
 
 void vxui_push_screen( vxui_ctx* ctx, const char* name )
@@ -2840,7 +3019,7 @@ void VXUI_VALUE( vxui_ctx* ctx, const char* l10n_key, float value, vxui_value_cf
     CLAY( vxui__clay_id_from_hash( decl_id ), {
         .layout = {
             .childGap = 8,
-            .layoutDirection = CLAY_LEFT_TO_RIGHT,
+            .layoutDirection = vxui__resolve_dir( CLAY_LEFT_TO_RIGHT, ctx->rtl ),
         },
     } ) {
         vxui__emit_text( ctx, resolved, font_id, font_size, color, decl_id );
@@ -2862,7 +3041,7 @@ void VXUI_ACTION( vxui_ctx* ctx, const char* id, const char* l10n_key, vxui_acti
         vxui__emit_text(
             ctx,
             resolved,
-            ctx->default_font_id,
+            vxui__effective_font_id( ctx, 0 ),
             ctx->default_font_size,
             ctx->default_text_color,
             action_id );
@@ -2922,7 +3101,7 @@ void VXUI_OPTION( vxui_ctx* ctx, const char* id, int* index, const char** string
             .padding = CLAY_PADDING_ALL( 4 ),
         },
     } ) {
-        vxui__emit_text( ctx, resolved, ctx->default_font_id, ctx->default_font_size, ctx->default_text_color, option_id );
+        vxui__emit_text( ctx, resolved, vxui__effective_font_id( ctx, 0 ), ctx->default_font_size, ctx->default_text_color, option_id );
     }
 }
 
@@ -2999,6 +3178,7 @@ void VXUI_SLIDER( vxui_ctx* ctx, const char* id, float* value, float min_value, 
             .padding = { 4, 4, 4, 4 },
             .childGap = 8,
             .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+            .layoutDirection = vxui__resolve_dir( CLAY_LEFT_TO_RIGHT, ctx->rtl ),
         },
     } ) {
         CLAY( vxui__clay_id_from_hash( slider_track_id ), {
@@ -3018,7 +3198,7 @@ void VXUI_SLIDER( vxui_ctx* ctx, const char* id, float* value, float min_value, 
         }
 
         if ( cfg.show_value && !value_text.empty() ) {
-            vxui__emit_text( ctx, value_text.c_str(), ctx->default_font_id, ctx->default_font_size, ctx->default_text_color, slider_id );
+            vxui__emit_text( ctx, value_text.c_str(), vxui__effective_font_id( ctx, 0 ), ctx->default_font_size, ctx->default_text_color, slider_id );
         }
     }
 }
@@ -3044,7 +3224,7 @@ void VXUI_PROMPT( vxui_ctx* ctx, const char* action_name )
     vxui__get_anim_state( ctx, prompt_id, true );
 
     CLAY( vxui__clay_id_from_hash( prompt_id ), {} ) {
-        vxui__emit_text( ctx, glyph, vxui__effective_font_id( ctx, binding.font_id ), ctx->default_font_size, ctx->default_text_color, prompt_id );
+        vxui__emit_text( ctx, glyph, binding.font_id != 0 ? binding.font_id : ctx->default_font_id, ctx->default_font_size, ctx->default_text_color, prompt_id );
     }
 }
 
