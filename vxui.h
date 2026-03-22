@@ -51,6 +51,8 @@ typedef struct vxui_arena
 typedef struct vxui_ctx vxui_ctx;
 
 typedef void ( *vxui_action_fn )( vxui_ctx* ctx, uint32_t id, void* userdata );
+typedef void ( *vxui_int_change_fn )( vxui_ctx* ctx, int value, void* userdata );
+typedef void ( *vxui_float_change_fn )( vxui_ctx* ctx, float value, void* userdata );
 
 typedef struct vxui_label_cfg
 {
@@ -78,6 +80,46 @@ typedef struct vxui_action_cfg
     bool disabled;
     void* userdata;
 } vxui_action_cfg;
+
+typedef struct vxui_option_cfg
+{
+    bool wrap;
+    uint32_t nav_up;
+    uint32_t nav_down;
+    uint32_t nav_left;
+    uint32_t nav_right;
+    vxui_int_change_fn on_change;
+    void* userdata;
+} vxui_option_cfg;
+
+typedef struct vxui_slider_cfg
+{
+    float step;
+    bool show_value;
+    const char* format;
+    vxui_float_change_fn on_change;
+    void* userdata;
+} vxui_slider_cfg;
+
+typedef struct vxui_list_cfg
+{
+    int max_visible;
+    float item_height;
+    float scroll_stiffness;
+    float scroll_damping;
+} vxui_list_cfg;
+
+typedef struct vxui_prompt_binding
+{
+    uint32_t font_id;
+    uint32_t glyph;
+} vxui_prompt_binding;
+
+typedef struct vxui_input_table
+{
+    vxui_prompt_binding confirm;
+    vxui_prompt_binding cancel;
+} vxui_input_table;
 
 typedef enum vxui_dir
 {
@@ -251,6 +293,11 @@ typedef enum vxui_decl_kind
     VXUI_DECL_LABEL,
     VXUI_DECL_VALUE,
     VXUI_DECL_ACTION,
+    VXUI_DECL_OPTION,
+    VXUI_DECL_SLIDER,
+    VXUI_DECL_LIST,
+    VXUI_DECL_LIST_ITEM,
+    VXUI_DECL_PROMPT,
 } vxui_decl_kind;
 
 typedef struct vxui_decl
@@ -267,6 +314,25 @@ typedef struct vxui_decl
     vxui_action_fn on_confirm;
     void* userdata;
 } vxui_decl;
+
+typedef struct vxui_input_owner
+{
+    uint32_t id;
+    int depth;
+    bool consume_up;
+    bool consume_down;
+    bool consume_left;
+    bool consume_right;
+} vxui_input_owner;
+
+typedef struct vxui_list_state
+{
+    uint32_t id;
+    int focused_index;
+    float scroll_current;
+    float scroll_target;
+    float scroll_velocity;
+} vxui_list_state;
 
 typedef struct vxui_ctx
 {
@@ -326,6 +392,19 @@ typedef struct vxui_ctx
     uint32_t focused_id;
     uint32_t pending_focus_id;
     vxui_focus_ring_state focus_ring_state;
+
+    vxui_input_owner* input_owners;
+    int input_owner_count;
+    int input_owner_capacity;
+    uint32_t* list_scope_ids;
+    vxui_list_cfg* list_scope_cfgs;
+    int* list_scope_item_counts;
+    int list_scope_count;
+    int list_scope_capacity;
+    vxui_list_state* list_states;
+    int list_state_count;
+    int list_state_capacity;
+    const vxui_input_table* input_table;
 } vxui_ctx;
 
 uint64_t vxui_min_memory_size( void );
@@ -342,11 +421,28 @@ void vxui_input_cancel( vxui_ctx* ctx );
 void vxui_input_tab( vxui_ctx* ctx, int direction );
 uint32_t vxui_focused_id( vxui_ctx* ctx );
 void vxui_set_focus( vxui_ctx* ctx, uint32_t id );
+void vxui_set_input_table( vxui_ctx* ctx, const vxui_input_table* table );
+void vxui_list_begin( vxui_ctx* ctx, const char* id, vxui_list_cfg cfg );
+void vxui_list_end( vxui_ctx* ctx );
+void vxui_list_item_begin( vxui_ctx* ctx, int index );
+void vxui_list_item_end( vxui_ctx* ctx );
 void VXUI_LABEL( vxui_ctx* ctx, const char* l10n_key, vxui_label_cfg cfg );
 void VXUI_VALUE( vxui_ctx* ctx, const char* l10n_key, float value, vxui_value_cfg cfg );
 void VXUI_ACTION( vxui_ctx* ctx, const char* id, const char* l10n_key, vxui_action_fn fn, vxui_action_cfg cfg );
+void VXUI_OPTION( vxui_ctx* ctx, const char* id, int* index, const char** strings, int count, vxui_option_cfg cfg );
+void VXUI_SLIDER( vxui_ctx* ctx, const char* id, float* value, float min_value, float max_value, vxui_slider_cfg cfg );
+void VXUI_PROMPT( vxui_ctx* ctx, const char* action_name );
 uint32_t vxui_id( const char* label );
 uint32_t vxui_idi( const char* label, int index );
+
+#define VXUI_LIST_BEGIN( ctx, id, ... ) \
+    for ( bool _vxui_list_once = ( vxui_list_begin( ( ctx ), ( id ), __VA_ARGS__ ), true ); _vxui_list_once; _vxui_list_once = ( vxui_list_end( ( ctx ) ), false ) )
+
+#define VXUI_LIST_ITEM( ctx, index ) \
+    for ( bool _vxui_list_item_once = ( vxui_list_item_begin( ( ctx ), ( index ) ), true ); _vxui_list_item_once; _vxui_list_item_once = ( vxui_list_item_end( ( ctx ) ), false ) )
+
+#define VXUI_LIST_END( ctx ) \
+    do { ( void ) ( ctx ); } while ( 0 )
 
 #ifdef VXUI_IMPL
 
@@ -361,8 +457,14 @@ enum
     VXUI__DEFAULT_MAX_ANIM_STATES = 1024,
     VXUI__DEFAULT_MAX_SEQUENCES = 64,
     VXUI__DEFAULT_MAX_SEQ_STEPS = 1024,
+    VXUI__DEFAULT_MAX_LIST_STATES = 64,
     VXUI__DEFAULT_FRAME_STRING_BYTES = VXUI__DEFAULT_MAX_ELEMENTS * 128,
     VXUI__DEFAULT_RETAINED_TEXT_BYTES = 256,
+};
+
+static const vxui_input_table vxui__input_keyboard = {
+    .confirm = { 0, 'E' },
+    .cancel = { 0, 'Q' },
 };
 
 static void* vxui__arena_alloc( vxui_arena* arena, uint64_t size, uint64_t align );
@@ -410,6 +512,13 @@ static void vxui__update_anim_store( vxui_ctx* ctx );
 static void vxui__capture_retained_cmd( vxui_ctx* ctx, uint32_t id, const vxui_cmd* cmd );
 static void vxui__emit_retained_anim_commands( vxui_ctx* ctx );
 static void vxui__evict_dead_anim_states( vxui_ctx* ctx );
+static bool vxui__option_step( int* value, int count, int delta, bool wrap );
+static float vxui__clamp01( float t );
+static void vxui__register_decl( vxui_ctx* ctx, vxui_decl_kind kind, uint32_t id, uint32_t nav_up, uint32_t nav_down, uint32_t nav_left, uint32_t nav_right, bool focusable, bool disabled, bool no_focus_ring, vxui_action_fn on_confirm, void* userdata );
+static vxui_input_owner* vxui__push_input_owner( vxui_ctx* ctx, uint32_t id, bool consume_up, bool consume_down, bool consume_left, bool consume_right );
+static vxui_list_state* vxui__get_list_state( vxui_ctx* ctx, uint32_t id, bool create );
+static vxui_prompt_binding vxui__resolve_prompt_binding( vxui_ctx* ctx, const char* action_name, bool* found );
+static const char* vxui__push_utf8_codepoint( vxui_ctx* ctx, uint32_t codepoint );
 static void vxui__translate_clay_commands( vxui_ctx* ctx );
 static vxui_config vxui__sanitize_config( vxui_config cfg );
 
@@ -615,6 +724,8 @@ static void vxui__reset_frame_buffers( vxui_ctx* ctx )
     ctx->clip_stack_count = 0;
     ctx->frame_string_count = 0;
     ctx->decl_count = 0;
+    ctx->input_owner_count = 0;
+    ctx->list_scope_count = 0;
 }
 
 static vxui_cmd* vxui__push_cmd( vxui_ctx* ctx, vxui_cmd_type type )
@@ -717,24 +828,177 @@ static void vxui__emit_text( vxui_ctx* ctx, const char* text, uint32_t font_id, 
         } ) );
 }
 
-static void vxui__register_action( vxui_ctx* ctx, uint32_t id, vxui_action_fn fn, vxui_action_cfg cfg )
+static bool vxui__option_step( int* value, int count, int delta, bool wrap )
+{
+    int next = *value + delta;
+    if ( wrap ) {
+        if ( next < 0 ) {
+            next = count - 1;
+        } else if ( next >= count ) {
+            next = 0;
+        }
+    } else {
+        if ( next < 0 ) {
+            next = 0;
+        } else if ( next >= count ) {
+            next = count - 1;
+        }
+    }
+
+    if ( next == *value ) {
+        return false;
+    }
+
+    *value = next;
+    return true;
+}
+
+static float vxui__clamp01( float t )
+{
+    if ( t < 0.0f ) {
+        return 0.0f;
+    }
+    if ( t > 1.0f ) {
+        return 1.0f;
+    }
+    return t;
+}
+
+static void vxui__register_decl(
+    vxui_ctx* ctx,
+    vxui_decl_kind kind,
+    uint32_t id,
+    uint32_t nav_up,
+    uint32_t nav_down,
+    uint32_t nav_left,
+    uint32_t nav_right,
+    bool focusable,
+    bool disabled,
+    bool no_focus_ring,
+    vxui_action_fn on_confirm,
+    void* userdata )
 {
     vxui_decl* decl = vxui__push_decl( ctx );
     if ( !decl ) {
         return;
     }
 
-    decl->kind = VXUI_DECL_ACTION;
+    decl->kind = kind;
     decl->id = id;
-    decl->focusable = !cfg.disabled;
-    decl->disabled = cfg.disabled;
-    decl->no_focus_ring = cfg.no_focus_ring;
-    decl->nav_up = cfg.nav_up;
-    decl->nav_down = cfg.nav_down;
-    decl->nav_left = cfg.nav_left;
-    decl->nav_right = cfg.nav_right;
-    decl->on_confirm = fn;
-    decl->userdata = cfg.userdata;
+    decl->focusable = focusable;
+    decl->disabled = disabled;
+    decl->no_focus_ring = no_focus_ring;
+    decl->nav_up = nav_up;
+    decl->nav_down = nav_down;
+    decl->nav_left = nav_left;
+    decl->nav_right = nav_right;
+    decl->on_confirm = on_confirm;
+    decl->userdata = userdata;
+}
+
+static void vxui__register_action( vxui_ctx* ctx, uint32_t id, vxui_action_fn fn, vxui_action_cfg cfg )
+{
+    vxui__register_decl(
+        ctx,
+        VXUI_DECL_ACTION,
+        id,
+        cfg.nav_up,
+        cfg.nav_down,
+        cfg.nav_left,
+        cfg.nav_right,
+        !cfg.disabled,
+        cfg.disabled,
+        cfg.no_focus_ring,
+        fn,
+        cfg.userdata );
+}
+
+static vxui_input_owner* vxui__push_input_owner( vxui_ctx* ctx, uint32_t id, bool consume_up, bool consume_down, bool consume_left, bool consume_right )
+{
+    if ( !ctx->input_owners || ctx->input_owner_count >= ctx->input_owner_capacity ) {
+        return nullptr;
+    }
+
+    vxui_input_owner* owner = &ctx->input_owners[ ctx->input_owner_count++ ];
+    *owner = ( vxui_input_owner ) {
+        .id = id,
+        .depth = ctx->list_scope_count,
+        .consume_up = consume_up,
+        .consume_down = consume_down,
+        .consume_left = consume_left,
+        .consume_right = consume_right,
+    };
+    return owner;
+}
+
+static vxui_list_state* vxui__get_list_state( vxui_ctx* ctx, uint32_t id, bool create )
+{
+    for ( int i = 0; i < ctx->list_state_count; ++i ) {
+        if ( ctx->list_states[ i ].id == id ) {
+            return &ctx->list_states[ i ];
+        }
+    }
+
+    if ( !create || !ctx->list_states || ctx->list_state_count >= ctx->list_state_capacity ) {
+        return nullptr;
+    }
+
+    vxui_list_state* state = &ctx->list_states[ ctx->list_state_count++ ];
+    *state = vxui_list_state {};
+    state->id = id;
+    return state;
+}
+
+static vxui_prompt_binding vxui__resolve_prompt_binding( vxui_ctx* ctx, const char* action_name, bool* found )
+{
+    vxui_prompt_binding binding = {};
+    if ( found ) {
+        *found = false;
+    }
+
+    if ( !ctx->input_table || !action_name ) {
+        return binding;
+    }
+
+    if ( std::strcmp( action_name, "action.confirm" ) == 0 ) {
+        binding = ctx->input_table->confirm;
+        if ( found ) {
+            *found = binding.glyph != 0;
+        }
+    } else if ( std::strcmp( action_name, "action.cancel" ) == 0 ) {
+        binding = ctx->input_table->cancel;
+        if ( found ) {
+            *found = binding.glyph != 0;
+        }
+    }
+
+    return binding;
+}
+
+static const char* vxui__push_utf8_codepoint( vxui_ctx* ctx, uint32_t codepoint )
+{
+    char encoded[ 5 ] = {};
+    size_t length = 0;
+    if ( codepoint <= 0x7Fu ) {
+        encoded[ 0 ] = ( char ) codepoint;
+        length = 1;
+    } else if ( codepoint <= 0x7FFu ) {
+        encoded[ 0 ] = ( char ) ( 0xC0u | ( codepoint >> 6 ) );
+        encoded[ 1 ] = ( char ) ( 0x80u | ( codepoint & 0x3Fu ) );
+        length = 2;
+    } else if ( codepoint <= 0xFFFFu ) {
+        encoded[ 0 ] = ( char ) ( 0xE0u | ( codepoint >> 12 ) );
+        encoded[ 1 ] = ( char ) ( 0x80u | ( ( codepoint >> 6 ) & 0x3Fu ) );
+        encoded[ 2 ] = ( char ) ( 0x80u | ( codepoint & 0x3Fu ) );
+        length = 3;
+    } else {
+        encoded[ 0 ] = ( char ) ( 0xF0u | ( codepoint >> 18 ) );
+        encoded[ 1 ] = ( char ) ( 0x80u | ( ( codepoint >> 12 ) & 0x3Fu ) );
+        encoded[ 2 ] = ( char ) ( 0x80u | ( ( codepoint >> 6 ) & 0x3Fu ) );
+        encoded[ 3 ] = ( char ) ( 0x80u | ( codepoint & 0x3Fu ) );
+        length = 4;
+    }
+    return vxui__push_frame_string( ctx, encoded, length );
 }
 
 static vxui_anim_slot* vxui__get_anim_slot( vxui_ctx* ctx, uint32_t id, bool create )
@@ -1576,13 +1840,16 @@ uint64_t vxui_min_memory_size( void )
     uint64_t text_bytes = command_capacity * ( uint64_t ) sizeof( vxui_draw_cmd_text );
     uint64_t clip_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ELEMENTS * ( uint64_t ) sizeof( vxui_rect );
     uint64_t decl_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ELEMENTS * ( uint64_t ) sizeof( vxui_decl );
+    uint64_t owner_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ELEMENTS * ( uint64_t ) sizeof( vxui_input_owner );
+    uint64_t list_scope_bytes = 32u * ( ( uint64_t ) sizeof( uint32_t ) + ( uint64_t ) sizeof( vxui_list_cfg ) + ( uint64_t ) sizeof( int ) );
+    uint64_t list_state_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_LIST_STATES * ( uint64_t ) sizeof( vxui_list_state );
     uint64_t anim_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ANIM_STATES * ( uint64_t ) sizeof( vxui_anim_slot );
     uint64_t retained_cmd_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ANIM_STATES * ( uint64_t ) sizeof( vxui_cmd );
     uint64_t retained_valid_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ANIM_STATES * ( uint64_t ) sizeof( bool );
     uint64_t retained_text_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ANIM_STATES * ( uint64_t ) VXUI__DEFAULT_RETAINED_TEXT_BYTES;
     uint64_t frame_bytes = ( uint64_t ) VXUI__DEFAULT_FRAME_STRING_BYTES;
     uint64_t slack_bytes = 64u * 1024u;
-    return clay_bytes + command_bytes + text_bytes + clip_bytes + decl_bytes + anim_bytes + retained_cmd_bytes + retained_valid_bytes + retained_text_bytes + frame_bytes + slack_bytes;
+    return clay_bytes + command_bytes + text_bytes + clip_bytes + decl_bytes + owner_bytes + list_scope_bytes + list_state_bytes + anim_bytes + retained_cmd_bytes + retained_valid_bytes + retained_text_bytes + frame_bytes + slack_bytes;
 }
 
 vxui_arena vxui_create_arena( uint64_t size, void* memory )
@@ -1657,6 +1924,42 @@ void vxui_init( vxui_ctx* ctx, vxui_arena arena, vxui_config cfg )
         ctx->decl_capacity = ctx->cfg.max_elements;
     }
 
+    ctx->input_owners = ( vxui_input_owner* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->cfg.max_elements * ( uint64_t ) sizeof( vxui_input_owner ),
+        ( uint64_t ) alignof( vxui_input_owner ) );
+    if ( ctx->input_owners ) {
+        ctx->input_owner_capacity = ctx->cfg.max_elements;
+    }
+
+    ctx->list_scope_capacity = 32;
+    ctx->list_scope_ids = ( uint32_t* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->list_scope_capacity * ( uint64_t ) sizeof( uint32_t ),
+        ( uint64_t ) alignof( uint32_t ) );
+    ctx->list_scope_cfgs = ( vxui_list_cfg* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->list_scope_capacity * ( uint64_t ) sizeof( vxui_list_cfg ),
+        ( uint64_t ) alignof( vxui_list_cfg ) );
+    ctx->list_scope_item_counts = ( int* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->list_scope_capacity * ( uint64_t ) sizeof( int ),
+        ( uint64_t ) alignof( int ) );
+    if ( !ctx->list_scope_ids || !ctx->list_scope_cfgs || !ctx->list_scope_item_counts ) {
+        ctx->list_scope_capacity = 0;
+    }
+
+    ctx->list_state_capacity = VXUI__DEFAULT_MAX_LIST_STATES;
+    ctx->list_states = ( vxui_list_state* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->list_state_capacity * ( uint64_t ) sizeof( vxui_list_state ),
+        ( uint64_t ) alignof( vxui_list_state ) );
+    if ( ctx->list_states ) {
+        std::memset( ctx->list_states, 0, ( size_t ) ctx->list_state_capacity * sizeof( vxui_list_state ) );
+    } else {
+        ctx->list_state_capacity = 0;
+    }
+
     ctx->anim_capacity = ( int ) vxui__next_pow2( ( uint32_t ) ctx->cfg.max_anim_states );
     ctx->anim_slots = ( vxui_anim_slot* ) vxui__arena_alloc(
         &ctx->arena,
@@ -1699,6 +2002,7 @@ void vxui_init( vxui_ctx* ctx, vxui_arena arena, vxui_config cfg )
     ctx->default_font_id = 0;
     ctx->default_font_size = 24.0f;
     ctx->default_text_color = ( vxui_color ) { 255, 255, 255, 255 };
+    ctx->input_table = &vxui__input_keyboard;
 
     vxui__reset_frame_buffers( ctx );
 }
@@ -1785,6 +2089,147 @@ void vxui_set_focus( vxui_ctx* ctx, uint32_t id )
     ctx->pending_focus_id = id;
 }
 
+void vxui_set_input_table( vxui_ctx* ctx, const vxui_input_table* table )
+{
+    ctx->input_table = table ? table : &vxui__input_keyboard;
+}
+
+void vxui_list_begin( vxui_ctx* ctx, const char* id, vxui_list_cfg cfg )
+{
+    uint32_t list_id = vxui_id( id );
+    vxui__register_decl( ctx, VXUI_DECL_LIST, list_id, 0, 0, 0, 0, true, false, false, nullptr, nullptr );
+    vxui__get_anim_state( ctx, list_id, true );
+    vxui__push_input_owner( ctx, list_id, true, true, false, false );
+
+    vxui_list_cfg effective = cfg;
+    if ( effective.max_visible <= 0 ) {
+        effective.max_visible = 6;
+    }
+    if ( effective.item_height <= 0.0f ) {
+        effective.item_height = 24.0f;
+    }
+    if ( effective.scroll_stiffness <= 0.0f ) {
+        effective.scroll_stiffness = VXUI_DEFAULT_STIFFNESS;
+    }
+    if ( effective.scroll_damping <= 0.0f ) {
+        effective.scroll_damping = VXUI_DEFAULT_DAMPING;
+    }
+
+    vxui_list_state* state = vxui__get_list_state( ctx, list_id, true );
+    if ( state ) {
+        vxui__spring_step( state->scroll_target, &state->scroll_current, &state->scroll_velocity, effective.scroll_stiffness, effective.scroll_damping, ctx->delta_time );
+    }
+
+    if ( ctx->list_scope_count < ctx->list_scope_capacity ) {
+        ctx->list_scope_ids[ ctx->list_scope_count ] = list_id;
+        ctx->list_scope_cfgs[ ctx->list_scope_count ] = effective;
+        ctx->list_scope_item_counts[ ctx->list_scope_count ] = 0;
+        ctx->list_scope_count += 1;
+    }
+
+    Clay__OpenElementWithId( vxui__clay_id_from_hash( list_id ) );
+    Clay__ConfigureOpenElement( ( Clay_ElementDeclaration ) {
+        .layout = {
+            .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIXED( effective.item_height * ( float ) effective.max_visible ) },
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+        },
+        .clip = {
+            .horizontal = true,
+            .vertical = true,
+            .childOffset = { 0.0f, state ? -state->scroll_current : 0.0f },
+        },
+    } );
+}
+
+void vxui_list_end( vxui_ctx* ctx )
+{
+    if ( ctx->list_scope_count <= 0 ) {
+        return;
+    }
+
+    int scope_index = ctx->list_scope_count - 1;
+    uint32_t list_id = ctx->list_scope_ids[ scope_index ];
+    vxui_list_cfg cfg = ctx->list_scope_cfgs[ scope_index ];
+    int item_count = ctx->list_scope_item_counts[ scope_index ];
+    vxui_list_state* state = vxui__get_list_state( ctx, list_id, true );
+    if ( state ) {
+        if ( item_count <= 0 ) {
+            state->focused_index = 0;
+        } else {
+            if ( state->focused_index < 0 ) {
+                state->focused_index = 0;
+            }
+            if ( state->focused_index >= item_count ) {
+                state->focused_index = item_count - 1;
+            }
+        }
+
+        if ( ctx->focused_id == list_id && item_count > 0 ) {
+            if ( ( ctx->pending_nav_mask & ( 1u << VXUI_DIR_UP ) ) != 0u && state->focused_index > 0 ) {
+                state->focused_index -= 1;
+                ctx->pending_nav_mask &= ~( 1u << VXUI_DIR_UP );
+            } else if ( ( ctx->pending_nav_mask & ( 1u << VXUI_DIR_DOWN ) ) != 0u && state->focused_index < item_count - 1 ) {
+                state->focused_index += 1;
+                ctx->pending_nav_mask &= ~( 1u << VXUI_DIR_DOWN );
+            }
+
+            float max_scroll_items = ( float ) ( item_count - cfg.max_visible );
+            if ( max_scroll_items < 0.0f ) {
+                max_scroll_items = 0.0f;
+            }
+            float visible_start = ( float ) state->focused_index - ( float ) cfg.max_visible + 1.0f;
+            if ( visible_start < 0.0f ) {
+                visible_start = 0.0f;
+            }
+            if ( visible_start > max_scroll_items ) {
+                visible_start = max_scroll_items;
+            }
+            state->scroll_target = visible_start * cfg.item_height;
+        }
+    }
+
+    ctx->list_scope_count -= 1;
+    Clay__CloseElement();
+}
+
+void vxui_list_item_begin( vxui_ctx* ctx, int index )
+{
+    if ( ctx->list_scope_count <= 0 ) {
+        return;
+    }
+
+    int scope_index = ctx->list_scope_count - 1;
+    uint32_t list_id = ctx->list_scope_ids[ scope_index ];
+    vxui_list_cfg cfg = ctx->list_scope_cfgs[ scope_index ];
+    vxui_list_state* state = vxui__get_list_state( ctx, list_id, true );
+    bool selected = state && state->focused_index == index;
+    struct
+    {
+        uint32_t list_id;
+        int index;
+    } item_key = { list_id, index };
+    uint32_t item_id = vxui__hash_bytes( &item_key, sizeof( item_key ), 0x1A57u );
+
+    ctx->list_scope_item_counts[ scope_index ] += 1;
+    vxui__register_decl( ctx, VXUI_DECL_LIST_ITEM, item_id, 0, 0, 0, 0, false, false, true, nullptr, nullptr );
+    vxui__get_anim_state( ctx, item_id, true );
+
+    Clay__OpenElementWithId( vxui__clay_id_from_hash( item_id ) );
+    Clay__ConfigureOpenElement( ( Clay_ElementDeclaration ) {
+        .layout = {
+            .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIXED( cfg.item_height ) },
+            .padding = CLAY_PADDING_ALL( 4 ),
+        },
+        .backgroundColor = selected ? Clay_Color { 32, 64, 96, 255 } : Clay_Color {},
+    } );
+}
+
+void vxui_list_item_end( vxui_ctx* ctx )
+{
+    ( void ) ctx;
+    Clay__CloseElement();
+}
+
 void VXUI_LABEL( vxui_ctx* ctx, const char* l10n_key, vxui_label_cfg cfg )
 {
     const char* resolved = vxui__resolve_text( ctx, l10n_key );
@@ -1860,6 +2305,185 @@ void VXUI_ACTION( vxui_ctx* ctx, const char* id, const char* l10n_key, vxui_acti
             ctx->default_font_size,
             ctx->default_text_color,
             action_id );
+    }
+}
+
+void VXUI_OPTION( vxui_ctx* ctx, const char* id, int* index, const char** strings, int count, vxui_option_cfg cfg )
+{
+    uint32_t option_id = vxui_id( id );
+    vxui_option_cfg zero_cfg_value = {};
+    bool zero_cfg = std::memcmp( &cfg, &zero_cfg_value, sizeof( cfg ) ) == 0;
+    bool wrap = cfg.wrap || zero_cfg;
+
+    vxui__register_decl(
+        ctx,
+        VXUI_DECL_OPTION,
+        option_id,
+        cfg.nav_up,
+        cfg.nav_down,
+        cfg.nav_left,
+        cfg.nav_right,
+        true,
+        false,
+        false,
+        nullptr,
+        cfg.userdata );
+    vxui__get_anim_state( ctx, option_id, true );
+    vxui__push_input_owner( ctx, option_id, false, false, true, true );
+
+    if ( index && count > 0 ) {
+        if ( *index < 0 ) {
+            *index = 0;
+        }
+        if ( *index >= count ) {
+            *index = count - 1;
+        }
+    }
+
+    if ( ctx->focused_id == option_id && index && count > 0 ) {
+        bool changed = false;
+        if ( ( ctx->pending_nav_mask & ( 1u << VXUI_DIR_LEFT ) ) != 0u ) {
+            changed = vxui__option_step( index, count, -1, wrap ) || changed;
+            ctx->pending_nav_mask &= ~( 1u << VXUI_DIR_LEFT );
+        }
+        if ( ( ctx->pending_nav_mask & ( 1u << VXUI_DIR_RIGHT ) ) != 0u ) {
+            changed = vxui__option_step( index, count, +1, wrap ) || changed;
+            ctx->pending_nav_mask &= ~( 1u << VXUI_DIR_RIGHT );
+        }
+        if ( changed && cfg.on_change ) {
+            cfg.on_change( ctx, *index, cfg.userdata );
+        }
+    }
+
+    const char* resolved = ( index && strings && count > 0 ) ? vxui__resolve_text( ctx, strings[ *index ] ) : "";
+    CLAY( vxui__clay_id_from_hash( option_id ), {
+        .layout = {
+            .padding = CLAY_PADDING_ALL( 4 ),
+        },
+    } ) {
+        vxui__emit_text( ctx, resolved, ctx->default_font_id, ctx->default_font_size, ctx->default_text_color, option_id );
+    }
+}
+
+void VXUI_SLIDER( vxui_ctx* ctx, const char* id, float* value, float min_value, float max_value, vxui_slider_cfg cfg )
+{
+    uint32_t slider_id = vxui_id( id );
+    uint32_t slider_track_id = vxui__hash_bytes( &slider_id, sizeof( slider_id ), 0x7A11u );
+    uint32_t slider_fill_id = vxui__hash_bytes( &slider_id, sizeof( slider_id ), 0xF111u );
+    float range = max_value - min_value;
+    float step = cfg.step != 0.0f ? cfg.step : ( range != 0.0f ? range / 20.0f : 0.0f );
+    if ( step < 0.0f ) {
+        step = -step;
+    }
+
+    vxui__register_decl( ctx, VXUI_DECL_SLIDER, slider_id, 0, 0, 0, 0, true, false, false, nullptr, cfg.userdata );
+    vxui__get_anim_state( ctx, slider_id, true );
+    vxui__push_input_owner( ctx, slider_id, false, false, true, true );
+
+    if ( value ) {
+        if ( *value < min_value ) {
+            *value = min_value;
+        }
+        if ( *value > max_value ) {
+            *value = max_value;
+        }
+    }
+
+    if ( ctx->focused_id == slider_id && value ) {
+        float next = *value;
+        if ( ( ctx->pending_nav_mask & ( 1u << VXUI_DIR_LEFT ) ) != 0u ) {
+            next -= step;
+            ctx->pending_nav_mask &= ~( 1u << VXUI_DIR_LEFT );
+        }
+        if ( ( ctx->pending_nav_mask & ( 1u << VXUI_DIR_RIGHT ) ) != 0u ) {
+            next += step;
+            ctx->pending_nav_mask &= ~( 1u << VXUI_DIR_RIGHT );
+        }
+
+        if ( next < min_value ) {
+            next = min_value;
+        }
+        if ( next > max_value ) {
+            next = max_value;
+        }
+        if ( next != *value ) {
+            *value = next;
+            if ( cfg.on_change ) {
+                cfg.on_change( ctx, *value, cfg.userdata );
+            }
+        }
+    }
+
+    float fill = 0.0f;
+    if ( value && range > 0.0f ) {
+        fill = vxui__clamp01( ( *value - min_value ) / range );
+    }
+
+    const char* format = cfg.format ? cfg.format : "%.2f";
+    std::string value_text;
+    if ( cfg.show_value && value ) {
+        int needed = std::snprintf( nullptr, 0, format, *value );
+        if ( needed < 0 ) {
+            needed = 0;
+        }
+        value_text.resize( ( size_t ) needed );
+        if ( needed > 0 ) {
+            std::snprintf( value_text.data(), value_text.size() + 1, format, *value );
+        }
+    }
+
+    CLAY( vxui__clay_id_from_hash( slider_id ), {
+        .layout = {
+            .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIXED( 28 ) },
+            .padding = { 4, 4, 4, 4 },
+            .childGap = 8,
+            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+        },
+    } ) {
+        CLAY( vxui__clay_id_from_hash( slider_track_id ), {
+            .layout = {
+                .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIXED( 12 ) },
+            },
+            .backgroundColor = { 32, 40, 56, 255 },
+            .cornerRadius = CLAY_CORNER_RADIUS( 6 ),
+        } ) {
+            CLAY( vxui__clay_id_from_hash( slider_fill_id ), {
+                .layout = {
+                    .sizing = { CLAY_SIZING_PERCENT( fill ), CLAY_SIZING_GROW( 0 ) },
+                },
+                .backgroundColor = { 96, 176, 255, 255 },
+                .cornerRadius = CLAY_CORNER_RADIUS( 6 ),
+            } ) {}
+        }
+
+        if ( cfg.show_value && !value_text.empty() ) {
+            vxui__emit_text( ctx, value_text.c_str(), ctx->default_font_id, ctx->default_font_size, ctx->default_text_color, slider_id );
+        }
+    }
+}
+
+void VXUI_PROMPT( vxui_ctx* ctx, const char* action_name )
+{
+    bool found = false;
+    vxui_prompt_binding binding = vxui__resolve_prompt_binding( ctx, action_name, &found );
+    if ( !found || binding.glyph == 0 ) {
+#ifndef NDEBUG
+        std::fprintf( stderr, "vxui: missing prompt binding for %s\n", action_name ? action_name : "<null>" );
+#endif
+        return;
+    }
+
+    const char* glyph = vxui__push_utf8_codepoint( ctx, binding.glyph );
+    if ( !glyph ) {
+        return;
+    }
+
+    uint32_t prompt_id = vxui_id( action_name );
+    vxui__register_decl( ctx, VXUI_DECL_PROMPT, prompt_id, 0, 0, 0, 0, false, false, true, nullptr, nullptr );
+    vxui__get_anim_state( ctx, prompt_id, true );
+
+    CLAY( vxui__clay_id_from_hash( prompt_id ), {} ) {
+        vxui__emit_text( ctx, glyph, vxui__effective_font_id( ctx, binding.font_id ), ctx->default_font_size, ctx->default_text_color, prompt_id );
     }
 }
 

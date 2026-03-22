@@ -29,6 +29,7 @@ if(VXUI_BUILD_TESTS)
         tests/test_core.cpp
         tests/test_clay_bridge.cpp
         tests/test_primitives_basic.cpp
+        tests/test_primitives_advanced.cpp
         tests/test_motion.cpp
         tests/test_navigation.cpp
     )
