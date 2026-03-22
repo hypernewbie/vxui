@@ -334,6 +334,60 @@ typedef struct vxui_list_state
     float scroll_velocity;
 } vxui_list_state;
 
+typedef enum vxui_screen_state
+{
+    VXUI_SCREEN_ENTERING,
+    VXUI_SCREEN_ACTIVE,
+    VXUI_SCREEN_EXITING,
+    VXUI_SCREEN_DEAD,
+} vxui_screen_state;
+
+typedef struct vxui_snapshot
+{
+    vxui_cmd* commands;
+    uint32_t* command_ids;
+    uint32_t* screen_ids;
+    int command_count;
+    int command_capacity;
+    char* text_blob;
+    int text_blob_size;
+    int text_blob_capacity;
+} vxui_snapshot;
+
+typedef struct vxui_screen
+{
+    char name[ 64 ];
+    uint32_t name_id;
+    vxui_screen_state state;
+    uint64_t state_started_ms;
+    vxui_snapshot snapshot;
+} vxui_screen;
+
+typedef struct vxui_seq_step
+{
+    uint32_t delay_ms;
+    uint32_t id;
+    vxui_prop prop;
+    float target;
+} vxui_seq_step;
+
+typedef struct vxui_registered_seq
+{
+    char name[ 64 ];
+    uint32_t name_id;
+    vxui_seq_step* steps;
+    int count;
+} vxui_registered_seq;
+
+typedef struct vxui_active_seq
+{
+    int registered_index;
+    uint32_t name_id;
+    uint32_t elapsed_ms;
+    int next_step;
+    bool playing;
+} vxui_active_seq;
+
 typedef struct vxui_ctx
 {
     vxui_config cfg;
@@ -345,6 +399,8 @@ typedef struct vxui_ctx
     ve_fontcache* fontcache;
 
     vxui_cmd* commands;
+    uint32_t* command_ids;
+    uint32_t* command_screen_ids;
     int command_count;
     int command_capacity;
 
@@ -405,6 +461,17 @@ typedef struct vxui_ctx
     int list_state_count;
     int list_state_capacity;
     const vxui_input_table* input_table;
+
+    vxui_screen* screens;
+    int screen_count;
+    int screen_capacity;
+    vxui_registered_seq* registered_seqs;
+    int registered_seq_count;
+    int registered_seq_capacity;
+    vxui_active_seq* active_seqs;
+    int active_seq_count;
+    int active_seq_capacity;
+    uint64_t elapsed_ms;
 } vxui_ctx;
 
 uint64_t vxui_min_memory_size( void );
@@ -422,6 +489,13 @@ void vxui_input_tab( vxui_ctx* ctx, int direction );
 uint32_t vxui_focused_id( vxui_ctx* ctx );
 void vxui_set_focus( vxui_ctx* ctx, uint32_t id );
 void vxui_set_input_table( vxui_ctx* ctx, const vxui_input_table* table );
+void vxui_push_screen( vxui_ctx* ctx, const char* name );
+void vxui_pop_screen( vxui_ctx* ctx );
+void vxui_replace_screen( vxui_ctx* ctx, const char* name );
+void vxui_register_seq( vxui_ctx* ctx, const char* name, vxui_seq_step* steps, int count );
+void vxui_fire_seq( vxui_ctx* ctx, const char* name );
+void vxui_stop_seq( vxui_ctx* ctx, const char* name );
+bool vxui_seq_playing( vxui_ctx* ctx, const char* name );
 void vxui_list_begin( vxui_ctx* ctx, const char* id, vxui_list_cfg cfg );
 void vxui_list_end( vxui_ctx* ctx );
 void vxui_list_item_begin( vxui_ctx* ctx, int index );
@@ -458,6 +532,9 @@ enum
     VXUI__DEFAULT_MAX_SEQUENCES = 64,
     VXUI__DEFAULT_MAX_SEQ_STEPS = 1024,
     VXUI__DEFAULT_MAX_LIST_STATES = 64,
+    VXUI__DEFAULT_MAX_SCREENS = 16,
+    VXUI__DEFAULT_MAX_ACTIVE_SEQS = 32,
+    VXUI__DEFAULT_SNAPSHOT_TEXT_BYTES = 8192,
     VXUI__DEFAULT_FRAME_STRING_BYTES = VXUI__DEFAULT_MAX_ELEMENTS * 128,
     VXUI__DEFAULT_RETAINED_TEXT_BYTES = 256,
 };
@@ -512,6 +589,17 @@ static void vxui__update_anim_store( vxui_ctx* ctx );
 static void vxui__capture_retained_cmd( vxui_ctx* ctx, uint32_t id, const vxui_cmd* cmd );
 static void vxui__emit_retained_anim_commands( vxui_ctx* ctx );
 static void vxui__evict_dead_anim_states( vxui_ctx* ctx );
+static void vxui__apply_seq_step( vxui_anim_state* st, const vxui_seq_step* step );
+static vxui_screen* vxui__find_live_screen( vxui_ctx* ctx );
+static vxui_screen* vxui__find_screen_by_name_id( vxui_ctx* ctx, uint32_t name_id );
+static vxui_registered_seq* vxui__find_registered_seq( vxui_ctx* ctx, uint32_t name_id );
+static vxui_active_seq* vxui__find_active_seq( vxui_ctx* ctx, uint32_t name_id );
+static void vxui__fire_seq_by_id( vxui_ctx* ctx, uint32_t name_id );
+static void vxui__advance_sequences( vxui_ctx* ctx );
+static void vxui__snapshot_from_draw_list( vxui_ctx* ctx, vxui_snapshot* dst, const vxui_draw_list* src );
+static void vxui__emit_snapshot( vxui_ctx* ctx, const vxui_screen* screen );
+static void vxui__compact_dead_screens( vxui_ctx* ctx );
+static void vxui__update_screen_states( vxui_ctx* ctx );
 static bool vxui__option_step( int* value, int count, int delta, bool wrap );
 static float vxui__clamp01( float t );
 static void vxui__register_decl( vxui_ctx* ctx, vxui_decl_kind kind, uint32_t id, uint32_t nav_up, uint32_t nav_down, uint32_t nav_left, uint32_t nav_right, bool focusable, bool disabled, bool no_focus_ring, vxui_action_fn on_confirm, void* userdata );
@@ -734,9 +822,17 @@ static vxui_cmd* vxui__push_cmd( vxui_ctx* ctx, vxui_cmd_type type )
         return nullptr;
     }
 
-    vxui_cmd* cmd = &ctx->commands[ ctx->command_count++ ];
+    int index = ctx->command_count++;
+    vxui_cmd* cmd = &ctx->commands[ index ];
     *cmd = vxui_cmd {};
     cmd->type = type;
+    if ( ctx->command_ids ) {
+        ctx->command_ids[ index ] = 0;
+    }
+    if ( ctx->command_screen_ids ) {
+        vxui_screen* screen = vxui__find_live_screen( ctx );
+        ctx->command_screen_ids[ index ] = screen ? screen->name_id : 0;
+    }
     return cmd;
 }
 
@@ -999,6 +1095,240 @@ static const char* vxui__push_utf8_codepoint( vxui_ctx* ctx, uint32_t codepoint 
         length = 4;
     }
     return vxui__push_frame_string( ctx, encoded, length );
+}
+
+static void vxui__apply_seq_step( vxui_anim_state* st, const vxui_seq_step* step )
+{
+    if ( !st || !step ) {
+        return;
+    }
+
+    switch ( step->prop ) {
+        case VXUI_PROP_OPACITY:
+            st->opacity_target = step->target;
+            break;
+
+        case VXUI_PROP_SCALE:
+            st->scale_target = step->target;
+            break;
+
+        case VXUI_PROP_SLIDE_X:
+            st->slide_x_target = step->target;
+            break;
+
+        case VXUI_PROP_SLIDE_Y:
+            st->slide_y_target = step->target;
+            break;
+    }
+}
+
+static vxui_screen* vxui__find_live_screen( vxui_ctx* ctx )
+{
+    for ( int i = ctx->screen_count - 1; i >= 0; --i ) {
+        if ( ctx->screens[ i ].state == VXUI_SCREEN_ENTERING || ctx->screens[ i ].state == VXUI_SCREEN_ACTIVE ) {
+            return &ctx->screens[ i ];
+        }
+    }
+    return nullptr;
+}
+
+static vxui_screen* vxui__find_screen_by_name_id( vxui_ctx* ctx, uint32_t name_id )
+{
+    for ( int i = 0; i < ctx->screen_count; ++i ) {
+        if ( ctx->screens[ i ].name_id == name_id && ctx->screens[ i ].state != VXUI_SCREEN_DEAD ) {
+            return &ctx->screens[ i ];
+        }
+    }
+    return nullptr;
+}
+
+static vxui_registered_seq* vxui__find_registered_seq( vxui_ctx* ctx, uint32_t name_id )
+{
+    for ( int i = 0; i < ctx->registered_seq_count; ++i ) {
+        if ( ctx->registered_seqs[ i ].name_id == name_id ) {
+            return &ctx->registered_seqs[ i ];
+        }
+    }
+    return nullptr;
+}
+
+static vxui_active_seq* vxui__find_active_seq( vxui_ctx* ctx, uint32_t name_id )
+{
+    for ( int i = 0; i < ctx->active_seq_count; ++i ) {
+        if ( ctx->active_seqs[ i ].name_id == name_id ) {
+            return &ctx->active_seqs[ i ];
+        }
+    }
+    return nullptr;
+}
+
+static void vxui__fire_seq_by_id( vxui_ctx* ctx, uint32_t name_id )
+{
+    vxui_registered_seq* registered = vxui__find_registered_seq( ctx, name_id );
+    if ( !registered ) {
+        return;
+    }
+
+    vxui_active_seq* active = vxui__find_active_seq( ctx, name_id );
+    if ( !active ) {
+        for ( int i = 0; i < ctx->active_seq_count; ++i ) {
+            if ( !ctx->active_seqs[ i ].playing ) {
+                active = &ctx->active_seqs[ i ];
+                break;
+            }
+        }
+    }
+    if ( !active ) {
+        if ( ctx->active_seq_count >= ctx->active_seq_capacity ) {
+            return;
+        }
+        active = &ctx->active_seqs[ ctx->active_seq_count++ ];
+    }
+
+    *active = ( vxui_active_seq ) {
+        .registered_index = ( int ) ( registered - ctx->registered_seqs ),
+        .name_id = name_id,
+        .elapsed_ms = 0,
+        .next_step = 0,
+        .playing = true,
+    };
+}
+
+static void vxui__advance_sequences( vxui_ctx* ctx )
+{
+    uint32_t delta_ms = 0;
+    if ( ctx->delta_time > 0.0f ) {
+        delta_ms = ( uint32_t ) std::llround( ( double ) ctx->delta_time * 1000.0 );
+    }
+
+    for ( int i = 0; i < ctx->active_seq_count; ++i ) {
+        vxui_active_seq* active = &ctx->active_seqs[ i ];
+        if ( !active->playing ) {
+            continue;
+        }
+
+        if ( active->registered_index < 0 || active->registered_index >= ctx->registered_seq_count ) {
+            active->playing = false;
+            continue;
+        }
+
+        vxui_registered_seq* registered = &ctx->registered_seqs[ active->registered_index ];
+        active->elapsed_ms += delta_ms;
+        while ( active->next_step < registered->count && registered->steps[ active->next_step ].delay_ms <= active->elapsed_ms ) {
+            vxui_seq_step* step = &registered->steps[ active->next_step ];
+            vxui_anim_state* st = vxui__get_anim_state( ctx, step->id, true );
+            vxui__apply_seq_step( st, step );
+            active->next_step += 1;
+        }
+
+        if ( active->next_step >= registered->count ) {
+            active->playing = false;
+        }
+    }
+}
+
+static void vxui__snapshot_from_draw_list( vxui_ctx* ctx, vxui_snapshot* dst, const vxui_draw_list* src )
+{
+    dst->command_count = 0;
+    dst->text_blob_size = 0;
+    if ( !src || !dst->commands || !dst->text_blob ) {
+        return;
+    }
+
+    vxui_screen* live = vxui__find_live_screen( ctx );
+    uint32_t live_screen_id = live ? live->name_id : 0;
+    for ( int i = 0; i < src->length && dst->command_count < dst->command_capacity; ++i ) {
+        if ( ctx->command_screen_ids && ctx->command_screen_ids[ i ] != live_screen_id ) {
+            continue;
+        }
+        if ( ctx->command_ids && ctx->command_ids[ i ] == 0 && src->commands[ i ].type == VXUI_CMD_BORDER ) {
+            continue;
+        }
+
+        int dst_index = dst->command_count++;
+        dst->commands[ dst_index ] = src->commands[ i ];
+        if ( dst->command_ids ) {
+            dst->command_ids[ dst_index ] = ctx->command_ids ? ctx->command_ids[ i ] : 0;
+        }
+        if ( dst->screen_ids ) {
+            dst->screen_ids[ dst_index ] = ctx->command_screen_ids ? ctx->command_screen_ids[ i ] : 0;
+        }
+
+        if ( dst->commands[ dst_index ].type == VXUI_CMD_TEXT && dst->commands[ dst_index ].text.text ) {
+            size_t length = std::strlen( dst->commands[ dst_index ].text.text ) + 1u;
+            if ( dst->text_blob_size + ( int ) length > dst->text_blob_capacity ) {
+                dst->command_count -= 1;
+                break;
+            }
+            char* text_dst = dst->text_blob + dst->text_blob_size;
+            std::memcpy( text_dst, dst->commands[ dst_index ].text.text, length );
+            dst->commands[ dst_index ].text.text = text_dst;
+            dst->text_blob_size += ( int ) length;
+        }
+    }
+}
+
+static void vxui__emit_snapshot( vxui_ctx* ctx, const vxui_screen* screen )
+{
+    if ( !screen ) {
+        return;
+    }
+
+    vxui_anim_state* screen_anim = vxui__get_anim_state( ctx, screen->name_id, true );
+    for ( int i = 0; i < screen->snapshot.command_count; ++i ) {
+        vxui_cmd* dst = vxui__push_cmd( ctx, screen->snapshot.commands[ i ].type );
+        if ( !dst ) {
+            break;
+        }
+
+        *dst = screen->snapshot.commands[ i ];
+        if ( ctx->command_ids ) {
+            ctx->command_ids[ ctx->command_count - 1 ] = screen->snapshot.command_ids ? screen->snapshot.command_ids[ i ] : 0;
+        }
+        if ( ctx->command_screen_ids ) {
+            ctx->command_screen_ids[ ctx->command_count - 1 ] = screen->name_id;
+        }
+        if ( screen_anim ) {
+            vxui__apply_anim_to_cmd( dst, screen_anim );
+        }
+    }
+}
+
+static void vxui__compact_dead_screens( vxui_ctx* ctx )
+{
+    int write_index = 0;
+    for ( int read_index = 0; read_index < ctx->screen_count; ++read_index ) {
+        if ( ctx->screens[ read_index ].state == VXUI_SCREEN_DEAD ) {
+            continue;
+        }
+        if ( write_index != read_index ) {
+            ctx->screens[ write_index ] = ctx->screens[ read_index ];
+        }
+        write_index += 1;
+    }
+    ctx->screen_count = write_index;
+}
+
+static void vxui__update_screen_states( vxui_ctx* ctx )
+{
+    for ( int i = 0; i < ctx->screen_count; ++i ) {
+        vxui_screen* screen = &ctx->screens[ i ];
+        char seq_name[ 80 ] = {};
+        if ( screen->state == VXUI_SCREEN_ENTERING ) {
+            std::snprintf( seq_name, sizeof( seq_name ), "%s_enter", screen->name );
+            if ( !vxui_seq_playing( ctx, seq_name ) && ctx->elapsed_ms > screen->state_started_ms ) {
+                screen->state = VXUI_SCREEN_ACTIVE;
+                screen->state_started_ms = ctx->elapsed_ms;
+            }
+        } else if ( screen->state == VXUI_SCREEN_EXITING ) {
+            std::snprintf( seq_name, sizeof( seq_name ), "%s_exit", screen->name );
+            if ( !vxui_seq_playing( ctx, seq_name ) && ctx->elapsed_ms > screen->state_started_ms ) {
+                screen->state = VXUI_SCREEN_DEAD;
+            }
+        }
+    }
+
+    vxui__compact_dead_screens( ctx );
 }
 
 static vxui_anim_slot* vxui__get_anim_slot( vxui_ctx* ctx, uint32_t id, bool create )
@@ -1449,6 +1779,12 @@ static void vxui__emit_focus_ring( vxui_ctx* ctx )
     if ( !cmd ) {
         return;
     }
+    if ( ctx->command_ids ) {
+        ctx->command_ids[ ctx->command_count - 1 ] = 0;
+    }
+    if ( ctx->command_screen_ids ) {
+        ctx->command_screen_ids[ ctx->command_count - 1 ] = 0;
+    }
 
     cmd->clip_rect = vxui_rect {};
     cmd->border.bounds = ( vxui_rect ) {
@@ -1528,7 +1864,17 @@ static void vxui__update_anim_store( vxui_ctx* ctx )
         st->color_g_target = 1.0f;
         st->color_b_target = 1.0f;
         st->color_a_target = 1.0f;
+    }
 
+    vxui__advance_sequences( ctx );
+
+    for ( int i = 0; i < ctx->anim_capacity; ++i ) {
+        vxui_anim_slot* slot = &ctx->anim_slots[ i ];
+        if ( !slot->occupied ) {
+            continue;
+        }
+
+        vxui_anim_state* st = &slot->state;
         vxui__spring_step( st->opacity_target, &st->opacity_current, &st->opacity_velocity, VXUI_DEFAULT_STIFFNESS, VXUI_DEFAULT_DAMPING, ctx->delta_time );
         vxui__spring_step( st->scale_target, &st->scale_current, &st->scale_velocity, VXUI_DEFAULT_STIFFNESS, VXUI_DEFAULT_DAMPING, ctx->delta_time );
         vxui__spring_step( st->slide_x_target, &st->slide_x_current, &st->slide_x_velocity, VXUI_DEFAULT_STIFFNESS, VXUI_DEFAULT_DAMPING, ctx->delta_time );
@@ -1666,6 +2012,9 @@ static void vxui__translate_clay_commands( vxui_ctx* ctx )
                 if ( !cmd ) {
                     break;
                 }
+                if ( ctx->command_ids ) {
+                    ctx->command_ids[ ctx->command_count - 1 ] = src->id;
+                }
 
                 cmd->clip_rect = ctx->current_clip_rect;
                 if ( radius > 0.0f ) {
@@ -1687,6 +2036,9 @@ static void vxui__translate_clay_commands( vxui_ctx* ctx )
                 if ( !cmd ) {
                     break;
                 }
+                if ( ctx->command_ids ) {
+                    ctx->command_ids[ ctx->command_count - 1 ] = src->id;
+                }
 
                 cmd->clip_rect = ctx->current_clip_rect;
                 cmd->border.bounds = vxui__rect_from_clay_box( src->boundingBox );
@@ -1705,6 +2057,9 @@ static void vxui__translate_clay_commands( vxui_ctx* ctx )
                 vxui_cmd* cmd = vxui__push_cmd( ctx, VXUI_CMD_TEXT );
                 if ( !queued || !cmd ) {
                     break;
+                }
+                if ( ctx->command_ids ) {
+                    ctx->command_ids[ ctx->command_count - 1 ] = src->id;
                 }
 
                 queued->pos = ( vxui_vec2 ) { src->boundingBox.x, src->boundingBox.y };
@@ -1726,6 +2081,9 @@ static void vxui__translate_clay_commands( vxui_ctx* ctx )
                 vxui_cmd* cmd = vxui__push_cmd( ctx, VXUI_CMD_IMAGE );
                 if ( !cmd ) {
                     break;
+                }
+                if ( ctx->command_ids ) {
+                    ctx->command_ids[ ctx->command_count - 1 ] = src->id;
                 }
 
                 cmd->clip_rect = ctx->current_clip_rect;
@@ -1751,6 +2109,9 @@ static void vxui__translate_clay_commands( vxui_ctx* ctx )
                 if ( !cmd ) {
                     break;
                 }
+                if ( ctx->command_ids ) {
+                    ctx->command_ids[ ctx->command_count - 1 ] = src->id;
+                }
 
                 cmd->clip_rect = ctx->current_clip_rect;
                 cmd->clip.rect = ctx->current_clip_rect;
@@ -1761,6 +2122,9 @@ static void vxui__translate_clay_commands( vxui_ctx* ctx )
             case CLAY_RENDER_COMMAND_TYPE_SCISSOR_END: {
                 vxui_cmd* cmd = vxui__push_cmd( ctx, VXUI_CMD_CLIP_POP );
                 if ( cmd ) {
+                    if ( ctx->command_ids ) {
+                        ctx->command_ids[ ctx->command_count - 1 ] = src->id;
+                    }
                     cmd->clip_rect = ctx->current_clip_rect;
                     cmd->clip.rect = ctx->current_clip_rect;
                     vxui__apply_anim_to_cmd( cmd, st );
@@ -1837,6 +2201,7 @@ uint64_t vxui_min_memory_size( void )
     uint64_t clay_bytes = ( uint64_t ) Clay_MinMemorySize();
     uint64_t command_capacity = ( uint64_t ) VXUI__DEFAULT_MAX_ELEMENTS + ( uint64_t ) VXUI__DEFAULT_MAX_ANIM_STATES;
     uint64_t command_bytes = command_capacity * ( uint64_t ) sizeof( vxui_cmd );
+    uint64_t command_id_bytes = command_capacity * ( uint64_t ) sizeof( uint32_t ) * 2u;
     uint64_t text_bytes = command_capacity * ( uint64_t ) sizeof( vxui_draw_cmd_text );
     uint64_t clip_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ELEMENTS * ( uint64_t ) sizeof( vxui_rect );
     uint64_t decl_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ELEMENTS * ( uint64_t ) sizeof( vxui_decl );
@@ -1847,9 +2212,15 @@ uint64_t vxui_min_memory_size( void )
     uint64_t retained_cmd_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ANIM_STATES * ( uint64_t ) sizeof( vxui_cmd );
     uint64_t retained_valid_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ANIM_STATES * ( uint64_t ) sizeof( bool );
     uint64_t retained_text_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ANIM_STATES * ( uint64_t ) VXUI__DEFAULT_RETAINED_TEXT_BYTES;
+    uint64_t screen_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SCREENS * ( uint64_t ) sizeof( vxui_screen );
+    uint64_t snapshot_cmd_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SCREENS * command_capacity * ( uint64_t ) sizeof( vxui_cmd );
+    uint64_t snapshot_id_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SCREENS * command_capacity * ( uint64_t ) sizeof( uint32_t ) * 2u;
+    uint64_t snapshot_text_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SCREENS * ( uint64_t ) VXUI__DEFAULT_SNAPSHOT_TEXT_BYTES;
+    uint64_t registered_seq_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SEQUENCES * ( uint64_t ) sizeof( vxui_registered_seq );
+    uint64_t active_seq_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ACTIVE_SEQS * ( uint64_t ) sizeof( vxui_active_seq );
     uint64_t frame_bytes = ( uint64_t ) VXUI__DEFAULT_FRAME_STRING_BYTES;
     uint64_t slack_bytes = 64u * 1024u;
-    return clay_bytes + command_bytes + text_bytes + clip_bytes + decl_bytes + owner_bytes + list_scope_bytes + list_state_bytes + anim_bytes + retained_cmd_bytes + retained_valid_bytes + retained_text_bytes + frame_bytes + slack_bytes;
+    return clay_bytes + command_bytes + command_id_bytes + text_bytes + clip_bytes + decl_bytes + owner_bytes + list_scope_bytes + list_state_bytes + anim_bytes + retained_cmd_bytes + retained_valid_bytes + retained_text_bytes + screen_bytes + snapshot_cmd_bytes + snapshot_id_bytes + snapshot_text_bytes + registered_seq_bytes + active_seq_bytes + frame_bytes + slack_bytes;
 }
 
 vxui_arena vxui_create_arena( uint64_t size, void* memory )
@@ -1890,6 +2261,14 @@ void vxui_init( vxui_ctx* ctx, vxui_arena arena, vxui_config cfg )
     if ( ctx->commands ) {
         ctx->command_capacity = ctx->cfg.max_elements + ctx->cfg.max_anim_states;
     }
+    ctx->command_ids = ( uint32_t* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->command_capacity * ( uint64_t ) sizeof( uint32_t ),
+        ( uint64_t ) alignof( uint32_t ) );
+    ctx->command_screen_ids = ( uint32_t* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->command_capacity * ( uint64_t ) sizeof( uint32_t ),
+        ( uint64_t ) alignof( uint32_t ) );
 
     ctx->text_queue = ( vxui_draw_cmd_text* ) vxui__arena_alloc(
         &ctx->arena,
@@ -2003,6 +2382,58 @@ void vxui_init( vxui_ctx* ctx, vxui_arena arena, vxui_config cfg )
     ctx->default_font_size = 24.0f;
     ctx->default_text_color = ( vxui_color ) { 255, 255, 255, 255 };
     ctx->input_table = &vxui__input_keyboard;
+    ctx->screen_capacity = VXUI__DEFAULT_MAX_SCREENS;
+    ctx->screens = ( vxui_screen* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->screen_capacity * ( uint64_t ) sizeof( vxui_screen ),
+        ( uint64_t ) alignof( vxui_screen ) );
+    if ( ctx->screens ) {
+        std::memset( ctx->screens, 0, ( size_t ) ctx->screen_capacity * sizeof( vxui_screen ) );
+        for ( int i = 0; i < ctx->screen_capacity; ++i ) {
+            ctx->screens[ i ].snapshot.command_capacity = ctx->command_capacity;
+            ctx->screens[ i ].snapshot.commands = ( vxui_cmd* ) vxui__arena_alloc(
+                &ctx->arena,
+                ( uint64_t ) ctx->command_capacity * ( uint64_t ) sizeof( vxui_cmd ),
+                ( uint64_t ) alignof( vxui_cmd ) );
+            ctx->screens[ i ].snapshot.command_ids = ( uint32_t* ) vxui__arena_alloc(
+                &ctx->arena,
+                ( uint64_t ) ctx->command_capacity * ( uint64_t ) sizeof( uint32_t ),
+                ( uint64_t ) alignof( uint32_t ) );
+            ctx->screens[ i ].snapshot.screen_ids = ( uint32_t* ) vxui__arena_alloc(
+                &ctx->arena,
+                ( uint64_t ) ctx->command_capacity * ( uint64_t ) sizeof( uint32_t ),
+                ( uint64_t ) alignof( uint32_t ) );
+            ctx->screens[ i ].snapshot.text_blob_capacity = VXUI__DEFAULT_SNAPSHOT_TEXT_BYTES;
+            ctx->screens[ i ].snapshot.text_blob = ( char* ) vxui__arena_alloc(
+                &ctx->arena,
+                ( uint64_t ) ctx->screens[ i ].snapshot.text_blob_capacity,
+                1 );
+        }
+    } else {
+        ctx->screen_capacity = 0;
+    }
+
+    ctx->registered_seq_capacity = ctx->cfg.max_sequences;
+    ctx->registered_seqs = ( vxui_registered_seq* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->registered_seq_capacity * ( uint64_t ) sizeof( vxui_registered_seq ),
+        ( uint64_t ) alignof( vxui_registered_seq ) );
+    if ( ctx->registered_seqs ) {
+        std::memset( ctx->registered_seqs, 0, ( size_t ) ctx->registered_seq_capacity * sizeof( vxui_registered_seq ) );
+    } else {
+        ctx->registered_seq_capacity = 0;
+    }
+
+    ctx->active_seq_capacity = VXUI__DEFAULT_MAX_ACTIVE_SEQS;
+    ctx->active_seqs = ( vxui_active_seq* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->active_seq_capacity * ( uint64_t ) sizeof( vxui_active_seq ),
+        ( uint64_t ) alignof( vxui_active_seq ) );
+    if ( ctx->active_seqs ) {
+        std::memset( ctx->active_seqs, 0, ( size_t ) ctx->active_seq_capacity * sizeof( vxui_active_seq ) );
+    } else {
+        ctx->active_seq_capacity = 0;
+    }
 
     vxui__reset_frame_buffers( ctx );
 }
@@ -2023,6 +2454,11 @@ void vxui_begin( vxui_ctx* ctx, float delta_time )
 vxui_draw_list vxui_end( vxui_ctx* ctx )
 {
     vxui_draw_list list = {};
+    uint32_t delta_ms = 0;
+    if ( ctx->delta_time > 0.0f ) {
+        delta_ms = ( uint32_t ) std::llround( ( double ) ctx->delta_time * 1000.0 );
+    }
+    ctx->elapsed_ms += delta_ms;
 
     if ( ctx->clay_ctx ) {
         Clay_SetCurrentContext( ctx->clay_ctx );
@@ -2033,6 +2469,23 @@ vxui_draw_list vxui_end( vxui_ctx* ctx )
     vxui__resolve_focus( ctx );
     vxui__update_focus_ring( ctx );
     vxui__emit_focus_ring( ctx );
+    for ( int i = 0; i < ctx->command_count; ++i ) {
+        uint32_t screen_id = ctx->command_screen_ids ? ctx->command_screen_ids[ i ] : 0;
+        if ( screen_id == 0 ) {
+            continue;
+        }
+
+        vxui_anim_state* screen_anim = vxui__get_anim_state( ctx, screen_id, true );
+        if ( screen_anim ) {
+            vxui__apply_anim_to_cmd( &ctx->commands[ i ], screen_anim );
+        }
+    }
+    for ( int i = 0; i < ctx->screen_count; ++i ) {
+        if ( ctx->screens[ i ].state == VXUI_SCREEN_EXITING ) {
+            vxui__emit_snapshot( ctx, &ctx->screens[ i ] );
+        }
+    }
+    vxui__update_screen_states( ctx );
 
     list.commands = ctx->commands;
     list.length = ctx->command_count;
@@ -2092,6 +2545,114 @@ void vxui_set_focus( vxui_ctx* ctx, uint32_t id )
 void vxui_set_input_table( vxui_ctx* ctx, const vxui_input_table* table )
 {
     ctx->input_table = table ? table : &vxui__input_keyboard;
+}
+
+void vxui_push_screen( vxui_ctx* ctx, const char* name )
+{
+    if ( !name || ctx->screen_count >= ctx->screen_capacity ) {
+        return;
+    }
+
+    vxui_screen* screen = &ctx->screens[ ctx->screen_count++ ];
+    vxui_snapshot snapshot = screen->snapshot;
+    *screen = vxui_screen {};
+    screen->snapshot = snapshot;
+    screen->snapshot.command_count = 0;
+    screen->snapshot.text_blob_size = 0;
+    std::snprintf( screen->name, sizeof( screen->name ), "%s", name );
+    screen->name_id = vxui_id( screen->name );
+    screen->state = VXUI_SCREEN_ENTERING;
+    screen->state_started_ms = ctx->elapsed_ms;
+
+    char seq_name[ 80 ] = {};
+    std::snprintf( seq_name, sizeof( seq_name ), "%s_enter", screen->name );
+    vxui__fire_seq_by_id( ctx, vxui_id( seq_name ) );
+}
+
+void vxui_pop_screen( vxui_ctx* ctx )
+{
+    vxui_screen* screen = vxui__find_live_screen( ctx );
+    if ( !screen ) {
+        return;
+    }
+
+    vxui_draw_list current = {
+        .commands = ctx->commands,
+        .length = ctx->command_count,
+    };
+    vxui__snapshot_from_draw_list( ctx, &screen->snapshot, &current );
+    screen->state = VXUI_SCREEN_EXITING;
+    screen->state_started_ms = ctx->elapsed_ms;
+
+    ctx->focused_id = 0;
+    ctx->pending_focus_id = 0;
+    ctx->focus_ring_state.valid = false;
+
+    char seq_name[ 80 ] = {};
+    std::snprintf( seq_name, sizeof( seq_name ), "%s_exit", screen->name );
+    vxui__fire_seq_by_id( ctx, vxui_id( seq_name ) );
+}
+
+void vxui_replace_screen( vxui_ctx* ctx, const char* name )
+{
+    vxui_screen* live = vxui__find_live_screen( ctx );
+    if ( live ) {
+        live->state = VXUI_SCREEN_DEAD;
+        vxui__compact_dead_screens( ctx );
+    }
+    vxui_push_screen( ctx, name );
+}
+
+void vxui_register_seq( vxui_ctx* ctx, const char* name, vxui_seq_step* steps, int count )
+{
+    if ( !name || !steps || count <= 0 ) {
+        return;
+    }
+
+    uint32_t name_id = vxui_id( name );
+    vxui_registered_seq* seq = vxui__find_registered_seq( ctx, name_id );
+    if ( !seq ) {
+        if ( ctx->registered_seq_count >= ctx->registered_seq_capacity ) {
+            return;
+        }
+        seq = &ctx->registered_seqs[ ctx->registered_seq_count++ ];
+        *seq = vxui_registered_seq {};
+    }
+
+    std::snprintf( seq->name, sizeof( seq->name ), "%s", name );
+    seq->name_id = name_id;
+    seq->steps = steps;
+    seq->count = count;
+}
+
+void vxui_fire_seq( vxui_ctx* ctx, const char* name )
+{
+    if ( !name ) {
+        return;
+    }
+    vxui__fire_seq_by_id( ctx, vxui_id( name ) );
+}
+
+void vxui_stop_seq( vxui_ctx* ctx, const char* name )
+{
+    if ( !name ) {
+        return;
+    }
+
+    vxui_active_seq* active = vxui__find_active_seq( ctx, vxui_id( name ) );
+    if ( active ) {
+        active->playing = false;
+    }
+}
+
+bool vxui_seq_playing( vxui_ctx* ctx, const char* name )
+{
+    if ( !name ) {
+        return false;
+    }
+
+    vxui_active_seq* active = vxui__find_active_seq( ctx, vxui_id( name ) );
+    return active && active->playing;
 }
 
 void vxui_list_begin( vxui_ctx* ctx, const char* id, vxui_list_cfg cfg )

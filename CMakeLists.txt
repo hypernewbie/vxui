@@ -32,6 +32,7 @@ if(VXUI_BUILD_TESTS)
         tests/test_primitives_advanced.cpp
         tests/test_motion.cpp
         tests/test_navigation.cpp
+        tests/test_screen_stack.cpp
     )
     target_link_libraries(vxui_tests PRIVATE vxui)
     add_test(NAME vxui_tests COMMAND vxui_tests)
