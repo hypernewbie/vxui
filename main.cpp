@@ -655,8 +655,8 @@ int main( void )
 
             VXUI( &ctx, "debug.overlay", {
                 .layout = {
-                    .childGap = 8,
                     .padding = CLAY_PADDING_ALL( 12 ),
+                    .childGap = 8,
                     .layoutDirection = CLAY_TOP_TO_BOTTOM,
                 },
                 .backgroundColor = { 24, 24, 36, 220 },

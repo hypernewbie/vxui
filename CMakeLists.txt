@@ -42,6 +42,7 @@ if(VXUI_BUILD_TESTS)
         tests/test_screen_stack.cpp
         tests/test_traits.cpp
         tests/test_sequences_tooling.cpp
+        tests/test_soak.cpp
     )
     target_link_libraries(vxui_tests PRIVATE vxui tomlc99)
     target_compile_definitions(vxui_tests PRIVATE

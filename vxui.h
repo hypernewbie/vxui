@@ -64,11 +64,13 @@ typedef struct vxui_draw_list vxui_draw_list;
 typedef struct vxui_anim_state vxui_anim_state;
 static inline Clay_ElementDeclaration vxui__rtl_decl( vxui_ctx* ctx, Clay_ElementDeclaration decl );
 
+/* Callback signatures. */
 typedef void ( *vxui_action_fn )( vxui_ctx* ctx, uint32_t id, void* userdata );
 typedef void ( *vxui_int_change_fn )( vxui_ctx* ctx, int value, void* userdata );
 typedef void ( *vxui_float_change_fn )( vxui_ctx* ctx, float value, void* userdata );
 typedef void ( *vxui_trait_fn )( vxui_anim_state* element, vxui_draw_list* draw_list, vxui_rect bounds, float t, bool focused, const void* params );
 
+/* Primitive configuration. */
 typedef struct vxui_label_cfg
 {
     uint32_t font_id;
@@ -232,6 +234,7 @@ typedef struct vxui_focus_ring_cfg
     float spring_damping;
 } vxui_focus_ring_cfg;
 
+/* Context configuration. Zero or negative fields fall back to defaults. */
 typedef struct vxui_config
 {
     int screen_width;
@@ -569,23 +572,32 @@ static inline Clay_ElementDeclaration vxui__rtl_decl( vxui_ctx* ctx, Clay_Elemen
     return decl;
 }
 
+/* Context lifecycle. */
 uint64_t vxui_min_memory_size( void );
 vxui_arena vxui_create_arena( uint64_t size, void* memory );
 void vxui_init( vxui_ctx* ctx, vxui_arena arena, vxui_config cfg );
 void vxui_begin( vxui_ctx* ctx, float delta_time );
 vxui_draw_list vxui_end( vxui_ctx* ctx );
 void vxui_flush_text( vxui_ctx* ctx );
+
+/* External services. */
 void vxui_set_fontcache( vxui_ctx* ctx, ve_fontcache* cache );
 void vxui_set_text_fn( vxui_ctx* ctx, const char* ( *fn )( const char* key, void* userdata ), void* userdata );
+
+/* Input and focus. */
 void vxui_input_nav( vxui_ctx* ctx, vxui_dir dir );
 void vxui_input_confirm( vxui_ctx* ctx );
 void vxui_input_cancel( vxui_ctx* ctx );
 void vxui_input_tab( vxui_ctx* ctx, int direction );
 uint32_t vxui_focused_id( vxui_ctx* ctx );
 void vxui_set_focus( vxui_ctx* ctx, uint32_t id );
+
+/* Localisation and prompts. */
 void vxui_set_input_table( vxui_ctx* ctx, const vxui_input_table* table );
 void vxui_set_locale( vxui_ctx* ctx, const char* locale_code );
 void vxui_set_locale_font( vxui_ctx* ctx, const char* locale_code, uint32_t font_id );
+
+/* Screen stack and sequences. */
 void vxui_push_screen( vxui_ctx* ctx, const char* name );
 void vxui_pop_screen( vxui_ctx* ctx );
 void vxui_replace_screen( vxui_ctx* ctx, const char* name );
@@ -597,23 +609,33 @@ const vxui_registered_seq* vxui_find_seq( vxui_ctx* ctx, const char* name );
 bool vxui_load_seq_toml( vxui_ctx* ctx, const char* path, const char* seq_name, char* error, size_t error_size );
 bool vxui_generate_seq_c( const vxui_registered_seq* seq, char* out, size_t out_size );
 bool vxui_generate_seq_toml( const vxui_registered_seq* seq, char* out, size_t out_size );
+
+/* Debug-only sequence tooling. Requires VXUI_DEBUG. */
 #ifdef VXUI_DEBUG
 bool vxui_watch_seq_file( vxui_ctx* ctx, const char* path, const char* name );
 bool vxui_poll_seq_hot_reload( vxui_ctx* ctx, uint64_t now_ms, char* error, size_t error_size );
 void vxui_debug_capture_preview( vxui_ctx* ctx, const vxui_draw_list* src );
 void vxui_debug_generate_seq_outputs( vxui_ctx* ctx );
 #endif
+
+/* Trait registration. */
 void vxui_register_trait( vxui_ctx* ctx, uint32_t id, vxui_trait_fn fn, size_t params_size );
+
+/* List helpers. */
 void vxui_list_begin( vxui_ctx* ctx, const char* id, vxui_list_cfg cfg );
 void vxui_list_end( vxui_ctx* ctx );
 void vxui_list_item_begin( vxui_ctx* ctx, int index );
 void vxui_list_item_end( vxui_ctx* ctx );
+
+/* Primitives. */
 void VXUI_LABEL( vxui_ctx* ctx, const char* l10n_key, vxui_label_cfg cfg );
 void VXUI_VALUE( vxui_ctx* ctx, const char* l10n_key, float value, vxui_value_cfg cfg );
 void VXUI_ACTION( vxui_ctx* ctx, const char* id, const char* l10n_key, vxui_action_fn fn, vxui_action_cfg cfg );
 void VXUI_OPTION( vxui_ctx* ctx, const char* id, int* index, const char** strings, int count, vxui_option_cfg cfg );
 void VXUI_SLIDER( vxui_ctx* ctx, const char* id, float* value, float min_value, float max_value, vxui_slider_cfg cfg );
 void VXUI_PROMPT( vxui_ctx* ctx, const char* action_name );
+
+/* Id helpers. */
 uint32_t vxui_id( const char* label );
 uint32_t vxui_idi( const char* label, int index );
 
