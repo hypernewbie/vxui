@@ -1,0 +1,4 @@
+[sequence.main_menu_enter]
+steps = [
+  { delay = 0, id = "title", prop = "opacity", target = 1.0 },
+  { delay = 80, id = "options", prop = "slide_y", target = 0.0 }

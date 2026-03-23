@@ -4,10 +4,12 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <cassert>
+#include <cstdarg>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <sys/stat.h>
 
 #include "clay/clay.h"
 typedef struct ve_fontcache ve_fontcache;
@@ -420,6 +422,8 @@ typedef struct vxui_registered_seq
     char name[ 64 ];
     uint32_t name_id;
     vxui_seq_step* steps;
+    const char* step_names;
+    int step_name_stride;
     int count;
 } vxui_registered_seq;
 
@@ -431,6 +435,25 @@ typedef struct vxui_active_seq
     int next_step;
     bool playing;
 } vxui_active_seq;
+
+typedef struct vxui_seq_file
+{
+    char path[ 260 ];
+    uint64_t last_write_time;
+    char name[ 64 ];
+} vxui_seq_file;
+
+#ifdef VXUI_DEBUG
+typedef struct vxui_debug_seq_editor
+{
+    bool open;
+    int selected_seq;
+    bool preview_playing;
+    vxui_snapshot preview_snapshot;
+    char generated_c[ 8192 ];
+    char generated_toml[ 8192 ];
+} vxui_debug_seq_editor;
+#endif
 
 typedef struct vxui_ctx
 {
@@ -518,6 +541,11 @@ typedef struct vxui_ctx
     vxui_registered_seq* registered_seqs;
     int registered_seq_count;
     int registered_seq_capacity;
+    vxui_seq_step* registered_seq_storage;
+    char* registered_seq_step_names;
+    int registered_seq_step_capacity;
+    int registered_seq_step_stride;
+    int registered_seq_step_name_stride;
     vxui_active_seq* active_seqs;
     int active_seq_count;
     int active_seq_capacity;
@@ -526,6 +554,13 @@ typedef struct vxui_ctx
     int trait_desc_count;
     int trait_desc_capacity;
     uint32_t current_decl_id;
+#ifdef VXUI_DEBUG
+    vxui_seq_file* watched_seq_files;
+    int watched_seq_file_count;
+    int watched_seq_file_capacity;
+    vxui_debug_seq_editor debug_seq_editor;
+    uint64_t last_hot_reload_check_ms;
+#endif
 } vxui_ctx;
 
 static inline Clay_ElementDeclaration vxui__rtl_decl( vxui_ctx* ctx, Clay_ElementDeclaration decl )
@@ -558,6 +593,16 @@ void vxui_register_seq( vxui_ctx* ctx, const char* name, vxui_seq_step* steps, i
 void vxui_fire_seq( vxui_ctx* ctx, const char* name );
 void vxui_stop_seq( vxui_ctx* ctx, const char* name );
 bool vxui_seq_playing( vxui_ctx* ctx, const char* name );
+const vxui_registered_seq* vxui_find_seq( vxui_ctx* ctx, const char* name );
+bool vxui_load_seq_toml( vxui_ctx* ctx, const char* path, const char* seq_name, char* error, size_t error_size );
+bool vxui_generate_seq_c( const vxui_registered_seq* seq, char* out, size_t out_size );
+bool vxui_generate_seq_toml( const vxui_registered_seq* seq, char* out, size_t out_size );
+#ifdef VXUI_DEBUG
+bool vxui_watch_seq_file( vxui_ctx* ctx, const char* path, const char* name );
+bool vxui_poll_seq_hot_reload( vxui_ctx* ctx, uint64_t now_ms, char* error, size_t error_size );
+void vxui_debug_capture_preview( vxui_ctx* ctx, const vxui_draw_list* src );
+void vxui_debug_generate_seq_outputs( vxui_ctx* ctx );
+#endif
 void vxui_register_trait( vxui_ctx* ctx, uint32_t id, vxui_trait_fn fn, size_t params_size );
 void vxui_list_begin( vxui_ctx* ctx, const char* id, vxui_list_cfg cfg );
 void vxui_list_end( vxui_ctx* ctx );
@@ -590,6 +635,7 @@ void vxui__attach_trait( vxui_ctx* ctx, uint32_t trait_id, const void* params, s
 #ifdef VXUI_IMPL
 
 #include "vefc/ve_fontcache.h"
+#include "third_party/tomlc99/toml.h"
 
 enum
 {
@@ -600,12 +646,16 @@ enum
     VXUI__DEFAULT_MAX_ANIM_STATES = 1024,
     VXUI__DEFAULT_MAX_SEQUENCES = 64,
     VXUI__DEFAULT_MAX_SEQ_STEPS = 1024,
+    VXUI__DEFAULT_SEQ_STEPS_PER_SEQ = 64,
     VXUI__DEFAULT_MAX_LIST_STATES = 64,
     VXUI__DEFAULT_MAX_SCREENS = 16,
     VXUI__DEFAULT_MAX_ACTIVE_SEQS = 32,
     VXUI__DEFAULT_SNAPSHOT_TEXT_BYTES = 8192,
     VXUI__DEFAULT_FRAME_STRING_BYTES = VXUI__DEFAULT_MAX_ELEMENTS * 128,
     VXUI__DEFAULT_RETAINED_TEXT_BYTES = 256,
+#ifdef VXUI_DEBUG
+    VXUI__DEFAULT_MAX_WATCHED_SEQ_FILES = 16,
+#endif
 };
 
 static const vxui_input_table vxui__input_keyboard = {
@@ -671,6 +721,15 @@ static void vxui__capture_retained_cmd( vxui_ctx* ctx, uint32_t id, const vxui_c
 static void vxui__emit_retained_anim_commands( vxui_ctx* ctx );
 static void vxui__evict_dead_anim_states( vxui_ctx* ctx );
 static void vxui__apply_seq_step( vxui_anim_state* st, const vxui_seq_step* step );
+static bool vxui__register_seq_internal( vxui_ctx* ctx, const char* name, const vxui_seq_step* steps, int count );
+static void vxui__set_seq_step_name( vxui_ctx* ctx, vxui_registered_seq* seq, int step_index, const char* name );
+static const char* vxui__get_seq_step_name( const vxui_registered_seq* seq, int step_index, char* fallback, size_t fallback_size );
+static bool vxui__parse_prop_name( const char* name, vxui_prop* out_prop );
+static const char* vxui__prop_name( vxui_prop prop );
+static void vxui__set_errorf( char* error, size_t error_size, const char* fmt, ... );
+static bool vxui__appendf( char* out, size_t out_size, size_t* used, const char* fmt, ... );
+static uint64_t vxui__get_file_write_time( const char* path );
+static bool vxui__file_changed( vxui_seq_file* file );
 static vxui_screen* vxui__find_live_screen( vxui_ctx* ctx );
 static vxui_screen* vxui__find_screen_by_name_id( vxui_ctx* ctx, uint32_t name_id );
 static vxui_registered_seq* vxui__find_registered_seq( vxui_ctx* ctx, uint32_t name_id );
@@ -1241,6 +1300,115 @@ static const char* vxui__push_utf8_codepoint( vxui_ctx* ctx, uint32_t codepoint 
     return vxui__push_frame_string( ctx, encoded, length );
 }
 
+static bool vxui__parse_prop_name( const char* name, vxui_prop* out_prop )
+{
+    if ( !name || !out_prop ) {
+        return false;
+    }
+
+    if ( std::strcmp( name, "opacity" ) == 0 ) {
+        *out_prop = VXUI_PROP_OPACITY;
+        return true;
+    }
+    if ( std::strcmp( name, "scale" ) == 0 ) {
+        *out_prop = VXUI_PROP_SCALE;
+        return true;
+    }
+    if ( std::strcmp( name, "slide_x" ) == 0 ) {
+        *out_prop = VXUI_PROP_SLIDE_X;
+        return true;
+    }
+    if ( std::strcmp( name, "slide_y" ) == 0 ) {
+        *out_prop = VXUI_PROP_SLIDE_Y;
+        return true;
+    }
+    return false;
+}
+
+static const char* vxui__prop_name( vxui_prop prop )
+{
+    switch ( prop ) {
+        case VXUI_PROP_OPACITY:
+            return "opacity";
+
+        case VXUI_PROP_SCALE:
+            return "scale";
+
+        case VXUI_PROP_SLIDE_X:
+            return "slide_x";
+
+        case VXUI_PROP_SLIDE_Y:
+            return "slide_y";
+    }
+
+    return "opacity";
+}
+
+static void vxui__set_errorf( char* error, size_t error_size, const char* fmt, ... )
+{
+    if ( !error || error_size == 0 || !fmt ) {
+        return;
+    }
+
+    va_list args;
+    va_start( args, fmt );
+    std::vsnprintf( error, error_size, fmt, args );
+    va_end( args );
+    error[ error_size - 1 ] = '\0';
+}
+
+static bool vxui__appendf( char* out, size_t out_size, size_t* used, const char* fmt, ... )
+{
+    if ( !out || !used || !fmt || *used >= out_size ) {
+        return false;
+    }
+
+    va_list args;
+    va_start( args, fmt );
+    int wrote = std::vsnprintf( out + *used, out_size - *used, fmt, args );
+    va_end( args );
+    if ( wrote < 0 ) {
+        return false;
+    }
+
+    size_t advance = ( size_t ) wrote;
+    if ( *used + advance >= out_size ) {
+        *used = out_size - 1;
+        out[ out_size - 1 ] = '\0';
+        return false;
+    }
+
+    *used += advance;
+    return true;
+}
+
+static uint64_t vxui__get_file_write_time( const char* path )
+{
+    if ( !path || !path[ 0 ] ) {
+        return 0;
+    }
+
+    struct _stat64 st = {};
+    if ( _stat64( path, &st ) != 0 ) {
+        return 0;
+    }
+    return ( uint64_t ) st.st_mtime;
+}
+
+static bool vxui__file_changed( vxui_seq_file* file )
+{
+    if ( !file ) {
+        return false;
+    }
+
+    uint64_t now = vxui__get_file_write_time( file->path );
+    if ( now == 0 || now == file->last_write_time ) {
+        return false;
+    }
+    file->last_write_time = now;
+    return true;
+}
+
 static void vxui__apply_seq_step( vxui_anim_state* st, const vxui_seq_step* step )
 {
     if ( !st || !step ) {
@@ -1296,6 +1464,40 @@ static vxui_registered_seq* vxui__find_registered_seq( vxui_ctx* ctx, uint32_t n
     return nullptr;
 }
 
+static void vxui__set_seq_step_name( vxui_ctx* ctx, vxui_registered_seq* seq, int step_index, const char* name )
+{
+    if ( !ctx || !seq || !ctx->registered_seq_step_names || step_index < 0 || step_index >= ctx->registered_seq_step_stride ) {
+        return;
+    }
+
+    int seq_index = ( int ) ( seq - ctx->registered_seqs );
+    if ( seq_index < 0 || seq_index >= ctx->registered_seq_capacity ) {
+        return;
+    }
+
+    char* dst = ctx->registered_seq_step_names
+        + ( size_t ) seq_index * ( size_t ) ctx->registered_seq_step_stride * ( size_t ) ctx->registered_seq_step_name_stride
+        + ( size_t ) step_index * ( size_t ) ctx->registered_seq_step_name_stride;
+    std::snprintf( dst, ( size_t ) ctx->registered_seq_step_name_stride, "%s", name ? name : "" );
+}
+
+static const char* vxui__get_seq_step_name( const vxui_registered_seq* seq, int step_index, char* fallback, size_t fallback_size )
+{
+    if ( seq && seq->steps && step_index >= 0 && step_index < seq->count && seq->step_names ) {
+        const char* name = seq->step_names + ( size_t ) step_index * ( size_t ) seq->step_name_stride;
+        if ( name[ 0 ] != '\0' ) {
+            return name;
+        }
+    }
+
+    if ( fallback && fallback_size > 0 && seq && seq->steps && step_index >= 0 && step_index < seq->count ) {
+        std::snprintf( fallback, fallback_size, "#%08x", seq->steps[ step_index ].id );
+        return fallback;
+    }
+
+    return "";
+}
+
 static vxui_active_seq* vxui__find_active_seq( vxui_ctx* ctx, uint32_t name_id )
 {
     for ( int i = 0; i < ctx->active_seq_count; ++i ) {
@@ -1336,6 +1538,50 @@ static void vxui__fire_seq_by_id( vxui_ctx* ctx, uint32_t name_id )
         .next_step = 0,
         .playing = true,
     };
+}
+
+static bool vxui__register_seq_internal( vxui_ctx* ctx, const char* name, const vxui_seq_step* steps, int count )
+{
+    if ( !ctx || !name || !steps || count <= 0 ) {
+        return false;
+    }
+    if ( ctx->registered_seq_step_stride > 0 && count > ctx->registered_seq_step_stride ) {
+        return false;
+    }
+
+    uint32_t name_id = vxui_id( name );
+    vxui_registered_seq* seq = vxui__find_registered_seq( ctx, name_id );
+    if ( !seq ) {
+        if ( ctx->registered_seq_count >= ctx->registered_seq_capacity ) {
+            return false;
+        }
+        seq = &ctx->registered_seqs[ ctx->registered_seq_count++ ];
+        *seq = vxui_registered_seq {};
+    }
+
+    std::snprintf( seq->name, sizeof( seq->name ), "%s", name );
+    seq->name_id = name_id;
+    seq->count = count;
+    seq->step_names = nullptr;
+    seq->step_name_stride = 0;
+
+    if ( ctx->registered_seq_storage && ctx->registered_seq_step_stride > 0 ) {
+        int seq_index = ( int ) ( seq - ctx->registered_seqs );
+        vxui_seq_step* storage = ctx->registered_seq_storage + ( size_t ) seq_index * ( size_t ) ctx->registered_seq_step_stride;
+        std::memcpy( storage, steps, ( size_t ) count * sizeof( vxui_seq_step ) );
+        seq->steps = storage;
+    } else {
+        seq->steps = ( vxui_seq_step* ) steps;
+    }
+
+    if ( ctx->registered_seq_step_names && ctx->registered_seq_step_name_stride > 0 ) {
+        int seq_index = ( int ) ( seq - ctx->registered_seqs );
+        char* names = ctx->registered_seq_step_names
+            + ( size_t ) seq_index * ( size_t ) ctx->registered_seq_step_stride * ( size_t ) ctx->registered_seq_step_name_stride;
+        std::memset( names, 0, ( size_t ) ctx->registered_seq_step_stride * ( size_t ) ctx->registered_seq_step_name_stride );
+    }
+
+    return true;
 }
 
 static void vxui__advance_sequences( vxui_ctx* ctx )
@@ -2663,12 +2909,25 @@ uint64_t vxui_min_memory_size( void )
     uint64_t snapshot_id_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SCREENS * command_capacity * ( uint64_t ) sizeof( uint32_t ) * 2u;
     uint64_t snapshot_text_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SCREENS * ( uint64_t ) VXUI__DEFAULT_SNAPSHOT_TEXT_BYTES;
     uint64_t registered_seq_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SEQUENCES * ( uint64_t ) sizeof( vxui_registered_seq );
+    uint64_t registered_seq_step_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SEQUENCES * ( uint64_t ) VXUI__DEFAULT_SEQ_STEPS_PER_SEQ * ( uint64_t ) sizeof( vxui_seq_step );
+    uint64_t registered_seq_name_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_SEQUENCES * ( uint64_t ) VXUI__DEFAULT_SEQ_STEPS_PER_SEQ * 64u;
     uint64_t active_seq_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_ACTIVE_SEQS * ( uint64_t ) sizeof( vxui_active_seq );
     uint64_t locale_font_bytes = 32u * ( uint64_t ) sizeof( vxui_locale_font );
     uint64_t trait_desc_bytes = 32u * ( uint64_t ) sizeof( vxui_trait_desc );
     uint64_t frame_bytes = ( uint64_t ) VXUI__DEFAULT_FRAME_STRING_BYTES;
+#ifdef VXUI_DEBUG
+    uint64_t watched_seq_file_bytes = ( uint64_t ) VXUI__DEFAULT_MAX_WATCHED_SEQ_FILES * ( uint64_t ) sizeof( vxui_seq_file );
+    uint64_t debug_snapshot_cmd_bytes = command_capacity * ( uint64_t ) sizeof( vxui_cmd );
+    uint64_t debug_snapshot_id_bytes = command_capacity * ( uint64_t ) sizeof( uint32_t ) * 2u;
+    uint64_t debug_snapshot_text_bytes = ( uint64_t ) VXUI__DEFAULT_SNAPSHOT_TEXT_BYTES;
+#else
+    uint64_t watched_seq_file_bytes = 0;
+    uint64_t debug_snapshot_cmd_bytes = 0;
+    uint64_t debug_snapshot_id_bytes = 0;
+    uint64_t debug_snapshot_text_bytes = 0;
+#endif
     uint64_t slack_bytes = 64u * 1024u;
-    return clay_bytes + command_bytes + command_id_bytes + text_bytes + clip_bytes + decl_bytes + owner_bytes + list_scope_bytes + list_state_bytes + anim_bytes + retained_cmd_bytes + retained_valid_bytes + retained_text_bytes + screen_bytes + snapshot_cmd_bytes + snapshot_id_bytes + snapshot_text_bytes + registered_seq_bytes + active_seq_bytes + locale_font_bytes + trait_desc_bytes + frame_bytes + slack_bytes;
+    return clay_bytes + command_bytes + command_id_bytes + text_bytes + clip_bytes + decl_bytes + owner_bytes + list_scope_bytes + list_state_bytes + anim_bytes + retained_cmd_bytes + retained_valid_bytes + retained_text_bytes + screen_bytes + snapshot_cmd_bytes + snapshot_id_bytes + snapshot_text_bytes + registered_seq_bytes + registered_seq_step_bytes + registered_seq_name_bytes + active_seq_bytes + locale_font_bytes + trait_desc_bytes + frame_bytes + watched_seq_file_bytes + debug_snapshot_cmd_bytes + debug_snapshot_id_bytes + debug_snapshot_text_bytes + slack_bytes;
 }
 
 vxui_arena vxui_create_arena( uint64_t size, void* memory )
@@ -2875,6 +3134,28 @@ void vxui_init( vxui_ctx* ctx, vxui_arena arena, vxui_config cfg )
     } else {
         ctx->registered_seq_capacity = 0;
     }
+    ctx->registered_seq_step_stride = VXUI__DEFAULT_SEQ_STEPS_PER_SEQ;
+    ctx->registered_seq_step_name_stride = 64;
+    ctx->registered_seq_step_capacity = ctx->registered_seq_capacity * ctx->registered_seq_step_stride;
+    ctx->registered_seq_storage = ( vxui_seq_step* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->registered_seq_step_capacity * ( uint64_t ) sizeof( vxui_seq_step ),
+        ( uint64_t ) alignof( vxui_seq_step ) );
+    ctx->registered_seq_step_names = ( char* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->registered_seq_capacity * ( uint64_t ) ctx->registered_seq_step_stride * ( uint64_t ) ctx->registered_seq_step_name_stride,
+        1 );
+    if ( ctx->registered_seq_storage ) {
+        std::memset( ctx->registered_seq_storage, 0, ( size_t ) ctx->registered_seq_step_capacity * sizeof( vxui_seq_step ) );
+    } else {
+        ctx->registered_seq_step_capacity = 0;
+        ctx->registered_seq_step_stride = 0;
+    }
+    if ( ctx->registered_seq_step_names ) {
+        std::memset( ctx->registered_seq_step_names, 0, ( size_t ) ctx->registered_seq_capacity * ( size_t ) ctx->registered_seq_step_stride * ( size_t ) ctx->registered_seq_step_name_stride );
+    } else {
+        ctx->registered_seq_step_name_stride = 0;
+    }
 
     ctx->active_seq_capacity = VXUI__DEFAULT_MAX_ACTIVE_SEQS;
     ctx->active_seqs = ( vxui_active_seq* ) vxui__arena_alloc(
@@ -2907,6 +3188,37 @@ void vxui_init( vxui_ctx* ctx, vxui_arena arena, vxui_config cfg )
     } else {
         ctx->trait_desc_capacity = 0;
     }
+#ifdef VXUI_DEBUG
+    ctx->watched_seq_file_capacity = VXUI__DEFAULT_MAX_WATCHED_SEQ_FILES;
+    ctx->watched_seq_files = ( vxui_seq_file* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->watched_seq_file_capacity * ( uint64_t ) sizeof( vxui_seq_file ),
+        ( uint64_t ) alignof( vxui_seq_file ) );
+    if ( ctx->watched_seq_files ) {
+        std::memset( ctx->watched_seq_files, 0, ( size_t ) ctx->watched_seq_file_capacity * sizeof( vxui_seq_file ) );
+    } else {
+        ctx->watched_seq_file_capacity = 0;
+    }
+
+    ctx->debug_seq_editor.preview_snapshot.command_capacity = ctx->command_capacity;
+    ctx->debug_seq_editor.preview_snapshot.commands = ( vxui_cmd* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->command_capacity * ( uint64_t ) sizeof( vxui_cmd ),
+        ( uint64_t ) alignof( vxui_cmd ) );
+    ctx->debug_seq_editor.preview_snapshot.command_ids = ( uint32_t* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->command_capacity * ( uint64_t ) sizeof( uint32_t ),
+        ( uint64_t ) alignof( uint32_t ) );
+    ctx->debug_seq_editor.preview_snapshot.screen_ids = ( uint32_t* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->command_capacity * ( uint64_t ) sizeof( uint32_t ),
+        ( uint64_t ) alignof( uint32_t ) );
+    ctx->debug_seq_editor.preview_snapshot.text_blob_capacity = VXUI__DEFAULT_SNAPSHOT_TEXT_BYTES;
+    ctx->debug_seq_editor.preview_snapshot.text_blob = ( char* ) vxui__arena_alloc(
+        &ctx->arena,
+        ( uint64_t ) ctx->debug_seq_editor.preview_snapshot.text_blob_capacity,
+        1 );
+#endif
     std::snprintf( ctx->locale, sizeof( ctx->locale ), "%s", "en" );
     ctx->rtl = false;
     vxui__register_builtin_traits( ctx );
@@ -3113,24 +3425,7 @@ void vxui_replace_screen( vxui_ctx* ctx, const char* name )
 
 void vxui_register_seq( vxui_ctx* ctx, const char* name, vxui_seq_step* steps, int count )
 {
-    if ( !name || !steps || count <= 0 ) {
-        return;
-    }
-
-    uint32_t name_id = vxui_id( name );
-    vxui_registered_seq* seq = vxui__find_registered_seq( ctx, name_id );
-    if ( !seq ) {
-        if ( ctx->registered_seq_count >= ctx->registered_seq_capacity ) {
-            return;
-        }
-        seq = &ctx->registered_seqs[ ctx->registered_seq_count++ ];
-        *seq = vxui_registered_seq {};
-    }
-
-    std::snprintf( seq->name, sizeof( seq->name ), "%s", name );
-    seq->name_id = name_id;
-    seq->steps = steps;
-    seq->count = count;
+    vxui__register_seq_internal( ctx, name, steps, count );
 }
 
 void vxui_fire_seq( vxui_ctx* ctx, const char* name )
@@ -3162,6 +3457,301 @@ bool vxui_seq_playing( vxui_ctx* ctx, const char* name )
     vxui_active_seq* active = vxui__find_active_seq( ctx, vxui_id( name ) );
     return active && active->playing;
 }
+
+const vxui_registered_seq* vxui_find_seq( vxui_ctx* ctx, const char* name )
+{
+    if ( !ctx || !name ) {
+        return nullptr;
+    }
+    return vxui__find_registered_seq( ctx, vxui_id( name ) );
+}
+
+bool vxui_generate_seq_c( const vxui_registered_seq* seq, char* out, size_t out_size )
+{
+    if ( !out || out_size == 0 ) {
+        return false;
+    }
+    out[ 0 ] = '\0';
+    if ( !seq || !seq->steps || seq->count <= 0 ) {
+        return false;
+    }
+
+    size_t used = 0;
+    if ( !vxui__appendf( out, out_size, &used, "static const vxui_seq_step %s[] = {\n", seq->name ) ) {
+        return false;
+    }
+    for ( int i = 0; i < seq->count; ++i ) {
+        char fallback[ 32 ] = {};
+        const char* step_name = vxui__get_seq_step_name( seq, i, fallback, sizeof( fallback ) );
+        if ( !vxui__appendf(
+                 out,
+                 out_size,
+                 &used,
+                 "    { %u, vxui_id( \"%s\" ), %s, %.3ff },\n",
+                 seq->steps[ i ].delay_ms,
+                 step_name,
+                 seq->steps[ i ].prop == VXUI_PROP_OPACITY ? "VXUI_PROP_OPACITY" :
+                 seq->steps[ i ].prop == VXUI_PROP_SCALE ? "VXUI_PROP_SCALE" :
+                 seq->steps[ i ].prop == VXUI_PROP_SLIDE_X ? "VXUI_PROP_SLIDE_X" : "VXUI_PROP_SLIDE_Y",
+                 seq->steps[ i ].target ) ) {
+            return false;
+        }
+    }
+
+    return vxui__appendf( out, out_size, &used, "};\n" );
+}
+
+bool vxui_generate_seq_toml( const vxui_registered_seq* seq, char* out, size_t out_size )
+{
+    if ( !out || out_size == 0 ) {
+        return false;
+    }
+    out[ 0 ] = '\0';
+    if ( !seq || !seq->steps || seq->count <= 0 ) {
+        return false;
+    }
+
+    size_t used = 0;
+    if ( !vxui__appendf( out, out_size, &used, "[sequence.%s]\nsteps = [\n", seq->name ) ) {
+        return false;
+    }
+    for ( int i = 0; i < seq->count; ++i ) {
+        char fallback[ 32 ] = {};
+        const char* step_name = vxui__get_seq_step_name( seq, i, fallback, sizeof( fallback ) );
+        if ( !vxui__appendf(
+                 out,
+                 out_size,
+                 &used,
+                 "  { delay = %u, id = \"%s\", prop = \"%s\", target = %.3f }%s\n",
+                 seq->steps[ i ].delay_ms,
+                 step_name,
+                 vxui__prop_name( seq->steps[ i ].prop ),
+                 seq->steps[ i ].target,
+                 i + 1 < seq->count ? "," : "" ) ) {
+            return false;
+        }
+    }
+
+    return vxui__appendf( out, out_size, &used, "]\n" );
+}
+
+bool vxui_load_seq_toml( vxui_ctx* ctx, const char* path, const char* seq_name, char* error, size_t error_size )
+{
+    if ( error && error_size > 0 ) {
+        error[ 0 ] = '\0';
+    }
+    if ( !ctx || !path || !path[ 0 ] ) {
+        vxui__set_errorf( error, error_size, "missing sequence path" );
+        return false;
+    }
+
+    FILE* fp = std::fopen( path, "rb" );
+    if ( !fp ) {
+        vxui__set_errorf( error, error_size, "failed to open %s", path );
+        return false;
+    }
+
+    char parse_error[ 256 ] = {};
+    toml_doc_t* doc = toml_parse_file( fp, parse_error, ( int ) sizeof( parse_error ) );
+    std::fclose( fp );
+    if ( !doc ) {
+        vxui__set_errorf( error, error_size, "%s", parse_error[ 0 ] ? parse_error : "toml parse failed" );
+        return false;
+    }
+
+    typedef struct vxui__loaded_seq_temp
+    {
+        char name[ 64 ];
+        vxui_seq_step steps[ VXUI__DEFAULT_SEQ_STEPS_PER_SEQ ];
+        char step_names[ VXUI__DEFAULT_SEQ_STEPS_PER_SEQ ][ 64 ];
+        int count;
+    } vxui__loaded_seq_temp;
+
+    vxui__loaded_seq_temp loaded[ VXUI__DEFAULT_MAX_SEQUENCES ] = {};
+    int loaded_count = 0;
+    for ( int i = 0; i < doc->sequence_count; ++i ) {
+        const toml_sequence_t* src_seq = &doc->sequences[ i ];
+        if ( seq_name && seq_name[ 0 ] && std::strcmp( src_seq->name, seq_name ) != 0 ) {
+            continue;
+        }
+        if ( loaded_count >= VXUI__DEFAULT_MAX_SEQUENCES ) {
+            vxui__set_errorf( error, error_size, "too many sequences in %s", path );
+            toml_free( doc );
+            return false;
+        }
+        if ( src_seq->step_count <= 0 || src_seq->step_count > VXUI__DEFAULT_SEQ_STEPS_PER_SEQ ) {
+            vxui__set_errorf( error, error_size, "invalid step count for %s", src_seq->name );
+            toml_free( doc );
+            return false;
+        }
+
+        vxui__loaded_seq_temp* dst_seq = &loaded[ loaded_count++ ];
+        std::snprintf( dst_seq->name, sizeof( dst_seq->name ), "%s", src_seq->name );
+        dst_seq->count = src_seq->step_count;
+
+        for ( int step_index = 0; step_index < src_seq->step_count; ++step_index ) {
+            const toml_step_t* src_step = &src_seq->steps[ step_index ];
+            vxui_prop prop = VXUI_PROP_OPACITY;
+            if ( !src_step->has_delay || !src_step->has_id || !src_step->has_prop || !src_step->has_target ) {
+                vxui__set_errorf( error, error_size, "missing required field in %s step %d", src_seq->name, step_index );
+                toml_free( doc );
+                return false;
+            }
+            if ( src_step->delay < 0 ) {
+                vxui__set_errorf( error, error_size, "negative delay in %s step %d", src_seq->name, step_index );
+                toml_free( doc );
+                return false;
+            }
+            if ( !vxui__parse_prop_name( src_step->prop, &prop ) ) {
+                vxui__set_errorf( error, error_size, "unknown prop '%s' in %s", src_step->prop ? src_step->prop : "", src_seq->name );
+                toml_free( doc );
+                return false;
+            }
+#ifdef VXUI_DEBUG
+            if ( src_step->unknown_field_count > 0 ) {
+                std::fprintf( stderr, "vxui: ignoring unknown sequence key '%s' in %s\n", src_step->unknown_key, src_seq->name );
+            }
+#endif
+            dst_seq->steps[ step_index ] = ( vxui_seq_step ) {
+                ( uint32_t ) src_step->delay,
+                vxui_id( src_step->id ),
+                prop,
+                ( float ) src_step->target,
+            };
+            std::snprintf( dst_seq->step_names[ step_index ], sizeof( dst_seq->step_names[ step_index ] ), "%s", src_step->id );
+        }
+    }
+
+    toml_free( doc );
+    if ( loaded_count == 0 ) {
+        vxui__set_errorf( error, error_size, "no matching sequences in %s", path );
+        return false;
+    }
+
+    for ( int i = 0; i < loaded_count; ++i ) {
+        if ( !vxui__register_seq_internal( ctx, loaded[ i ].name, loaded[ i ].steps, loaded[ i ].count ) ) {
+            vxui__set_errorf( error, error_size, "failed to register %s", loaded[ i ].name );
+            return false;
+        }
+
+        vxui_registered_seq* seq = vxui__find_registered_seq( ctx, vxui_id( loaded[ i ].name ) );
+        if ( !seq ) {
+            vxui__set_errorf( error, error_size, "registered sequence lookup failed for %s", loaded[ i ].name );
+            return false;
+        }
+        if ( ctx->registered_seq_step_names && ctx->registered_seq_step_name_stride > 0 ) {
+            seq->step_name_stride = ctx->registered_seq_step_name_stride;
+            seq->step_names = ctx->registered_seq_step_names
+                + ( size_t ) ( seq - ctx->registered_seqs ) * ( size_t ) ctx->registered_seq_step_stride * ( size_t ) ctx->registered_seq_step_name_stride;
+            for ( int step_index = 0; step_index < loaded[ i ].count; ++step_index ) {
+                vxui__set_seq_step_name( ctx, seq, step_index, loaded[ i ].step_names[ step_index ] );
+            }
+        } else {
+            seq->step_names = nullptr;
+            seq->step_name_stride = 0;
+        }
+    }
+
+    return true;
+}
+
+#ifdef VXUI_DEBUG
+bool vxui_watch_seq_file( vxui_ctx* ctx, const char* path, const char* name )
+{
+    if ( !ctx || !path || !path[ 0 ] || ctx->watched_seq_file_count >= ctx->watched_seq_file_capacity ) {
+        return false;
+    }
+
+    vxui_seq_file* file = &ctx->watched_seq_files[ ctx->watched_seq_file_count++ ];
+    *file = vxui_seq_file {};
+    std::snprintf( file->path, sizeof( file->path ), "%s", path );
+    std::snprintf( file->name, sizeof( file->name ), "%s", name ? name : "" );
+    file->last_write_time = vxui__get_file_write_time( file->path );
+    return true;
+}
+
+bool vxui_poll_seq_hot_reload( vxui_ctx* ctx, uint64_t now_ms, char* error, size_t error_size )
+{
+    if ( error && error_size > 0 ) {
+        error[ 0 ] = '\0';
+    }
+    if ( !ctx ) {
+        return false;
+    }
+    if ( now_ms < ctx->last_hot_reload_check_ms || now_ms - ctx->last_hot_reload_check_ms < 250 ) {
+        return false;
+    }
+    ctx->last_hot_reload_check_ms = now_ms;
+
+    bool reloaded = false;
+    for ( int i = 0; i < ctx->watched_seq_file_count; ++i ) {
+        vxui_seq_file* file = &ctx->watched_seq_files[ i ];
+        if ( !vxui__file_changed( file ) ) {
+            continue;
+        }
+        if ( vxui_load_seq_toml( ctx, file->path, file->name[ 0 ] ? file->name : nullptr, error, error_size ) ) {
+            reloaded = true;
+        }
+    }
+
+    return reloaded;
+}
+
+void vxui_debug_capture_preview( vxui_ctx* ctx, const vxui_draw_list* src )
+{
+    if ( !ctx ) {
+        return;
+    }
+    vxui__snapshot_from_draw_list( ctx, &ctx->debug_seq_editor.preview_snapshot, src );
+    if ( !src || ctx->debug_seq_editor.preview_snapshot.command_count > 0 ) {
+        return;
+    }
+
+    vxui_snapshot* preview = &ctx->debug_seq_editor.preview_snapshot;
+    preview->command_count = 0;
+    preview->text_blob_size = 0;
+    for ( int i = 0; i < src->length && preview->command_count < preview->command_capacity; ++i ) {
+        int dst_index = preview->command_count++;
+        preview->commands[ dst_index ] = src->commands[ i ];
+        if ( preview->command_ids ) {
+            preview->command_ids[ dst_index ] = ctx->command_ids ? ctx->command_ids[ i ] : 0;
+        }
+        if ( preview->screen_ids ) {
+            preview->screen_ids[ dst_index ] = ctx->command_screen_ids ? ctx->command_screen_ids[ i ] : 0;
+        }
+
+        if ( preview->commands[ dst_index ].type == VXUI_CMD_TEXT && preview->commands[ dst_index ].text.text ) {
+            size_t text_len = std::strlen( preview->commands[ dst_index ].text.text ) + 1u;
+            if ( preview->text_blob_size + ( int ) text_len > preview->text_blob_capacity ) {
+                preview->command_count -= 1;
+                break;
+            }
+
+            char* dst_text = preview->text_blob + preview->text_blob_size;
+            std::memcpy( dst_text, preview->commands[ dst_index ].text.text, text_len );
+            preview->commands[ dst_index ].text.text = dst_text;
+            preview->text_blob_size += ( int ) text_len;
+        }
+    }
+}
+
+void vxui_debug_generate_seq_outputs( vxui_ctx* ctx )
+{
+    if ( !ctx ) {
+        return;
+    }
+
+    ctx->debug_seq_editor.generated_c[ 0 ] = '\0';
+    ctx->debug_seq_editor.generated_toml[ 0 ] = '\0';
+    if ( ctx->debug_seq_editor.selected_seq < 0 || ctx->debug_seq_editor.selected_seq >= ctx->registered_seq_count ) {
+        return;
+    }
+
+    const vxui_registered_seq* seq = &ctx->registered_seqs[ ctx->debug_seq_editor.selected_seq ];
+    vxui_generate_seq_c( seq, ctx->debug_seq_editor.generated_c, sizeof( ctx->debug_seq_editor.generated_c ) );
+    vxui_generate_seq_toml( seq, ctx->debug_seq_editor.generated_toml, sizeof( ctx->debug_seq_editor.generated_toml ) );
+}
+#endif
 
 void vxui_list_begin( vxui_ctx* ctx, const char* id, vxui_list_cfg cfg )
 {

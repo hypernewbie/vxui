@@ -1,0 +1,12 @@
+[sequence.main_menu_enter]
+steps = [
+  { delay = 0, id = "title", prop = "opacity", target = 1.0 },
+  { delay = 80, id = "options", prop = "slide_y", target = 0.0 },
+  { delay = 80, id = "options", prop = "opacity", target = 1.0 },
+]
+
+[sequence.settings_enter]
+steps = [
+  { delay = 0, id = "settings", prop = "slide_x", target = 28.0 },
+  { delay = 120, id = "settings", prop = "slide_x", target = 0.0 },
+]
