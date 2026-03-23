@@ -196,3 +196,26 @@ UTEST_F( traits_fixture, focused_flag_is_reported_correctly )
 
     EXPECT_TRUE( vxui__trait_last_focused );
 }
+
+UTEST_F( traits_fixture, nested_vxui_scope_restores_current_decl_id_for_following_traits )
+{
+    vxui_register_trait( &utest_fixture->ctx, 99u, vxui__test_trait, sizeof( vxui__test_trait_params ) );
+
+    vxui_begin( &utest_fixture->ctx, 0.016f );
+    VXUI( &utest_fixture->ctx, "trait.host", {} ) {
+        EXPECT_EQ( utest_fixture->ctx.current_decl_id, vxui_id( "trait.host" ) );
+        VXUI( &utest_fixture->ctx, "trait.child", {} ) {
+            EXPECT_EQ( utest_fixture->ctx.current_decl_id, vxui_id( "trait.child" ) );
+            VXUI_LABEL( &utest_fixture->ctx, "trait.child.label", ( vxui_label_cfg ) { 0 } );
+        }
+        EXPECT_EQ( utest_fixture->ctx.current_decl_id, vxui_id( "trait.host" ) );
+        VXUI_TRAIT( 99u, ( vxui__test_trait_params ) { .value = 0.8f, .order = 1 } );
+    }
+    vxui_end( &utest_fixture->ctx );
+
+    vxui_anim_state* host = vxui__find_anim_state( &utest_fixture->ctx, vxui_id( "trait.host" ) );
+    vxui_anim_state* child = vxui__find_anim_state( &utest_fixture->ctx, vxui_id( "trait.child" ) );
+    ASSERT_TRUE( host != nullptr );
+    EXPECT_EQ( host->trait_count, 1 );
+    EXPECT_TRUE( child == nullptr || child->trait_count == 0 );
+}

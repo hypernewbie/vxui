@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "../third_party/utest.h"
+#include "test_support.h"
 #include "../vxui.h"
 
 typedef struct soak_trait_params
@@ -14,19 +15,6 @@ static const char* vxui__soak_text( const char* key, void* userdata )
 {
     ( void ) userdata;
     return key;
-}
-
-static bool vxui__soak_write_text_file( const char* path, const char* text )
-{
-    FILE* fp = std::fopen( path, "wb" );
-    if ( !fp ) {
-        return false;
-    }
-
-    size_t length = std::strlen( text );
-    bool ok = std::fwrite( text, 1, length, fp ) == length;
-    std::fclose( fp );
-    return ok;
 }
 
 static void vxui__soak_overlay_trait( vxui_anim_state* element, vxui_draw_list* draw_list, vxui_rect bounds, float t, bool focused, const void* params )
@@ -119,21 +107,22 @@ UTEST( soak, repeated_sequence_fire_stop_reload_cycles )
     uint8_t* memory = nullptr;
     uint64_t memory_size = 0;
     vxui_ctx ctx = {};
-    char temp_path[ 260 ] = {};
+    std::string temp_path;
     ASSERT_TRUE( vxui__soak_init_ctx( &ctx, &memory, &memory_size ) );
-    std::snprintf( temp_path, sizeof( temp_path ), "%s/soak_sequence.toml", VXUI_TEST_TEMP_DIR );
+    temp_path = vxui_test_temp_path( "soak_sequence.toml" );
+    EXPECT_TRUE( temp_path.find( "C:\\code\\github\\vxui" ) != 0 );
 
-    ASSERT_TRUE( vxui__soak_write_text_file(
-        temp_path,
+    ASSERT_TRUE( vxui_test_write_text_file(
+        temp_path.c_str(),
         "[sequence.soak_enter]\n"
         "steps = [\n"
         "  { delay = 0, id = \"menu\", prop = \"opacity\", target = 0.5 },\n"
         "  { delay = 60, id = \"menu\", prop = \"opacity\", target = 1.0 },\n"
         "]\n" ) );
-    ASSERT_TRUE( vxui_load_seq_toml( &ctx, temp_path, "soak_enter", nullptr, 0 ) );
+    ASSERT_TRUE( vxui_load_seq_toml( &ctx, temp_path.c_str(), "soak_enter", nullptr, 0 ) );
 
 #ifdef VXUI_DEBUG
-    ASSERT_TRUE( vxui_watch_seq_file( &ctx, temp_path, "soak_enter" ) );
+    ASSERT_TRUE( vxui_watch_seq_file( &ctx, temp_path.c_str(), "soak_enter" ) );
 #endif
 
     for ( int i = 0; i < 120; ++i ) {
@@ -149,8 +138,8 @@ UTEST( soak, repeated_sequence_fire_stop_reload_cycles )
 
 #ifdef VXUI_DEBUG
         if ( ( i % 20 ) == 0 ) {
-            ASSERT_TRUE( vxui__soak_write_text_file(
-                temp_path,
+            ASSERT_TRUE( vxui_test_write_text_file(
+                temp_path.c_str(),
                 "[sequence.soak_enter]\n"
                 "steps = [\n"
                 "  { delay = 0, id = \"menu\", prop = \"opacity\", target = 0.5 },\n"
@@ -163,7 +152,7 @@ UTEST( soak, repeated_sequence_fire_stop_reload_cycles )
 #endif
     }
 
-    std::remove( temp_path );
+    std::remove( temp_path.c_str() );
     Clay_SetCurrentContext( nullptr );
     std::free( memory );
 }

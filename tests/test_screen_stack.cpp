@@ -243,3 +243,32 @@ UTEST_F( screen_stack_fixture, active_and_exiting_screens_coexist_in_draw_list )
     EXPECT_TRUE( vxui__screen_stack_has_text( &list, "Main Menu" ) );
     EXPECT_TRUE( vxui__screen_stack_has_text( &list, "Settings" ) );
 }
+
+UTEST_F( screen_stack_fixture, pop_keeps_exiting_snapshot_while_focus_returns_to_main_screen )
+{
+    vxui_push_screen( &utest_fixture->ctx, "main_menu" );
+
+    vxui_begin( &utest_fixture->ctx, 0.016f );
+    VXUI( &utest_fixture->ctx, "main_menu", {} ) {
+        VXUI_ACTION( &utest_fixture->ctx, "main.open", "screen.main", nullptr, ( vxui_action_cfg ) { 0 } );
+    }
+    vxui_end( &utest_fixture->ctx );
+
+    vxui_push_screen( &utest_fixture->ctx, "settings" );
+    vxui_begin( &utest_fixture->ctx, 0.016f );
+    VXUI( &utest_fixture->ctx, "settings", {} ) {
+        VXUI_LABEL( &utest_fixture->ctx, "screen.settings", ( vxui_label_cfg ) { 0 } );
+        VXUI_ACTION( &utest_fixture->ctx, "settings.back", "screen.back", nullptr, ( vxui_action_cfg ) { 0 } );
+    }
+    vxui_end( &utest_fixture->ctx );
+    vxui_pop_screen( &utest_fixture->ctx );
+
+    vxui_begin( &utest_fixture->ctx, 0.016f );
+    VXUI( &utest_fixture->ctx, "main_menu", {} ) {
+        VXUI_ACTION( &utest_fixture->ctx, "main.open", "screen.main", nullptr, ( vxui_action_cfg ) { 0 } );
+    }
+    vxui_draw_list list = vxui_end( &utest_fixture->ctx );
+
+    EXPECT_EQ( vxui_focused_id( &utest_fixture->ctx ), vxui_id( "main.open" ) );
+    EXPECT_TRUE( vxui__screen_stack_has_text( &list, "Settings" ) );
+}

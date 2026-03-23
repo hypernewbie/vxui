@@ -95,6 +95,33 @@ UTEST_F( clay_bridge_fixture, text_becomes_queue_item_and_flush_marker )
     EXPECT_STREQ( utest_fixture->ctx.text_queue[ 0 ].text, "hello" );
 }
 
+UTEST_F( clay_bridge_fixture, flush_text_drains_queue_without_touching_draw_commands )
+{
+    vxui_begin( &utest_fixture->ctx, 0.016f );
+    VXUI( &utest_fixture->ctx, "root", {} ) {
+        CLAY_TEXT(
+            CLAY_STRING( "hello" ),
+            CLAY_TEXT_CONFIG( {
+                .textColor = { 255, 255, 255, 255 },
+                .fontId = 0,
+                .fontSize = 18,
+            } ) );
+    }
+
+    vxui_draw_list list = vxui_end( &utest_fixture->ctx );
+    ASSERT_TRUE( list.length >= 1 );
+    ASSERT_EQ( utest_fixture->ctx.text_queue_count, 1 );
+
+    vxui_flush_text( &utest_fixture->ctx );
+    EXPECT_EQ( utest_fixture->ctx.text_queue_count, 0 );
+    EXPECT_EQ( list.length, 1 );
+    EXPECT_EQ( list.commands[ 0 ].type, VXUI_CMD_TEXT );
+    EXPECT_STREQ( list.commands[ 0 ].text.text, "hello" );
+
+    vxui_flush_text( &utest_fixture->ctx );
+    EXPECT_EQ( utest_fixture->ctx.text_queue_count, 0 );
+}
+
 UTEST_F( clay_bridge_fixture, image_payload_survives_translation )
 {
     int payload = 42;

@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "../third_party/utest.h"
+#include "test_support.h"
 #include "../vxui.h"
 
 typedef struct sequences_tooling_fixture
@@ -12,18 +13,6 @@ typedef struct sequences_tooling_fixture
     vxui_ctx ctx;
     char temp_path[ 260 ];
 } sequences_tooling_fixture;
-
-static bool vxui__write_text_file( const char* path, const char* text )
-{
-    FILE* fp = std::fopen( path, "wb" );
-    if ( !fp ) {
-        return false;
-    }
-    size_t length = std::strlen( text );
-    bool ok = std::fwrite( text, 1, length, fp ) == length;
-    std::fclose( fp );
-    return ok;
-}
 
 UTEST_F_SETUP( sequences_tooling_fixture )
 {
@@ -42,7 +31,8 @@ UTEST_F_SETUP( sequences_tooling_fixture )
             .max_sequences = 16,
         } );
 
-    std::snprintf( utest_fixture->temp_path, sizeof( utest_fixture->temp_path ), "%s/sequence_hot_reload.toml", VXUI_TEST_TEMP_DIR );
+    std::string temp_path = vxui_test_temp_path( "sequence_hot_reload.toml" );
+    std::snprintf( utest_fixture->temp_path, sizeof( utest_fixture->temp_path ), "%s", temp_path.c_str() );
 }
 
 UTEST_F_TEARDOWN( sequences_tooling_fixture )
@@ -101,7 +91,7 @@ UTEST_F( sequences_tooling_fixture, invalid_toml_does_not_replace_prior_good_seq
 UTEST_F( sequences_tooling_fixture, missing_required_field_fails_parse )
 {
     char error[ 256 ] = {};
-    ASSERT_TRUE( vxui__write_text_file(
+    ASSERT_TRUE( vxui_test_write_text_file(
         utest_fixture->temp_path,
         "[sequence.main_menu_enter]\nsteps = [\n  { id = \"title\", prop = \"opacity\", target = 1.0 },\n]\n" ) );
 
@@ -112,7 +102,7 @@ UTEST_F( sequences_tooling_fixture, missing_required_field_fails_parse )
 UTEST_F( sequences_tooling_fixture, unknown_property_fails_parse )
 {
     char error[ 256 ] = {};
-    ASSERT_TRUE( vxui__write_text_file(
+    ASSERT_TRUE( vxui_test_write_text_file(
         utest_fixture->temp_path,
         "[sequence.main_menu_enter]\nsteps = [\n  { delay = 0, id = \"title\", prop = \"shear\", target = 1.0 },\n]\n" ) );
 
@@ -124,7 +114,7 @@ UTEST_F( sequences_tooling_fixture, unknown_property_fails_parse )
 UTEST_F( sequences_tooling_fixture, hot_reload_while_preview_sequence_is_active_does_not_corrupt_runtime_state )
 {
     char error[ 256 ] = {};
-    ASSERT_TRUE( vxui__write_text_file( utest_fixture->temp_path, "[sequence.main_menu_enter]\nsteps = [\n  { delay = 0, id = \"title\", prop = \"opacity\", target = 0.25 },\n  { delay = 80, id = \"title\", prop = \"opacity\", target = 1.0 },\n]\n" ) );
+    ASSERT_TRUE( vxui_test_write_text_file( utest_fixture->temp_path, "[sequence.main_menu_enter]\nsteps = [\n  { delay = 0, id = \"title\", prop = \"opacity\", target = 0.25 },\n  { delay = 80, id = \"title\", prop = \"opacity\", target = 1.0 },\n]\n" ) );
     ASSERT_TRUE( vxui_watch_seq_file( &utest_fixture->ctx, utest_fixture->temp_path, "main_menu_enter" ) );
     ASSERT_TRUE( vxui_load_seq_toml( &utest_fixture->ctx, utest_fixture->temp_path, "main_menu_enter", error, sizeof( error ) ) );
 
@@ -139,7 +129,7 @@ UTEST_F( sequences_tooling_fixture, hot_reload_while_preview_sequence_is_active_
     vxui_fire_seq( &utest_fixture->ctx, "main_menu_enter" );
     ASSERT_TRUE( vxui_seq_playing( &utest_fixture->ctx, "main_menu_enter" ) );
 
-    ASSERT_TRUE( vxui__write_text_file( utest_fixture->temp_path, "[sequence.main_menu_enter]\nsteps = [\n  { delay = 0, id = \"title\", prop = \"opacity\", target = 0.75 },\n  { delay = 80, id = \"title\", prop = \"opacity\", target = 1.0 },\n]\n" ) );
+    ASSERT_TRUE( vxui_test_write_text_file( utest_fixture->temp_path, "[sequence.main_menu_enter]\nsteps = [\n  { delay = 0, id = \"title\", prop = \"opacity\", target = 0.75 },\n  { delay = 80, id = \"title\", prop = \"opacity\", target = 1.0 },\n]\n" ) );
     utest_fixture->ctx.watched_seq_files[ 0 ].last_write_time = 1;
     ASSERT_TRUE( vxui_poll_seq_hot_reload( &utest_fixture->ctx, 300, error, sizeof( error ) ) );
 
@@ -154,5 +144,40 @@ UTEST_F( sequences_tooling_fixture, hot_reload_while_preview_sequence_is_active_
     }
     list = vxui_end( &utest_fixture->ctx );
     EXPECT_TRUE( list.length > 0 );
+}
+
+UTEST_F( sequences_tooling_fixture, generated_outputs_refresh_after_debug_editor_changes )
+{
+    char error[ 256 ] = {};
+    ASSERT_TRUE( vxui_load_seq_toml( &utest_fixture->ctx, VXUI_TEST_DATA_DIR "/sequence_valid.toml", "main_menu_enter", error, sizeof( error ) ) );
+    utest_fixture->ctx.debug_seq_editor.selected_seq = 0;
+
+    vxui_registered_seq* seq = &utest_fixture->ctx.registered_seqs[ 0 ];
+    seq->steps[ 0 ].prop = VXUI_PROP_SLIDE_X;
+    seq->steps[ 0 ].target = 12.5f;
+    vxui_debug_generate_seq_outputs( &utest_fixture->ctx );
+
+    EXPECT_TRUE( std::strstr( utest_fixture->ctx.debug_seq_editor.generated_c, "VXUI_PROP_SLIDE_X" ) != nullptr );
+    EXPECT_TRUE( std::strstr( utest_fixture->ctx.debug_seq_editor.generated_toml, "target = 12.500" ) != nullptr );
+}
+
+UTEST_F( sequences_tooling_fixture, failed_hot_reload_keeps_prior_sequence_and_outputs )
+{
+    char error[ 256 ] = {};
+    ASSERT_TRUE( vxui_test_write_text_file( utest_fixture->temp_path, "[sequence.main_menu_enter]\nsteps = [\n  { delay = 0, id = \"title\", prop = \"opacity\", target = 0.25 },\n]\n" ) );
+    ASSERT_TRUE( vxui_watch_seq_file( &utest_fixture->ctx, utest_fixture->temp_path, "main_menu_enter" ) );
+    ASSERT_TRUE( vxui_load_seq_toml( &utest_fixture->ctx, utest_fixture->temp_path, "main_menu_enter", error, sizeof( error ) ) );
+    utest_fixture->ctx.debug_seq_editor.selected_seq = 0;
+    vxui_debug_generate_seq_outputs( &utest_fixture->ctx );
+
+    ASSERT_TRUE( vxui_test_write_text_file( utest_fixture->temp_path, "[sequence.main_menu_enter]\nsteps = [\n  { id = \"title\", prop = \"opacity\", target = 1.0 },\n]\n" ) );
+    utest_fixture->ctx.watched_seq_files[ 0 ].last_write_time = 1;
+    EXPECT_FALSE( vxui_poll_seq_hot_reload( &utest_fixture->ctx, 400, error, sizeof( error ) ) );
+    EXPECT_TRUE( error[ 0 ] != '\0' );
+
+    const vxui_registered_seq* seq = vxui_find_seq( &utest_fixture->ctx, "main_menu_enter" );
+    ASSERT_TRUE( seq != nullptr );
+    EXPECT_EQ( seq->steps[ 0 ].target, 0.25f );
+    EXPECT_TRUE( std::strstr( utest_fixture->ctx.debug_seq_editor.generated_toml, "target = 0.250" ) != nullptr );
 }
 #endif

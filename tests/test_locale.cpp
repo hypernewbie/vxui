@@ -5,6 +5,15 @@
 #include "../third_party/utest.h"
 #include "../vxui.h"
 
+enum
+{
+    VXUI_TEST_FONT_UI = 0,
+    VXUI_TEST_FONT_TITLE = 1,
+    VXUI_TEST_FONT_DEBUG = 2,
+    VXUI_TEST_FONT_JAPANESE = 3,
+    VXUI_TEST_FONT_ARABIC = 4,
+};
+
 typedef struct locale_fixture
 {
     uint8_t* memory;
@@ -79,7 +88,7 @@ UTEST_F( locale_fixture, locale_string_is_stored_correctly )
 
 UTEST_F( locale_fixture, locale_font_mapping_overrides_default_font )
 {
-    vxui_set_locale_font( &utest_fixture->ctx, "ja", 7 );
+    vxui_set_locale_font( &utest_fixture->ctx, "ja", VXUI_TEST_FONT_JAPANESE );
     vxui_set_locale( &utest_fixture->ctx, "ja" );
 
     vxui_begin( &utest_fixture->ctx, 0.016f );
@@ -88,12 +97,12 @@ UTEST_F( locale_fixture, locale_font_mapping_overrides_default_font )
     }
     vxui_end( &utest_fixture->ctx );
 
-    EXPECT_EQ( utest_fixture->ctx.text_queue[ 0 ].font_id, 7u );
+    EXPECT_EQ( utest_fixture->ctx.text_queue[ 0 ].font_id, VXUI_TEST_FONT_JAPANESE );
 }
 
 UTEST_F( locale_fixture, missing_locale_mapping_falls_back_to_default_font )
 {
-    utest_fixture->ctx.default_font_id = 3;
+    utest_fixture->ctx.default_font_id = VXUI_TEST_FONT_TITLE;
     vxui_set_locale( &utest_fixture->ctx, "fr" );
 
     vxui_begin( &utest_fixture->ctx, 0.016f );
@@ -102,12 +111,12 @@ UTEST_F( locale_fixture, missing_locale_mapping_falls_back_to_default_font )
     }
     vxui_end( &utest_fixture->ctx );
 
-    EXPECT_EQ( utest_fixture->ctx.text_queue[ 0 ].font_id, 3u );
+    EXPECT_EQ( utest_fixture->ctx.text_queue[ 0 ].font_id, VXUI_TEST_FONT_TITLE );
 }
 
 UTEST_F( locale_fixture, prefix_locale_lookup_works_for_ja_jp )
 {
-    vxui_set_locale_font( &utest_fixture->ctx, "ja", 9 );
+    vxui_set_locale_font( &utest_fixture->ctx, "ja", VXUI_TEST_FONT_JAPANESE );
     vxui_set_locale( &utest_fixture->ctx, "ja-JP" );
 
     vxui_begin( &utest_fixture->ctx, 0.016f );
@@ -116,16 +125,16 @@ UTEST_F( locale_fixture, prefix_locale_lookup_works_for_ja_jp )
     }
     vxui_end( &utest_fixture->ctx );
 
-    EXPECT_EQ( utest_fixture->ctx.text_queue[ 0 ].font_id, 9u );
+    EXPECT_EQ( utest_fixture->ctx.text_queue[ 0 ].font_id, VXUI_TEST_FONT_JAPANESE );
 }
 
 UTEST_F( locale_fixture, input_table_swap_changes_prompt_source )
 {
     vxui_input_table keyboard = {
-        .confirm = { 5, 'E' },
+        .confirm = { VXUI_TEST_FONT_UI, 'E' },
     };
     vxui_input_table gamepad = {
-        .confirm = { 7, 'A' },
+        .confirm = { VXUI_TEST_FONT_DEBUG, 'A' },
     };
 
     vxui_set_input_table( &utest_fixture->ctx, &keyboard );
@@ -135,6 +144,7 @@ UTEST_F( locale_fixture, input_table_swap_changes_prompt_source )
     }
     vxui_end( &utest_fixture->ctx );
     EXPECT_STREQ( utest_fixture->ctx.text_queue[ 0 ].text, "E" );
+    EXPECT_EQ( utest_fixture->ctx.text_queue[ 0 ].font_id, VXUI_TEST_FONT_UI );
 
     vxui_set_input_table( &utest_fixture->ctx, &gamepad );
     vxui_begin( &utest_fixture->ctx, 0.016f );
@@ -143,6 +153,7 @@ UTEST_F( locale_fixture, input_table_swap_changes_prompt_source )
     }
     vxui_end( &utest_fixture->ctx );
     EXPECT_STREQ( utest_fixture->ctx.text_queue[ 0 ].text, "A" );
+    EXPECT_EQ( utest_fixture->ctx.text_queue[ 0 ].font_id, VXUI_TEST_FONT_DEBUG );
 }
 
 UTEST_F( locale_fixture, rtl_detection_for_ar_returns_true )
@@ -198,13 +209,32 @@ UTEST_F( locale_fixture, ids_remain_stable_while_rtl_flips_layout_direction )
 
 UTEST_F( locale_fixture, repeated_locale_swaps_do_not_corrupt_font_mapping )
 {
-    vxui_set_locale_font( &utest_fixture->ctx, "en", 2 );
-    vxui_set_locale_font( &utest_fixture->ctx, "ja", 4 );
-    vxui_set_locale_font( &utest_fixture->ctx, "ar", 6 );
+    vxui_set_locale_font( &utest_fixture->ctx, "en", VXUI_TEST_FONT_UI );
+    vxui_set_locale_font( &utest_fixture->ctx, "ja", VXUI_TEST_FONT_JAPANESE );
+    vxui_set_locale_font( &utest_fixture->ctx, "ar", VXUI_TEST_FONT_ARABIC );
 
     const char* locales[] = { "en", "ja", "ar", "ja-JP", "en" };
-    const uint32_t expected_fonts[] = { 2, 4, 6, 4, 2 };
+    const uint32_t expected_fonts[] = { VXUI_TEST_FONT_UI, VXUI_TEST_FONT_JAPANESE, VXUI_TEST_FONT_ARABIC, VXUI_TEST_FONT_JAPANESE, VXUI_TEST_FONT_UI };
     for ( int i = 0; i < 5; ++i ) {
+        vxui_set_locale( &utest_fixture->ctx, locales[ i ] );
+        vxui_begin( &utest_fixture->ctx, 0.016f );
+        VXUI( &utest_fixture->ctx, "root", {} ) {
+            VXUI_LABEL( &utest_fixture->ctx, "label.hello", ( vxui_label_cfg ) { 0 } );
+        }
+        vxui_end( &utest_fixture->ctx );
+        EXPECT_EQ( utest_fixture->ctx.text_queue[ 0 ].font_id, expected_fonts[ i ] );
+    }
+}
+
+UTEST_F( locale_fixture, named_demo_font_map_matches_expected_locale_faces )
+{
+    utest_fixture->ctx.default_font_id = VXUI_TEST_FONT_UI;
+    vxui_set_locale_font( &utest_fixture->ctx, "ja", VXUI_TEST_FONT_JAPANESE );
+    vxui_set_locale_font( &utest_fixture->ctx, "ar", VXUI_TEST_FONT_ARABIC );
+
+    const char* locales[] = { "en", "ja-JP", "ar" };
+    const uint32_t expected_fonts[] = { VXUI_TEST_FONT_UI, VXUI_TEST_FONT_JAPANESE, VXUI_TEST_FONT_ARABIC };
+    for ( int i = 0; i < 3; ++i ) {
         vxui_set_locale( &utest_fixture->ctx, locales[ i ] );
         vxui_begin( &utest_fixture->ctx, 0.016f );
         VXUI( &utest_fixture->ctx, "root", {} ) {

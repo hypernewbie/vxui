@@ -1,0 +1,6 @@
+[submodule "vefc"]
+	path = vefc
+	url = https://github.com/hypernewbie/vefontcache
+[submodule "clay"]
+	path = clay
+	url = https://github.com/nicbarker/clay

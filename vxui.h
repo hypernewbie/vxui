@@ -14,10 +14,7 @@
 #include "clay/clay.h"
 typedef struct ve_fontcache ve_fontcache;
 
-#define VXUI( ctx, id_str, ... ) \
-    for ( bool _vxui_decl_once = ( ( ctx )->current_decl_id = vxui_id( id_str ), true ); _vxui_decl_once; _vxui_decl_once = false ) \
-        CLAY( CLAY_ID( id_str ), vxui__rtl_decl( ( ctx ), ( Clay_ElementDeclaration ) __VA_ARGS__ ) )
-
+/* ----------------------------- Public constants ----------------------------- */
 #define VXUI_DEFAULT_STIFFNESS 200.0f
 #define VXUI_DEFAULT_DAMPING 20.0f
 #define VXUI_SETTLE_EPSILON 0.001f
@@ -30,6 +27,7 @@ typedef struct ve_fontcache ve_fontcache;
 #define VXUI_MAX_TRAITS_PER_ELEMENT 8
 #define VXUI_MAX_TRAIT_PARAMS 64
 
+/* ------------------------------- Public types ------------------------------- */
 typedef struct vxui_vec2
 {
     float x;
@@ -62,7 +60,6 @@ typedef struct vxui_arena
 typedef struct vxui_ctx vxui_ctx;
 typedef struct vxui_draw_list vxui_draw_list;
 typedef struct vxui_anim_state vxui_anim_state;
-static inline Clay_ElementDeclaration vxui__rtl_decl( vxui_ctx* ctx, Clay_ElementDeclaration decl );
 
 /* Callback signatures. */
 typedef void ( *vxui_action_fn )( vxui_ctx* ctx, uint32_t id, void* userdata );
@@ -460,14 +457,16 @@ typedef struct vxui_debug_seq_editor
 
 typedef struct vxui_ctx
 {
+    /* Core config and frame timing. */
     vxui_config cfg;
     vxui_arena arena;
-
     uint64_t frame_index;
     float delta_time;
 
+    /* External services. */
     ve_fontcache* fontcache;
 
+    /* Translated draw commands. */
     vxui_cmd* commands;
     uint32_t* command_ids;
     uint32_t* command_owner_ids;
@@ -475,15 +474,18 @@ typedef struct vxui_ctx
     int command_count;
     int command_capacity;
 
+    /* Transient text staging for the current frame. */
     vxui_draw_cmd_text* text_queue;
     int text_queue_count;
     int text_queue_capacity;
 
+    /* Pending navigation and activation. */
     uint32_t pending_nav_mask;
     bool pending_confirm;
     bool pending_cancel;
     int pending_tab;
 
+    /* Clay bridge state. */
     Clay_Context* clay_ctx;
     Clay_Arena clay_arena;
     Clay_ErrorHandler clay_error_handler;
@@ -493,6 +495,7 @@ typedef struct vxui_ctx
     vxui_rect current_clip_rect;
     bool clip_active;
 
+    /* Clip and frame-string scratch buffers. */
     vxui_rect* clip_stack;
     int clip_stack_count;
     int clip_stack_capacity;
@@ -501,6 +504,7 @@ typedef struct vxui_ctx
     int frame_string_count;
     int frame_string_capacity;
 
+    /* Public declaration table and font defaults. */
     vxui_decl* decls;
     int decl_count;
     int decl_capacity;
@@ -509,6 +513,7 @@ typedef struct vxui_ctx
     float default_font_size;
     vxui_color default_text_color;
 
+    /* Retained animation store. */
     vxui_anim_slot* anim_slots;
     int anim_capacity;
     vxui_cmd* anim_retained_commands;
@@ -516,6 +521,7 @@ typedef struct vxui_ctx
     char* anim_retained_text;
     int anim_retained_text_stride;
 
+    /* Focus, navigation, and input ownership. */
     uint32_t focused_id;
     uint32_t pending_focus_id;
     vxui_focus_ring_state focus_ring_state;
@@ -532,12 +538,15 @@ typedef struct vxui_ctx
     int list_state_count;
     int list_state_capacity;
     const vxui_input_table* input_table;
+
+    /* Locale and text-direction state. */
     char locale[ 16 ];
     vxui_locale_font* locale_fonts;
     int locale_font_count;
     int locale_font_capacity;
     bool rtl;
 
+    /* Screen stack, sequences, and trait runtime. */
     vxui_screen* screens;
     int screen_count;
     int screen_capacity;
@@ -557,6 +566,8 @@ typedef struct vxui_ctx
     int trait_desc_count;
     int trait_desc_capacity;
     uint32_t current_decl_id;
+
+    /* Debug-only tooling state. */
 #ifdef VXUI_DEBUG
     vxui_seq_file* watched_seq_files;
     int watched_seq_file_count;
@@ -568,11 +579,20 @@ typedef struct vxui_ctx
 
 static inline Clay_ElementDeclaration vxui__rtl_decl( vxui_ctx* ctx, Clay_ElementDeclaration decl )
 {
+    /* Layout stays LTR in Clay; RTL is applied as a mirrored draw-command pass. */
     ( void ) ctx;
     return decl;
 }
 
-/* Context lifecycle. */
+/* ------------------------------- Public API -------------------------------- */
+
+/* Context lifecycle.
+   `vxui_end()` finalises the frame command list.
+   `text_queue` remains valid until the next `vxui_begin()` or `vxui_flush_text()`.
+   Callers render text from `VXUI_CMD_TEXT` draw commands, then call `vxui_flush_text()`
+   once after consuming that frame's text staging data. */
+/* ------------------------- Lifecycle and translation ----------------------- */
+
 uint64_t vxui_min_memory_size( void );
 vxui_arena vxui_create_arena( uint64_t size, void* memory );
 void vxui_init( vxui_ctx* ctx, vxui_arena arena, vxui_config cfg );
@@ -585,6 +605,8 @@ void vxui_set_fontcache( vxui_ctx* ctx, ve_fontcache* cache );
 void vxui_set_text_fn( vxui_ctx* ctx, const char* ( *fn )( const char* key, void* userdata ), void* userdata );
 
 /* Input and focus. */
+/* ------------------------------ Navigation -------------------------------- */
+
 void vxui_input_nav( vxui_ctx* ctx, vxui_dir dir );
 void vxui_input_confirm( vxui_ctx* ctx );
 void vxui_input_cancel( vxui_ctx* ctx );
@@ -607,6 +629,8 @@ void vxui_stop_seq( vxui_ctx* ctx, const char* name );
 bool vxui_seq_playing( vxui_ctx* ctx, const char* name );
 const vxui_registered_seq* vxui_find_seq( vxui_ctx* ctx, const char* name );
 bool vxui_load_seq_toml( vxui_ctx* ctx, const char* path, const char* seq_name, char* error, size_t error_size );
+/* -------------------------------- Tooling --------------------------------- */
+
 bool vxui_generate_seq_c( const vxui_registered_seq* seq, char* out, size_t out_size );
 bool vxui_generate_seq_toml( const vxui_registered_seq* seq, char* out, size_t out_size );
 
@@ -622,6 +646,8 @@ void vxui_debug_generate_seq_outputs( vxui_ctx* ctx );
 void vxui_register_trait( vxui_ctx* ctx, uint32_t id, vxui_trait_fn fn, size_t params_size );
 
 /* List helpers. */
+/* ------------------------------ Primitives -------------------------------- */
+
 void vxui_list_begin( vxui_ctx* ctx, const char* id, vxui_list_cfg cfg );
 void vxui_list_end( vxui_ctx* ctx );
 void vxui_list_item_begin( vxui_ctx* ctx, int index );
@@ -638,6 +664,12 @@ void VXUI_PROMPT( vxui_ctx* ctx, const char* action_name );
 /* Id helpers. */
 uint32_t vxui_id( const char* label );
 uint32_t vxui_idi( const char* label, int index );
+
+#define VXUI( ctx, id_str, ... ) \
+    for ( uint32_t _vxui_prev_decl_id = ( ctx )->current_decl_id, _vxui_once = ( ( ctx )->current_decl_id = vxui_id( id_str ), 1u ); \
+          _vxui_once; \
+          ( ctx )->current_decl_id = _vxui_prev_decl_id, _vxui_once = 0u ) \
+        CLAY( CLAY_ID( id_str ), vxui__rtl_decl( ( ctx ), ( Clay_ElementDeclaration ) __VA_ARGS__ ) )
 
 #define VXUI_LIST_BEGIN( ctx, id, ... ) \
     for ( bool _vxui_list_once = ( vxui_list_begin( ( ctx ), ( id ), __VA_ARGS__ ), true ); _vxui_list_once; _vxui_list_once = ( vxui_list_end( ( ctx ) ), false ) )
@@ -658,6 +690,8 @@ void vxui__attach_trait( vxui_ctx* ctx, uint32_t trait_id, const void* params, s
 
 #include "vefc/ve_fontcache.h"
 #include "third_party/tomlc99/toml.h"
+
+/* -------------------------- Internal implementation ------------------------- */
 
 enum
 {
@@ -693,19 +727,23 @@ static const vxui_input_table vxui__input_keyboard = {
 
 thread_local vxui_ctx* vxui__current_ctx = nullptr;
 
+/* --------------------------------- Arena ---------------------------------- */
+
 static void* vxui__arena_alloc( vxui_arena* arena, uint64_t size, uint64_t align );
+static FILE* vxui__fopen( const char* path, const char* mode );
 static uint32_t vxui__hash_bytes( const void* data, size_t size, uint32_t seed );
 static uint32_t vxui__next_pow2( uint32_t value );
 static Clay_String vxui__clay_string_from_cstr( const char* text );
 static Clay_ElementId vxui__clay_id_from_hash( uint32_t id );
 static vxui_rect vxui__rect_from_clay_box( Clay_BoundingBox box );
 static vxui_rect vxui__rect_union( vxui_rect a, vxui_rect b );
-static Clay_ElementDeclaration vxui__rtl_decl( vxui_ctx* ctx, Clay_ElementDeclaration decl );
 static vxui_rect vxui__transform_rect( vxui_rect rect, const vxui_anim_state* st );
 static vxui_color vxui__color_from_clay( Clay_Color color );
 static vxui_color vxui__apply_anim_color( vxui_color color, const vxui_anim_state* st );
 static void vxui__handle_clay_error( Clay_ErrorData errorData );
 static Clay_Dimensions vxui__measure_text( Clay_StringSlice text, Clay_TextElementConfig* cfg, void* userdata );
+/* ---------------------------------- Text ---------------------------------- */
+
 static void vxui__reset_frame_buffers( vxui_ctx* ctx );
 static vxui_cmd* vxui__push_cmd( vxui_ctx* ctx, vxui_cmd_type type );
 static vxui_draw_cmd_text* vxui__push_text( vxui_ctx* ctx );
@@ -721,6 +759,8 @@ static float vxui__effective_font_size( vxui_ctx* ctx, float font_size );
 static vxui_color vxui__effective_text_color( vxui_ctx* ctx, vxui_color color );
 static void vxui__emit_text( vxui_ctx* ctx, const char* text, uint32_t font_id, float font_size, vxui_color color, uintptr_t owner_id = 0 );
 static void vxui__register_action( vxui_ctx* ctx, uint32_t id, vxui_action_fn fn, vxui_action_cfg cfg );
+/* --------------------------- Animation and focus --------------------------- */
+
 static vxui_anim_slot* vxui__get_anim_slot( vxui_ctx* ctx, uint32_t id, bool create );
 static vxui_anim_state* vxui__get_anim_state( vxui_ctx* ctx, uint32_t id, bool create );
 static void vxui__spring_step( float target, float* current, float* velocity, float stiffness, float damping, float dt );
@@ -742,6 +782,8 @@ static void vxui__update_anim_store( vxui_ctx* ctx );
 static void vxui__capture_retained_cmd( vxui_ctx* ctx, uint32_t id, const vxui_cmd* cmd );
 static void vxui__emit_retained_anim_commands( vxui_ctx* ctx );
 static void vxui__evict_dead_anim_states( vxui_ctx* ctx );
+/* ----------------------- Sequences, screens, and RTL ----------------------- */
+
 static void vxui__apply_seq_step( vxui_anim_state* st, const vxui_seq_step* step );
 static bool vxui__register_seq_internal( vxui_ctx* ctx, const char* name, const vxui_seq_step* steps, int count );
 static void vxui__set_seq_step_name( vxui_ctx* ctx, vxui_registered_seq* seq, int step_index, const char* name );
@@ -763,6 +805,8 @@ static void vxui__emit_snapshot( vxui_ctx* ctx, const vxui_screen* screen );
 static void vxui__compact_dead_screens( vxui_ctx* ctx );
 static void vxui__update_screen_states( vxui_ctx* ctx );
 static void vxui__mirror_rtl_commands( vxui_ctx* ctx );
+/* -------------------------------- Traits ---------------------------------- */
+
 static vxui_trait_desc* vxui__find_trait_desc( vxui_ctx* ctx, uint32_t id );
 static void vxui__register_builtin_traits( vxui_ctx* ctx );
 static void vxui__execute_traits( vxui_ctx* ctx );
@@ -793,6 +837,21 @@ static void* vxui__arena_alloc( vxui_arena* arena, uint64_t size, uint64_t align
     arena->offset = at + size;
     return ret;
 }
+
+static FILE* vxui__fopen( const char* path, const char* mode )
+{
+    if ( !path || !mode ) {
+        return nullptr;
+    }
+#if defined( _MSC_VER )
+    FILE* fp = nullptr;
+    return fopen_s( &fp, path, mode ) == 0 ? fp : nullptr;
+#else
+    return std::fopen( path, mode );
+#endif
+}
+
+/* ---------------------------------- Ids ----------------------------------- */
 
 static uint32_t vxui__hash_bytes( const void* data, size_t size, uint32_t seed )
 {
@@ -1076,6 +1135,7 @@ static bool vxui__locale_is_rtl( const char* locale )
 
 static Clay_LayoutDirection vxui__resolve_dir( Clay_LayoutDirection dir, bool rtl )
 {
+    /* RTL is a post-translation mirror; keep Clay declarations honest and stable. */
     ( void ) rtl;
     return dir;
 }
@@ -3308,7 +3368,10 @@ vxui_draw_list vxui_end( vxui_ctx* ctx )
 
 void vxui_flush_text( vxui_ctx* ctx )
 {
-    ( void ) ctx;
+    if ( !ctx ) {
+        return;
+    }
+    ctx->text_queue_count = 0;
 }
 
 void vxui_set_fontcache( vxui_ctx* ctx, ve_fontcache* cache )
@@ -3567,7 +3630,7 @@ bool vxui_load_seq_toml( vxui_ctx* ctx, const char* path, const char* seq_name, 
         return false;
     }
 
-    FILE* fp = std::fopen( path, "rb" );
+    FILE* fp = vxui__fopen( path, "rb" );
     if ( !fp ) {
         vxui__set_errorf( error, error_size, "failed to open %s", path );
         return false;
