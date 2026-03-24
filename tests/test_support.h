@@ -42,3 +42,43 @@ static inline std::string vxui_test_temp_path( const char* filename )
     std::filesystem::path path = dir / ( std::to_string( stamp ) + "_" + filename );
     return path.make_preferred().string();
 }
+
+#ifndef VXUI_TEST_SUPPORT_H_FONTCACHE
+#define VXUI_TEST_SUPPORT_H_FONTCACHE
+
+#include <stdbool.h>
+
+typedef struct vxui_test_fontcache_handle vxui_test_fontcache_handle;
+
+vxui_test_fontcache_handle* vxui_test_fontcache_create( bool use_freetype_cpu );
+void vxui_test_fontcache_destroy( vxui_test_fontcache_handle* handle );
+struct ve_fontcache* vxui_test_fontcache_ptr( vxui_test_fontcache_handle* handle );
+
+int64_t vxui_test_fontcache_load_file( vxui_test_fontcache_handle* handle, const char* path, float size_px );
+
+void vxui_test_fontcache_flush_drawlist( vxui_test_fontcache_handle* handle );
+
+size_t vxui_test_fontcache_drawlist_dcall_count( vxui_test_fontcache_handle* handle );
+size_t vxui_test_fontcache_drawlist_vertex_count( vxui_test_fontcache_handle* handle );
+size_t vxui_test_fontcache_drawlist_index_count( vxui_test_fontcache_handle* handle );
+size_t vxui_test_fontcache_drawlist_texel_count( vxui_test_fontcache_handle* handle );
+
+size_t vxui_test_fontcache_cpu_atlas_page_count( vxui_test_fontcache_handle* handle );
+size_t vxui_test_fontcache_cpu_atlas_dcall_count( vxui_test_fontcache_handle* handle );
+size_t vxui_test_fontcache_cpu_atlas_texel_count( vxui_test_fontcache_handle* handle );
+
+bool vxui_test_fontcache_draw_text(
+    vxui_test_fontcache_handle* handle,
+    int64_t font_id,
+    const char* text_utf8,
+    float posx,
+    float posy,
+    float scalex,
+    float scaley,
+    bool shape_cache );
+
+bool vxui_test_fontcache_has_atlas_create_pass( vxui_test_fontcache_handle* handle );
+bool vxui_test_fontcache_has_atlas_upload_pass( vxui_test_fontcache_handle* handle );
+bool vxui_test_fontcache_has_target_cpu_cached_pass( vxui_test_fontcache_handle* handle );
+
+#endif

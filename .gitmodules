@@ -1,6 +1,7 @@
 [submodule "vefc"]
 	path = vefc
 	url = https://github.com/hypernewbie/vefontcache
+	branch = ai_slop
 [submodule "clay"]
 	path = clay
 	url = https://github.com/nicbarker/clay

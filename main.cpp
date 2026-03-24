@@ -1062,22 +1062,25 @@ static void vxui_demo_draw_placeholder_image( vxui_demo_renderer* renderer, vxui
 
 static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, const vxui_rect* clip_rect )
 {
-    ve_fontcache_optimise_drawlist( &renderer->cache );
     ve_fontcache_drawlist* drawlist = ve_fontcache_get_drawlist( &renderer->cache );
-    if ( !drawlist || drawlist->vertices.empty() || drawlist->indices.empty() ) {
+    if ( !drawlist || drawlist->dcalls.empty() ) {
         ve_fontcache_flush_drawlist( &renderer->cache );
         return;
     }
 
+    ve_fontcache_optimise_drawlist( &renderer->cache );
+
     GLuint vbo = 0;
     GLuint ibo = 0;
-    glGenBuffers( 1, &vbo );
-    glGenBuffers( 1, &ibo );
-    glBindVertexArray( renderer->vao );
-    glBindBuffer( GL_ARRAY_BUFFER, vbo );
-    glBufferData( GL_ARRAY_BUFFER, drawlist->vertices.size() * sizeof( ve_fontcache_vertex ), drawlist->vertices.data(), GL_DYNAMIC_DRAW );
-    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, ibo );
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, drawlist->indices.size() * sizeof( uint32_t ), drawlist->indices.data(), GL_DYNAMIC_DRAW );
+    if ( !drawlist->vertices.empty() && !drawlist->indices.empty() ) {
+        glGenBuffers( 1, &vbo );
+        glGenBuffers( 1, &ibo );
+        glBindVertexArray( renderer->vao );
+        glBindBuffer( GL_ARRAY_BUFFER, vbo );
+        glBufferData( GL_ARRAY_BUFFER, drawlist->vertices.size() * sizeof( ve_fontcache_vertex ), drawlist->vertices.data(), GL_DYNAMIC_DRAW );
+        glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, ibo );
+        glBufferData( GL_ELEMENT_ARRAY_BUFFER, drawlist->indices.size() * sizeof( uint32_t ), drawlist->indices.data(), GL_DYNAMIC_DRAW );
+    }
     glEnableVertexAttribArray( 0 );
     glEnableVertexAttribArray( 1 );
     glVertexAttribPointer( 0, 2, GL_FLOAT, false, sizeof( ve_fontcache_vertex ), nullptr );
@@ -1146,10 +1149,14 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
             }
             glUniform1i( glGetUniformLocation( renderer->fontcache_shader_draw_text, "src_texture" ), 0 );
 #ifdef VE_FONTCACHE_FREETYPE_RASTERISATION
-            if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_CPU_CACHED && !renderer->cpu_atlas_textures.empty() ) {
-                glUniform1ui( glGetUniformLocation( renderer->fontcache_shader_draw_text, "downsample" ), 0 );
-                glActiveTexture( GL_TEXTURE0 );
-                glBindTexture( GL_TEXTURE_2D, renderer->cpu_atlas_textures[ dcall.atlas_page ] );
+            if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_CPU_CACHED ) {
+                if ( dcall.atlas_page >= ( uint32_t ) renderer->cpu_atlas_textures.size() ) {
+                    std::fprintf( stderr, "vxui_demo: TARGET_CPU_CACHED draw arrived but cpu_atlas_textures[%u] not created\n", dcall.atlas_page );
+                } else {
+                    glUniform1ui( glGetUniformLocation( renderer->fontcache_shader_draw_text, "downsample" ), 0 );
+                    glActiveTexture( GL_TEXTURE0 );
+                    glBindTexture( GL_TEXTURE_2D, renderer->cpu_atlas_textures[ dcall.atlas_page ] );
+                }
             } else
 #endif
             {
@@ -1200,8 +1207,10 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
     }
 
     end_pass_group();
-    glDeleteBuffers( 1, &vbo );
-    glDeleteBuffers( 1, &ibo );
+    if ( vbo != 0 ) {
+        glDeleteBuffers( 1, &vbo );
+        glDeleteBuffers( 1, &ibo );
+    }
     glBindFramebuffer( GL_FRAMEBUFFER, 0 );
     ve_fontcache_flush_drawlist( &renderer->cache );
 }

@@ -1,5 +1,6 @@
 build/
 build-*/
+build_release/
 .vs/
 out/
 tmp/
@@ -19,3 +20,5 @@ Testing/
 *.log
 .ignore
 vxui_design.md
+temp/
+tmp/

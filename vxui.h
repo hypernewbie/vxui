@@ -601,8 +601,15 @@ vxui_draw_list vxui_end( vxui_ctx* ctx );
 void vxui_flush_text( vxui_ctx* ctx );
 
 /* External services. */
-void vxui_set_fontcache( vxui_ctx* ctx, ve_fontcache* cache );
-void vxui_set_text_fn( vxui_ctx* ctx, const char* ( *fn )( const char* key, void* userdata ), void* userdata );
+static inline void vxui_set_fontcache( vxui_ctx* ctx, ve_fontcache* cache )
+{
+    ctx->fontcache = cache;
+}
+static inline void vxui_set_text_fn( vxui_ctx* ctx, const char* ( *fn )( const char* key, void* userdata ), void* userdata )
+{
+    ctx->text_fn = fn;
+    ctx->text_fn_userdata = userdata;
+}
 
 /* Input and focus. */
 /* ------------------------------ Navigation -------------------------------- */
@@ -687,6 +694,16 @@ void vxui__attach_trait( vxui_ctx* ctx, uint32_t trait_id, const void* params, s
     do { auto _vxui_trait_params = __VA_ARGS__; vxui__attach_trait( vxui__current_ctx, ( trait_id ), &_vxui_trait_params, sizeof( _vxui_trait_params ) ); } while ( 0 )
 
 #ifdef VXUI_IMPL
+
+#if defined( VE_FONTCACHE_FREETYPE_RASTERISATION )
+#include <ft2build.h>
+#include FT_FREETYPE_H
+#include FT_GLYPH_H
+#endif
+
+#if defined( VE_FONTCACHE_HARFBUZZ )
+#include <hb.h>
+#endif
 
 #include "vefc/ve_fontcache.h"
 #include "third_party/tomlc99/toml.h"
@@ -1005,21 +1022,10 @@ static Clay_Dimensions vxui__measure_text( Clay_StringSlice text, Clay_TextEleme
         return dims;
     }
 
-    size_t verts = cache->drawlist.vertices.size();
-    size_t indices = cache->drawlist.indices.size();
-    size_t dcalls = cache->drawlist.dcalls.size();
-    ve_fontcache_vec2 cursor = cache->cursor_pos;
-
     std::u8string temp( ( const char8_t* ) text.chars, ( size_t ) text.length );
-    ve_fontcache_draw_text( cache, ( ve_font_id ) cfg->fontId, temp, 0.0f, 0.0f, 1.0f, 1.0f, true );
-    ve_fontcache_vec2 end = ve_fontcache_get_cursor_pos( cache );
+    ve_fontcache_vec2 result = ve_fontcache_measure_text( cache, ( ve_font_id ) cfg->fontId, temp, 1.0f, 1.0f, true );
 
-    cache->drawlist.vertices.resize( verts );
-    cache->drawlist.indices.resize( indices );
-    cache->drawlist.dcalls.resize( dcalls );
-    cache->cursor_pos = cursor;
-
-    dims.width = end.x;
+    dims.width = result.x;
     return dims;
 }
 
@@ -3372,17 +3378,6 @@ void vxui_flush_text( vxui_ctx* ctx )
         return;
     }
     ctx->text_queue_count = 0;
-}
-
-void vxui_set_fontcache( vxui_ctx* ctx, ve_fontcache* cache )
-{
-    ctx->fontcache = cache;
-}
-
-void vxui_set_text_fn( vxui_ctx* ctx, const char* ( *fn )( const char* key, void* userdata ), void* userdata )
-{
-    ctx->text_fn = fn;
-    ctx->text_fn_userdata = userdata;
 }
 
 void vxui_input_nav( vxui_ctx* ctx, vxui_dir dir )

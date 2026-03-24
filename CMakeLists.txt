@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.10)
 project(vxui LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 99)
@@ -24,7 +24,7 @@ add_library(tomlc99 STATIC
 )
 target_include_directories(tomlc99 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-if(VXUI_BUILD_DEMO)
+if(VXUI_BUILD_DEMO OR VXUI_BUILD_TESTS)
     if(POLICY CMP0077)
         cmake_policy(SET CMP0077 NEW)
     endif()
@@ -51,7 +51,9 @@ if(VXUI_BUILD_DEMO)
     set(HB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(HB_BUILD_DOCS OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(harfbuzz)
+endif()
 
+if(VXUI_BUILD_DEMO)
     add_executable(vxui_demo
         main.cpp
         vefc/demo/include/glad/glad.c
@@ -85,10 +87,18 @@ if(VXUI_BUILD_TESTS)
         tests/test_traits.cpp
         tests/test_sequences_tooling.cpp
         tests/test_soak.cpp
+        tests/test_vefc_integration.cpp
     )
-    target_link_libraries(vxui_tests PRIVATE vxui tomlc99)
+    target_include_directories(vxui_tests PRIVATE
+        ${freetype_SOURCE_DIR}/include
+        ${harfbuzz_SOURCE_DIR}/src
+    )
+    target_link_libraries(vxui_tests PRIVATE vxui tomlc99 freetype harfbuzz)
     target_compile_definitions(vxui_tests PRIVATE
+        VE_FONTCACHE_FREETYPE_RASTERISATION
+        VE_FONTCACHE_HARFBUZZ
         $<$<CONFIG:Debug>:VXUI_DEBUG>
+        VXUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
         VXUI_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"
     )
     add_test(NAME vxui_tests COMMAND vxui_tests)
