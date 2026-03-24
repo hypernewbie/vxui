@@ -141,6 +141,33 @@ typedef struct vxui_demo_renderer
     std::vector< uint8_t > debug_font;
     std::vector< uint8_t > japanese_font;
     std::vector< uint8_t > arabic_font;
+    struct vxui_demo_gl_debug
+    {
+        enum backend
+        {
+            backend_none,
+            backend_khr,
+            backend_ext,
+        } backend;
+        bool debug_context;
+        bool callback_installed;
+        typedef void ( APIENTRYP fn_PushDebugGroup )( GLenum source, GLuint id, GLsizei length, const GLchar* message );
+        typedef void ( APIENTRYP fn_PopDebugGroup )( void );
+        typedef void ( APIENTRYP fn_ObjectLabel )( GLenum identifier, GLuint name, GLsizei length, const GLchar* label );
+        typedef void ( APIENTRYP fn_DebugMessageCallback )( GLDEBUGPROC callback, const void* userParam );
+        typedef void ( APIENTRYP fn_DebugMessageControl )( GLenum source, GLenum type, GLenum severity, GLsizei count, const GLuint* ids, GLboolean enabled );
+        typedef void ( APIENTRYP fn_PushGroupMarkerEXT )( GLsizei length, const GLchar* marker );
+        typedef void ( APIENTRYP fn_PopGroupMarkerEXT )( void );
+        typedef void ( APIENTRYP fn_InsertEventMarkerEXT )( GLsizei length, const GLchar* marker );
+        fn_PushDebugGroup glPushDebugGroup;
+        fn_PopDebugGroup glPopDebugGroup;
+        fn_ObjectLabel glObjectLabel;
+        fn_DebugMessageCallback glDebugMessageCallback;
+        fn_DebugMessageControl glDebugMessageControl;
+        fn_PushGroupMarkerEXT glPushGroupMarkerEXT;
+        fn_PopGroupMarkerEXT glPopGroupMarkerEXT;
+        fn_InsertEventMarkerEXT glInsertEventMarkerEXT;
+    } gl_debug;
 } vxui_demo_renderer;
 
 static const char* vxui_demo_text( const char* key, void* userdata );
@@ -156,6 +183,11 @@ static void vxui_demo_refresh_status( vxui_demo_app* app );
 static void vxui_demo_open_settings( vxui_ctx* ctx, uint32_t id, void* userdata );
 static void vxui_demo_close_settings( vxui_ctx* ctx, uint32_t id, void* userdata );
 static GLuint vxui_demo_compile_program( const char* vs_source, const char* fs_source, const char* label );
+static void vxui_demo_gl_debug_init( vxui_demo_renderer* renderer );
+static void vxui_demo_gl_debug_label( vxui_demo_renderer* renderer, GLenum identifier, GLuint name, const char* label );
+static void vxui_demo_gl_debug_begin( vxui_demo_renderer* renderer, const char* label );
+static void vxui_demo_gl_debug_end( vxui_demo_renderer* renderer );
+static void vxui_demo_gl_debug_event( vxui_demo_renderer* renderer, const char* label );
 static bool vxui_demo_init_renderer( vxui_demo_renderer* renderer );
 static void vxui_demo_shutdown_renderer( vxui_demo_renderer* renderer );
 static bool vxui_demo_load_fonts( vxui_demo_renderer* renderer );
@@ -620,6 +652,187 @@ static void vxui_demo_flip_fontcache_upload( ve_fontcache_drawlist* drawlist, ve
 #endif
 }
 
+using GLDEBUGPROC = void ( APIENTRYP )( GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam );
+
+#define GL_DEBUG_SOURCE_API             0x8246
+#define GL_DEBUG_SOURCE_WINDOW_SYSTEM    0x8247
+#define GL_DEBUG_SOURCE_SHADER_COMPILER 0x8248
+#define GL_DEBUG_SOURCE_THIRD_PARTY     0x8249
+#define GL_DEBUG_SOURCE_APPLICATION      0x824A
+#define GL_DEBUG_SOURCE_OTHER           0x824B
+#define GL_DEBUG_TYPE_ERROR             0x824C
+#define GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR 0x824D
+#define GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR 0x824E
+#define GL_DEBUG_TYPE_PORTABILITY       0x824F
+#define GL_DEBUG_TYPE_PERFORMANCE       0x8250
+#define GL_DEBUG_TYPE_MARKER            0x8268
+#define GL_DEBUG_TYPE_PUSH_GROUP        0x8269
+#define GL_DEBUG_TYPE_POP_GROUP         0x826A
+#define GL_DEBUG_TYPE_OTHER            0x8251
+#define GL_DEBUG_SEVERITY_HIGH         0x9146
+#define GL_DEBUG_SEVERITY_MEDIUM       0x9147
+#define GL_DEBUG_SEVERITY_LOW          0x9148
+#define GL_DEBUG_SEVERITY_NOTIFICATION 0x826B
+#define GL_CONTEXT_FLAG_DEBUG_BIT      0x00000002
+#define GL_DEBUG_OUTPUT                0x92E0
+#define GL_PROGRAM                    0x82E2
+#define GL_VERTEX_ARRAY               0x85B5
+
+static void GLAPIENTRY vxui_demo_gl_message_callback( GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam )
+{
+    ( void ) userParam;
+    if ( severity != GL_DEBUG_SEVERITY_MEDIUM && severity != GL_DEBUG_SEVERITY_HIGH ) {
+        return;
+    }
+    const char* source_str = "unknown";
+    if ( source == GL_DEBUG_SOURCE_API ) source_str = "API";
+    else if ( source == GL_DEBUG_SOURCE_WINDOW_SYSTEM ) source_str = "WINDOW_SYSTEM";
+    else if ( source == GL_DEBUG_SOURCE_SHADER_COMPILER ) source_str = "SHADER_COMPILER";
+    else if ( source == GL_DEBUG_SOURCE_THIRD_PARTY ) source_str = "THIRD_PARTY";
+    else if ( source == GL_DEBUG_SOURCE_APPLICATION ) source_str = "APPLICATION";
+    else if ( source == GL_DEBUG_SOURCE_OTHER ) source_str = "OTHER";
+
+    const char* type_str = "unknown";
+    if ( type == GL_DEBUG_TYPE_ERROR ) type_str = "ERROR";
+    else if ( type == GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR ) type_str = "DEPRECATED_BEHAVIOR";
+    else if ( type == GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR ) type_str = "UNDEFINED_BEHAVIOR";
+    else if ( type == GL_DEBUG_TYPE_PORTABILITY ) type_str = "PORTABILITY";
+    else if ( type == GL_DEBUG_TYPE_PERFORMANCE ) type_str = "PERFORMANCE";
+    else if ( type == GL_DEBUG_TYPE_MARKER ) type_str = "MARKER";
+    else if ( type == GL_DEBUG_TYPE_PUSH_GROUP ) type_str = "PUSH_GROUP";
+    else if ( type == GL_DEBUG_TYPE_POP_GROUP ) type_str = "POP_GROUP";
+    else if ( type == GL_DEBUG_TYPE_OTHER ) type_str = "OTHER";
+
+    const char* severity_str = "unknown";
+    if ( severity == GL_DEBUG_SEVERITY_HIGH ) severity_str = "HIGH";
+    else if ( severity == GL_DEBUG_SEVERITY_MEDIUM ) severity_str = "MEDIUM";
+    else if ( severity == GL_DEBUG_SEVERITY_LOW ) severity_str = "LOW";
+    else if ( severity == GL_DEBUG_SEVERITY_NOTIFICATION ) severity_str = "NOTIFICATION";
+
+    std::fprintf( stderr, "[GL %s] %s | %s | %u | %s: %.*s\n", severity_str, source_str, type_str, id, severity_str, length, message );
+}
+
+static void* vxui_demo_get_proc_address( const char* name )
+{
+#if defined( _WIN32 )
+    void* proc = ( void* ) wglGetProcAddress( name );
+    if ( !proc || proc == ( void* ) -1 || proc == ( void* ) 1 || proc == ( void* ) 2 || proc == ( void* ) 3 ) {
+        static HMODULE opengl32 = GetModuleHandleW( L"opengl32.dll" );
+        if ( opengl32 ) {
+            proc = ( void* ) GetProcAddress( opengl32, name );
+        }
+    }
+    return proc;
+#else
+    return nullptr;
+#endif
+}
+
+#define VXUI_DEMO_LOAD_PROC( type, name, var ) \
+    do { \
+        var = ( type ) vxui_demo_get_proc_address( name ); \
+    } while ( 0 )
+
+void vxui_demo_gl_debug_init( vxui_demo_renderer* renderer )
+{
+    renderer->gl_debug.backend = vxui_demo_renderer::vxui_demo_gl_debug::backend_none;
+    renderer->gl_debug.debug_context = false;
+    renderer->gl_debug.callback_installed = false;
+    renderer->gl_debug.glPushDebugGroup = nullptr;
+    renderer->gl_debug.glPopDebugGroup = nullptr;
+    renderer->gl_debug.glObjectLabel = nullptr;
+    renderer->gl_debug.glDebugMessageCallback = nullptr;
+    renderer->gl_debug.glDebugMessageControl = nullptr;
+    renderer->gl_debug.glPushGroupMarkerEXT = nullptr;
+    renderer->gl_debug.glPopGroupMarkerEXT = nullptr;
+    renderer->gl_debug.glInsertEventMarkerEXT = nullptr;
+
+    GLint context_flags = 0;
+    glGetIntegerv( GL_CONTEXT_FLAGS, &context_flags );
+    renderer->gl_debug.debug_context = ( context_flags & GL_CONTEXT_FLAG_DEBUG_BIT ) != 0;
+
+    VXUI_DEMO_LOAD_PROC( vxui_demo_renderer::vxui_demo_gl_debug::fn_PushDebugGroup, "glPushDebugGroup", renderer->gl_debug.glPushDebugGroup );
+    VXUI_DEMO_LOAD_PROC( vxui_demo_renderer::vxui_demo_gl_debug::fn_PopDebugGroup, "glPopDebugGroup", renderer->gl_debug.glPopDebugGroup );
+    VXUI_DEMO_LOAD_PROC( vxui_demo_renderer::vxui_demo_gl_debug::fn_ObjectLabel, "glObjectLabel", renderer->gl_debug.glObjectLabel );
+    VXUI_DEMO_LOAD_PROC( vxui_demo_renderer::vxui_demo_gl_debug::fn_DebugMessageCallback, "glDebugMessageCallback", renderer->gl_debug.glDebugMessageCallback );
+    VXUI_DEMO_LOAD_PROC( vxui_demo_renderer::vxui_demo_gl_debug::fn_DebugMessageControl, "glDebugMessageControl", renderer->gl_debug.glDebugMessageControl );
+
+    if ( renderer->gl_debug.glPushDebugGroup && renderer->gl_debug.glPopDebugGroup && renderer->gl_debug.glObjectLabel ) {
+        renderer->gl_debug.backend = vxui_demo_renderer::vxui_demo_gl_debug::backend_khr;
+        std::printf( "vxui demo markers: KHR_debug\n" );
+    } else {
+        VXUI_DEMO_LOAD_PROC( vxui_demo_renderer::vxui_demo_gl_debug::fn_PushGroupMarkerEXT, "glPushGroupMarkerEXT", renderer->gl_debug.glPushGroupMarkerEXT );
+        VXUI_DEMO_LOAD_PROC( vxui_demo_renderer::vxui_demo_gl_debug::fn_PopGroupMarkerEXT, "glPopGroupMarkerEXT", renderer->gl_debug.glPopGroupMarkerEXT );
+        VXUI_DEMO_LOAD_PROC( vxui_demo_renderer::vxui_demo_gl_debug::fn_InsertEventMarkerEXT, "glInsertEventMarkerEXT", renderer->gl_debug.glInsertEventMarkerEXT );
+
+        if ( renderer->gl_debug.glPushGroupMarkerEXT && renderer->gl_debug.glPopGroupMarkerEXT && renderer->gl_debug.glInsertEventMarkerEXT ) {
+            renderer->gl_debug.backend = vxui_demo_renderer::vxui_demo_gl_debug::backend_ext;
+            std::printf( "vxui demo markers: EXT_debug_marker\n" );
+        } else {
+            std::printf( "vxui demo markers: unavailable\n" );
+        }
+    }
+
+    if ( renderer->gl_debug.backend == vxui_demo_renderer::vxui_demo_gl_debug::backend_khr && renderer->gl_debug.glDebugMessageCallback ) {
+        if ( renderer->gl_debug.debug_context || renderer->gl_debug.glDebugMessageControl ) {
+            if ( renderer->gl_debug.glDebugMessageControl ) {
+                renderer->gl_debug.glDebugMessageControl( GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_FALSE );
+                renderer->gl_debug.glDebugMessageControl( GL_DEBUG_SOURCE_THIRD_PARTY, GL_DEBUG_TYPE_OTHER, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE );
+            }
+            renderer->gl_debug.glDebugMessageCallback( vxui_demo_gl_message_callback, nullptr );
+            glEnable( GL_DEBUG_OUTPUT );
+            renderer->gl_debug.callback_installed = true;
+        }
+    }
+}
+
+void vxui_demo_gl_debug_label( vxui_demo_renderer* renderer, GLenum identifier, GLuint name, const char* label )
+{
+    if ( !renderer || !label || name == 0 ) {
+        return;
+    }
+    if ( renderer->gl_debug.backend == vxui_demo_renderer::vxui_demo_gl_debug::backend_khr && renderer->gl_debug.glObjectLabel ) {
+        renderer->gl_debug.glObjectLabel( identifier, name, -1, label );
+    }
+}
+
+void vxui_demo_gl_debug_begin( vxui_demo_renderer* renderer, const char* label )
+{
+    if ( !renderer || !label ) {
+        return;
+    }
+    if ( renderer->gl_debug.backend == vxui_demo_renderer::vxui_demo_gl_debug::backend_khr && renderer->gl_debug.glPushDebugGroup ) {
+        renderer->gl_debug.glPushDebugGroup( GL_DEBUG_SOURCE_APPLICATION, 0, -1, label );
+    } else if ( renderer->gl_debug.backend == vxui_demo_renderer::vxui_demo_gl_debug::backend_ext && renderer->gl_debug.glPushGroupMarkerEXT ) {
+        renderer->gl_debug.glPushGroupMarkerEXT( -1, label );
+    }
+}
+
+void vxui_demo_gl_debug_end( vxui_demo_renderer* renderer )
+{
+    if ( !renderer ) {
+        return;
+    }
+    if ( renderer->gl_debug.backend == vxui_demo_renderer::vxui_demo_gl_debug::backend_khr && renderer->gl_debug.glPopDebugGroup ) {
+        renderer->gl_debug.glPopDebugGroup();
+    } else if ( renderer->gl_debug.backend == vxui_demo_renderer::vxui_demo_gl_debug::backend_ext && renderer->gl_debug.glPopGroupMarkerEXT ) {
+        renderer->gl_debug.glPopGroupMarkerEXT();
+    }
+}
+
+void vxui_demo_gl_debug_event( vxui_demo_renderer* renderer, const char* label )
+{
+    if ( !renderer || !label ) {
+        return;
+    }
+    if ( renderer->gl_debug.backend == vxui_demo_renderer::vxui_demo_gl_debug::backend_khr && renderer->gl_debug.glPushDebugGroup ) {
+        renderer->gl_debug.glPushDebugGroup( GL_DEBUG_SOURCE_APPLICATION, 0, -1, label );
+        renderer->gl_debug.glPopDebugGroup();
+    } else if ( renderer->gl_debug.backend == vxui_demo_renderer::vxui_demo_gl_debug::backend_ext && renderer->gl_debug.glInsertEventMarkerEXT ) {
+        renderer->gl_debug.glInsertEventMarkerEXT( -1, label );
+    }
+}
+
 static bool vxui_demo_init_renderer( vxui_demo_renderer* renderer )
 {
     static const char* kPrimitiveVs = R"(#version 330 core
@@ -759,6 +972,19 @@ void main( void )
     vxui_demo_setup_fontcache_fbo( renderer );
     glEnable( GL_BLEND );
     glBlendEquation( GL_FUNC_ADD );
+
+    vxui_demo_gl_debug_init( renderer );
+
+    vxui_demo_gl_debug_label( renderer, GL_PROGRAM, renderer->primitive_program, "vxui.primitive_program" );
+    vxui_demo_gl_debug_label( renderer, GL_PROGRAM, renderer->fontcache_shader_render_glyph, "vxui.fontcache.render_glyph_program" );
+    vxui_demo_gl_debug_label( renderer, GL_PROGRAM, renderer->fontcache_shader_blit_atlas, "vxui.fontcache.blit_atlas_program" );
+    vxui_demo_gl_debug_label( renderer, GL_PROGRAM, renderer->fontcache_shader_draw_text, "vxui.fontcache.draw_text_program" );
+    vxui_demo_gl_debug_label( renderer, GL_VERTEX_ARRAY, renderer->vao, "vxui.vao" );
+    vxui_demo_gl_debug_label( renderer, GL_FRAMEBUFFER, renderer->fontcache_fbo[ 0 ], "vxui.fontcache.glyph_fbo" );
+    vxui_demo_gl_debug_label( renderer, GL_FRAMEBUFFER, renderer->fontcache_fbo[ 1 ], "vxui.fontcache.atlas_fbo" );
+    vxui_demo_gl_debug_label( renderer, GL_TEXTURE, renderer->fontcache_fbo_texture[ 0 ], "vxui.fontcache.glyph_fbo_texture" );
+    vxui_demo_gl_debug_label( renderer, GL_TEXTURE, renderer->fontcache_fbo_texture[ 1 ], "vxui.fontcache.atlas_fbo_texture" );
+
     return true;
 }
 
@@ -860,8 +1086,28 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
     glDisable( GL_CULL_FACE );
     glEnable( GL_BLEND );
 
+    int current_pass_group = -1;
+    auto end_pass_group = [&]()
+    {
+        if ( current_pass_group >= 0 )
+        {
+            vxui_demo_gl_debug_end( renderer );
+            current_pass_group = -1;
+        }
+    };
+    auto begin_pass_group = [&]( int new_group, const char* name )
+    {
+        if ( current_pass_group != new_group )
+        {
+            end_pass_group();
+            vxui_demo_gl_debug_begin( renderer, name );
+            current_pass_group = new_group;
+        }
+    };
+
     for ( ve_fontcache_draw& dcall : drawlist->dcalls ) {
         if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH ) {
+            begin_pass_group( 0, "VEFC Glyph Pass" );
             glUseProgram( renderer->fontcache_shader_render_glyph );
             glBindFramebuffer( GL_FRAMEBUFFER, renderer->fontcache_fbo[ 0 ] );
             glBlendFunc( GL_ONE_MINUS_DST_COLOR, GL_ONE_MINUS_SRC_COLOR );
@@ -870,6 +1116,7 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
             glScissor( 0, 0, VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH, VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT );
             glDisable( GL_FRAMEBUFFER_SRGB );
         } else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_ATLAS ) {
+            begin_pass_group( 1, "VEFC Atlas Blit" );
             glUseProgram( renderer->fontcache_shader_blit_atlas );
             glBindFramebuffer( GL_FRAMEBUFFER, renderer->fontcache_fbo[ 1 ] );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
@@ -882,6 +1129,7 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
             glBindTexture( GL_TEXTURE_2D, renderer->fontcache_fbo_texture[ 0 ] );
             glDisable( GL_FRAMEBUFFER_SRGB );
         } else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET || dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED || dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_CPU_CACHED ) {
+            begin_pass_group( 2, "VEFC Target Text" );
             glUseProgram( renderer->fontcache_shader_draw_text );
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
@@ -913,6 +1161,7 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
             glEnable( GL_FRAMEBUFFER_SRGB );
 #ifdef VE_FONTCACHE_FREETYPE_RASTERISATION
         } else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_ATLAS_PAGE_TEXTURE_CREATE ) {
+            begin_pass_group( 3, "VEFC CPU Atlas Create" );
             renderer->cpu_atlas_textures.resize( std::max( ( int ) renderer->cpu_atlas_textures.size(), ( int ) dcall.atlas_page + 1 ) );
             glGenTextures( 1, &renderer->cpu_atlas_textures[ dcall.atlas_page ] );
             glActiveTexture( GL_TEXTURE0 );
@@ -924,7 +1173,12 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
             glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
             glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
             glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+
+            char tex_label[ 64 ];
+            std::snprintf( tex_label, sizeof( tex_label ), "vxui.fontcache.cpu_atlas_page_%u", dcall.atlas_page );
+            vxui_demo_gl_debug_label( renderer, GL_TEXTURE, renderer->cpu_atlas_textures[ dcall.atlas_page ], tex_label );
         } else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_ATLAS_UPLOAD ) {
+            begin_pass_group( 4, "VEFC CPU Atlas Upload" );
             glActiveTexture( GL_TEXTURE0 );
             glBindTexture( GL_TEXTURE_2D, renderer->cpu_atlas_textures[ dcall.atlas_page ] );
             glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
@@ -932,6 +1186,8 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
             vxui_demo_flip_fontcache_upload( drawlist, dcall );
             glTexSubImage2D( GL_TEXTURE_2D, 0, dcall.upload_region_x, dcall.upload_region_y, dcall.upload_region_w, dcall.upload_region_h, GL_RED, GL_UNSIGNED_BYTE, &drawlist->texels[ dcall.texel_offset ] );
 #endif
+        } else {
+            end_pass_group();
         }
 
         if ( dcall.clear_before_draw ) {
@@ -943,6 +1199,7 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
         }
     }
 
+    end_pass_group();
     glDeleteBuffers( 1, &vbo );
     glDeleteBuffers( 1, &ibo );
     glBindFramebuffer( GL_FRAMEBUFFER, 0 );
@@ -973,6 +1230,11 @@ static void vxui_demo_render_text_cmd( vxui_demo_renderer* renderer, const vxui_
         1.0f / ( float ) renderer->window_size.width,
         1.0f / ( float ) renderer->window_size.height,
         true );
+
+    char event_label[ 64 ];
+    std::snprintf( event_label, sizeof( event_label ), "Submit Text Cmd: font=%u len=%zu", text->font_id, std::strlen( text->text ) );
+    vxui_demo_gl_debug_event( renderer, event_label );
+
     vxui_demo_render_fontcache_drawlist( renderer, clip_rect );
 }
 
@@ -1570,8 +1832,11 @@ int main( void )
         glClearColor( 0.05f, 0.06f, 0.10f, 1.0f );
         glClear( GL_COLOR_BUFFER_BIT );
 
+        vxui_demo_gl_debug_begin( &renderer, "VXUI Draw List" );
         vxui_demo_render_draw_list( &renderer, &list );
+        vxui_demo_gl_debug_end( &renderer );
         vxui_flush_text( &ctx );
+        vxui_demo_gl_debug_event( &renderer, "Present" );
         window->SwapDrawBuffers();
     }
 
