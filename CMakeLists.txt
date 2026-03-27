@@ -72,6 +72,16 @@ if(VXUI_BUILD_DEMO)
     )
 endif()
 
+if(VXUI_BUILD_DEMO AND VXUI_BUILD_TESTS)
+    # VEFC backend test runs as a test against the vxui_demo executable
+    add_test(NAME vxui_vefc_backend_test COMMAND vxui_demo --vefc-backend-test)
+    set_tests_properties(vxui_vefc_backend_test PROPERTIES
+        RUN_SERIAL TRUE
+        TIMEOUT 120
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+endif()
+
 if(VXUI_BUILD_TESTS)
     enable_testing()
     add_executable(vxui_tests
@@ -88,6 +98,7 @@ if(VXUI_BUILD_TESTS)
         tests/test_sequences_tooling.cpp
         tests/test_soak.cpp
         tests/test_vefc_integration.cpp
+        tests/test_layout_contracts.cpp
     )
     target_include_directories(vxui_tests PRIVATE
         ${freetype_SOURCE_DIR}/include

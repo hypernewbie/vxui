@@ -66,6 +66,7 @@ typedef void ( *vxui_action_fn )( vxui_ctx* ctx, uint32_t id, void* userdata );
 typedef void ( *vxui_int_change_fn )( vxui_ctx* ctx, int value, void* userdata );
 typedef void ( *vxui_float_change_fn )( vxui_ctx* ctx, float value, void* userdata );
 typedef void ( *vxui_trait_fn )( vxui_anim_state* element, vxui_draw_list* draw_list, vxui_rect bounds, float t, bool focused, const void* params );
+typedef void ( *vxui_font_resolve_fn )( vxui_ctx* ctx, uint32_t requested_font_id, float requested_font_size, const char* locale, void* userdata, struct vxui_resolved_font* out );
 
 /* Primitive configuration. */
 typedef struct vxui_label_cfg
@@ -148,6 +149,12 @@ typedef struct vxui_locale_font
     char locale[ 16 ];
     uint32_t font_id;
 } vxui_locale_font;
+
+typedef struct vxui_resolved_font
+{
+    uint32_t font_id;
+    float line_height;
+} vxui_resolved_font;
 
 typedef enum vxui_dir
 {
@@ -350,6 +357,7 @@ typedef struct vxui_decl
 {
     vxui_decl_kind kind;
     uint32_t id;
+    uint32_t clay_id;
     uint32_t nav_up;
     uint32_t nav_down;
     uint32_t nav_left;
@@ -443,6 +451,33 @@ typedef struct vxui_seq_file
     char name[ 64 ];
 } vxui_seq_file;
 
+typedef enum vxui_layout_issue_kind
+{
+    VXUI_LAYOUT_ISSUE_TINY_FOCUSABLE_BOUNDS,
+    VXUI_LAYOUT_ISSUE_TEXT_EXCEEDS_BUTTON_PADDING,
+    VXUI_LAYOUT_ISSUE_PAIR_CLUSTER_TOO_WIDE,
+    VXUI_LAYOUT_ISSUE_PAIR_CLUSTER_GAP_TOO_LARGE,
+    VXUI_LAYOUT_ISSUE_CONTROL_OUTSIDE_CONTENT_PANEL,
+    VXUI_LAYOUT_ISSUE_SELECTION_RECT_EXCEEDS_PANEL,
+    VXUI_LAYOUT_ISSUE_ROW_LANE_MISALIGNED,
+    VXUI_LAYOUT_ISSUE_SUSPICIOUS_ROW_HEIGHT,
+    VXUI_LAYOUT_ISSUE_RTL_TEXT_OUT_OF_BOUNDS,
+    VXUI_LAYOUT_ISSUE_METADATA_CLUSTER_TOO_SPARSE,
+    VXUI_LAYOUT_ISSUE_FOCUS_RING_DECGENERATE,
+    VXUI_LAYOUT_ISSUE_TEXT_OWNER_BOUNDS_MISMATCH,
+    VXUI_LAYOUT_ISSUE_CONTROL_LANE_EXCEEDS_PANEL,
+    VXUI_LAYOUT_ISSUE_CLIP_RECT_NARROWER_THAN_CONTENT,
+} vxui_layout_issue_kind;
+
+typedef struct vxui_layout_issue
+{
+    vxui_layout_issue_kind kind;
+    uint32_t subject_id;
+    vxui_rect bounds;
+    vxui_rect related_bounds;
+    char message[ 128 ];
+} vxui_layout_issue;
+
 #ifdef VXUI_DEBUG
 typedef struct vxui_debug_seq_editor
 {
@@ -468,6 +503,12 @@ typedef struct vxui_ctx
 
     /* Translated draw commands. */
     vxui_cmd* commands;
+    /*
+     * command_ids — per-instance Clay render id for this command.
+     * May be non-unique across frames; not used for animation matching.
+     * For text-bearing primitives (TEXT commands), command_owner_ids carries
+     * the stable decl/owner id used for animation and trait ownership.
+     */
     uint32_t* command_ids;
     uint32_t* command_owner_ids;
     uint32_t* command_screen_ids;
@@ -491,6 +532,8 @@ typedef struct vxui_ctx
     Clay_ErrorHandler clay_error_handler;
     const char* ( *text_fn )( const char* key, void* userdata );
     void* text_fn_userdata;
+    vxui_font_resolve_fn font_resolver;
+    void* font_resolver_userdata;
     Clay_RenderCommandArray clay_render_commands;
     vxui_rect current_clip_rect;
     bool clip_active;
@@ -574,13 +617,23 @@ typedef struct vxui_ctx
     int watched_seq_file_capacity;
     vxui_debug_seq_editor debug_seq_editor;
     uint64_t last_hot_reload_check_ms;
+    vxui_layout_issue layout_issues[ 64 ];
+    int layout_issue_count;
+    bool layout_issues_log_to_stderr;
+    bool layout_issues_truncated;
 #endif
 } vxui_ctx;
 
 static inline Clay_ElementDeclaration vxui__rtl_decl( vxui_ctx* ctx, Clay_ElementDeclaration decl )
 {
-    /* Layout stays LTR in Clay; RTL is applied as a mirrored draw-command pass. */
+    /* RTL rows are composed semantically at call sites; leave Clay declarations explicit. */
     ( void ) ctx;
+    return decl;
+}
+
+static inline Clay_ElementDeclaration vxui__text_leaf_decl( Clay_ElementDeclaration decl )
+{
+    decl.layout.sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) };
     return decl;
 }
 
@@ -610,6 +663,11 @@ static inline void vxui_set_text_fn( vxui_ctx* ctx, const char* ( *fn )( const c
 {
     ctx->text_fn = fn;
     ctx->text_fn_userdata = userdata;
+}
+static inline void vxui_set_font_resolver( vxui_ctx* ctx, vxui_font_resolve_fn fn, void* userdata )
+{
+    ctx->font_resolver = fn;
+    ctx->font_resolver_userdata = userdata;
 }
 
 /* Input and focus. */
@@ -648,6 +706,15 @@ bool vxui_watch_seq_file( vxui_ctx* ctx, const char* path, const char* name );
 bool vxui_poll_seq_hot_reload( vxui_ctx* ctx, uint64_t now_ms, char* error, size_t error_size );
 void vxui_debug_capture_preview( vxui_ctx* ctx, const vxui_draw_list* src );
 void vxui_debug_generate_seq_outputs( vxui_ctx* ctx );
+#endif
+
+/* Debug-only layout diagnostics. Requires VXUI_DEBUG. */
+#ifdef VXUI_DEBUG
+int vxui_debug_layout_issue_count( const vxui_ctx* ctx );
+const vxui_layout_issue* vxui_debug_layout_issue_at( const vxui_ctx* ctx, int index );
+void vxui_debug_clear_layout_issues( vxui_ctx* ctx );
+void vxui_set_debug_log_layout_issues( vxui_ctx* ctx, bool enabled );
+const char* vxui_layout_issue_kind_name( vxui_layout_issue_kind kind );
 #endif
 
 /* Trait registration. */
@@ -751,6 +818,7 @@ static void* vxui__arena_alloc( vxui_arena* arena, uint64_t size, uint64_t align
 static FILE* vxui__fopen( const char* path, const char* mode );
 static uint32_t vxui__hash_bytes( const void* data, size_t size, uint32_t seed );
 static uint32_t vxui__next_pow2( uint32_t value );
+static uint32_t vxui__make_instance_clay_id( vxui_ctx* ctx, uint32_t stable_id );
 static Clay_String vxui__clay_string_from_cstr( const char* text );
 static Clay_ElementId vxui__clay_id_from_hash( uint32_t id );
 static vxui_rect vxui__rect_from_clay_box( Clay_BoundingBox box );
@@ -774,7 +842,10 @@ static bool vxui__locale_is_rtl( const char* locale );
 static Clay_LayoutDirection vxui__resolve_dir( Clay_LayoutDirection dir, bool rtl );
 static uint32_t vxui__effective_font_id( vxui_ctx* ctx, uint32_t font_id );
 static float vxui__effective_font_size( vxui_ctx* ctx, float font_size );
+static vxui_resolved_font vxui__resolve_font( vxui_ctx* ctx, uint32_t font_id, float font_size );
+static uint16_t vxui__text_metric_to_u16( float value );
 static vxui_color vxui__effective_text_color( vxui_ctx* ctx, vxui_color color );
+static float vxui__default_control_height( vxui_ctx* ctx, uint32_t font_id = 0, float font_size = 0.0f );
 static void vxui__emit_text( vxui_ctx* ctx, const char* text, uint32_t font_id, float font_size, vxui_color color, uintptr_t owner_id = 0 );
 static void vxui__register_action( vxui_ctx* ctx, uint32_t id, vxui_action_fn fn, vxui_action_cfg cfg );
 /* --------------------------- Animation and focus --------------------------- */
@@ -899,6 +970,27 @@ static uint32_t vxui__next_pow2( uint32_t value )
     return value + 1u;
 }
 
+static uint32_t vxui__make_instance_clay_id( vxui_ctx* ctx, uint32_t stable_id )
+{
+    struct
+    {
+        uint32_t stable_id;
+        uint32_t ordinal;
+    } key = {
+        stable_id,
+        ( uint32_t ) ( ctx ? ctx->decl_count : 0 ),
+    };
+
+    uint32_t id = vxui__hash_bytes( &key, sizeof( key ), 0xC1A71Du );
+    if ( id == 0u ) {
+        id = vxui__hash_bytes( &key, sizeof( key ), 0x9E3779B9u );
+        if ( id == 0u ) {
+            id = 1u;
+        }
+    }
+    return id;
+}
+
 static Clay_String vxui__clay_string_from_cstr( const char* text )
 {
     Clay_String ret = {};
@@ -1012,19 +1104,34 @@ static Clay_Dimensions vxui__measure_text( Clay_StringSlice text, Clay_TextEleme
 {
     vxui_ctx* ctx = ( vxui_ctx* ) userdata;
     Clay_Dimensions dims = {};
-    dims.height = cfg ? ( float ) cfg->fontSize : 0.0f;
+    dims.height = 0.0f;
+
+    if ( cfg ) {
+        dims.height = cfg->lineHeight > 0 ? ( float ) cfg->lineHeight : ( float ) cfg->fontSize;
+        if ( ctx && ctx->font_resolver ) {
+            vxui_resolved_font resolved = vxui__resolve_font( ctx, ( uint32_t ) cfg->fontId, ( float ) cfg->fontSize );
+            if ( resolved.line_height > 0.0f ) {
+                dims.height = resolved.line_height;
+                cfg->lineHeight = vxui__text_metric_to_u16( resolved.line_height );
+            }
+            if ( resolved.font_id != 0u ) {
+                cfg->fontId = vxui__text_metric_to_u16( ( float ) resolved.font_id );
+            }
+        }
+    }
 
     if ( !ctx || !ctx->fontcache || !cfg ) {
         return dims;
     }
 
     ve_fontcache* cache = ctx->fontcache;
-    if ( cfg->fontId >= cache->entry.size() ) {
+    uint32_t font_id = ( uint32_t ) cfg->fontId;
+    if ( font_id >= cache->entry.size() ) {
         return dims;
     }
 
     std::u8string temp( ( const char8_t* ) text.chars, ( size_t ) text.length );
-    ve_fontcache_vec2 result = ve_fontcache_measure_text( cache, ( ve_font_id ) cfg->fontId, temp, 1.0f, 1.0f, true );
+    ve_fontcache_vec2 result = ve_fontcache_measure_text( cache, ( ve_font_id ) font_id, temp, 1.0f, 1.0f, true );
 
     dims.width = result.x;
     return dims;
@@ -1142,7 +1249,7 @@ static bool vxui__locale_is_rtl( const char* locale )
 
 static Clay_LayoutDirection vxui__resolve_dir( Clay_LayoutDirection dir, bool rtl )
 {
-    /* RTL is a post-translation mirror; keep Clay declarations honest and stable. */
+    /* VXUI composes RTL semantically where it has domain knowledge. */
     ( void ) rtl;
     return dir;
 }
@@ -1185,6 +1292,34 @@ static float vxui__effective_font_size( vxui_ctx* ctx, float font_size )
     return font_size > 0.0f ? font_size : ctx->default_font_size;
 }
 
+static vxui_resolved_font vxui__resolve_font( vxui_ctx* ctx, uint32_t font_id, float font_size )
+{
+    vxui_resolved_font resolved = { font_id, font_size };
+    if ( ctx && ctx->font_resolver ) {
+        resolved.font_id = UINT32_MAX;
+        resolved.line_height = 0.0f;
+        ctx->font_resolver( ctx, font_id, font_size, ctx->locale, ctx->font_resolver_userdata, &resolved );
+        if ( resolved.font_id == UINT32_MAX ) {
+            resolved.font_id = font_id;
+        }
+    }
+    if ( resolved.line_height <= 0.0f ) {
+        resolved.line_height = font_size;
+    }
+    return resolved;
+}
+
+static uint16_t vxui__text_metric_to_u16( float value )
+{
+    if ( value <= 0.0f ) {
+        return 0u;
+    }
+    if ( value >= 65535.0f ) {
+        return 65535u;
+    }
+    return ( uint16_t ) std::lround( value );
+}
+
 static vxui_color vxui__effective_text_color( vxui_ctx* ctx, vxui_color color )
 {
     if ( color.r == 0 && color.g == 0 && color.b == 0 && color.a == 0 ) {
@@ -1193,16 +1328,36 @@ static vxui_color vxui__effective_text_color( vxui_ctx* ctx, vxui_color color )
     return color;
 }
 
+static float vxui__default_control_height( vxui_ctx* ctx, uint32_t font_id, float font_size )
+{
+    if ( !ctx ) {
+        return 32.0f;
+    }
+
+    uint32_t effective_font_id = vxui__effective_font_id( ctx, font_id );
+    float effective_font_size = vxui__effective_font_size( ctx, font_size );
+    vxui_resolved_font resolved = vxui__resolve_font( ctx, effective_font_id, effective_font_size );
+    float line_height = resolved.line_height > 0.0f ? resolved.line_height : effective_font_size;
+    float height = line_height + 12.0f;
+    return height < 32.0f ? 32.0f : height;
+}
+
 static void vxui__emit_text( vxui_ctx* ctx, const char* text, uint32_t font_id, float font_size, vxui_color color, uintptr_t owner_id )
 {
     const char* copied = vxui__push_frame_string( ctx, text ? text : "", text ? std::strlen( text ) : 0 );
+    vxui_resolved_font resolved = vxui__resolve_font( ctx, font_id, font_size );
+    uint16_t line_height = 0u;
+    if ( ctx && ctx->font_resolver && resolved.line_height > 0.0f ) {
+        line_height = vxui__text_metric_to_u16( resolved.line_height );
+    }
     CLAY_TEXT(
         vxui__clay_string_from_cstr( copied ),
         CLAY_TEXT_CONFIG( {
             .userData = ( void* ) owner_id,
             .textColor = { ( float ) color.r, ( float ) color.g, ( float ) color.b, ( float ) color.a },
-            .fontId = ( uint16_t ) font_id,
-            .fontSize = ( uint16_t ) font_size,
+            .fontId = vxui__text_metric_to_u16( ( float ) resolved.font_id ),
+            .fontSize = vxui__text_metric_to_u16( font_size ),
+            .lineHeight = line_height,
         } ) );
 }
 
@@ -1263,6 +1418,7 @@ static void vxui__register_decl(
 
     decl->kind = kind;
     decl->id = id;
+    decl->clay_id = id;
     decl->focusable = focusable;
     decl->disabled = disabled;
     decl->no_focus_ring = no_focus_ring;
@@ -1812,43 +1968,7 @@ static void vxui__update_screen_states( vxui_ctx* ctx )
 
 static void vxui__mirror_rtl_commands( vxui_ctx* ctx )
 {
-    if ( !ctx->rtl ) {
-        return;
-    }
-
-    for ( int i = 0; i < ctx->command_count; ++i ) {
-        vxui_cmd* cmd = &ctx->commands[ i ];
-        switch ( cmd->type ) {
-            case VXUI_CMD_RECT:
-                cmd->rect.bounds.x = ( float ) ctx->cfg.screen_width - cmd->rect.bounds.x - cmd->rect.bounds.w;
-                break;
-
-            case VXUI_CMD_RECT_ROUNDED:
-                cmd->rect_rounded.bounds.x = ( float ) ctx->cfg.screen_width - cmd->rect_rounded.bounds.x - cmd->rect_rounded.bounds.w;
-                break;
-
-            case VXUI_CMD_BORDER:
-                cmd->border.bounds.x = ( float ) ctx->cfg.screen_width - cmd->border.bounds.x - cmd->border.bounds.w;
-                break;
-
-            case VXUI_CMD_IMAGE:
-                cmd->image.bounds.x = ( float ) ctx->cfg.screen_width - cmd->image.bounds.x - cmd->image.bounds.w;
-                break;
-
-            case VXUI_CMD_TEXT:
-                cmd->text.pos.x = ( float ) ctx->cfg.screen_width - cmd->text.pos.x;
-                break;
-
-            case VXUI_CMD_CLIP_PUSH:
-            case VXUI_CMD_CLIP_POP:
-                cmd->clip.rect.x = ( float ) ctx->cfg.screen_width - cmd->clip.rect.x - cmd->clip.rect.w;
-                break;
-        }
-
-        if ( cmd->clip_rect.w > 0.0f || cmd->clip_rect.h > 0.0f ) {
-            cmd->clip_rect.x = ( float ) ctx->cfg.screen_width - cmd->clip_rect.x - cmd->clip_rect.w;
-        }
-    }
+    ( void ) ctx;
 }
 
 static vxui_trait_desc* vxui__find_trait_desc( vxui_ctx* ctx, uint32_t id )
@@ -2242,16 +2362,25 @@ static void vxui__apply_anim_to_cmd( vxui_cmd* cmd, const vxui_anim_state* st )
             break;
 
         case VXUI_CMD_TEXT: {
-            vxui_rect text_bounds = st->bounds;
-            if ( text_bounds.w <= 0.0f ) {
-                text_bounds.w = cmd->text.size;
-            }
-            if ( text_bounds.h <= 0.0f ) {
-                text_bounds.h = cmd->text.size;
+            /* Use the owner bounds as the transform source; if the owner bounds are degenerate,
+             * fall back to a rect anchored at the current text position so we preserve local offsets.
+             */
+            vxui_rect owner_bounds = st->bounds;
+            if ( owner_bounds.w <= 0.0f || owner_bounds.h <= 0.0f ) {
+                owner_bounds.x = cmd->text.pos.x;
+                owner_bounds.y = cmd->text.pos.y;
+                owner_bounds.w = cmd->text.size;
+                owner_bounds.h = cmd->text.size;
             }
 
-            text_bounds = vxui__transform_rect( text_bounds, st );
-            cmd->text.pos = ( vxui_vec2 ) { text_bounds.x, text_bounds.y };
+            vxui_rect transformed = vxui__transform_rect( owner_bounds, st );
+
+            /* Preserve the text's local offset inside the owning bounds and apply scale/translate. */
+            float dx = cmd->text.pos.x - owner_bounds.x;
+            float dy = cmd->text.pos.y - owner_bounds.y;
+            cmd->text.pos.x = transformed.x + dx * st->scale_current;
+            cmd->text.pos.y = transformed.y + dy * st->scale_current;
+
             cmd->text.size *= st->scale_current;
             cmd->text.color = vxui__apply_anim_color( cmd->text.color, st );
             break;
@@ -2561,6 +2690,16 @@ static void vxui__emit_focus_ring( vxui_ctx* ctx )
     cmd->border.width = ctx->cfg.focus_ring.border_width;
 }
 
+static uint32_t vxui__decl_id_from_clay_id( vxui_ctx* ctx, uint32_t clay_id )
+{
+    for ( int i = 0; i < ctx->decl_count; ++i ) {
+        if ( ctx->decls[ i ].clay_id == clay_id ) {
+            return ctx->decls[ i ].id;
+        }
+    }
+    return clay_id;
+}
+
 static void vxui__scan_decl_anim_bounds( vxui_ctx* ctx )
 {
     if ( !ctx->clay_ctx ) {
@@ -2570,7 +2709,7 @@ static void vxui__scan_decl_anim_bounds( vxui_ctx* ctx )
     for ( int i = 0; i < ctx->decl_count; ++i ) {
         vxui_decl* decl = &ctx->decls[ i ];
         vxui_anim_state* st = vxui__get_anim_state( ctx, decl->id, true );
-        Clay_ElementData data = Clay_GetElementData( vxui__clay_id_from_hash( decl->id ) );
+        Clay_ElementData data = Clay_GetElementData( vxui__clay_id_from_hash( decl->clay_id ) );
         if ( data.found ) {
             vxui__mark_seen( st, ctx->frame_index, vxui__rect_from_clay_box( data.boundingBox ) );
         }
@@ -2592,7 +2731,15 @@ static void vxui__scan_clay_anim_states( vxui_ctx* ctx )
             case CLAY_RENDER_COMMAND_TYPE_IMAGE:
             case CLAY_RENDER_COMMAND_TYPE_SCISSOR_START:
             case CLAY_RENDER_COMMAND_TYPE_SCISSOR_END: {
-                vxui_anim_state* st = vxui__get_anim_state( ctx, src->id, true );
+                uint32_t anim_key = src->id;
+                if ( src->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT ) {
+                    if ( src->userData ) {
+                        anim_key = ( uint32_t ) ( uintptr_t ) src->userData;
+                    } else {
+                        anim_key = vxui__decl_id_from_clay_id( ctx, src->id );
+                    }
+                }
+                vxui_anim_state* st = vxui__get_anim_state( ctx, anim_key, true );
                 vxui__mark_seen( st, ctx->frame_index, vxui__rect_from_clay_box( src->boundingBox ) );
                 if ( src->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT && src->userData ) {
                     vxui_anim_state* owner = vxui__get_anim_state( ctx, ( uint32_t ) ( uintptr_t ) src->userData, true );
@@ -2765,7 +2912,15 @@ static void vxui__translate_clay_commands( vxui_ctx* ctx )
             continue;
         }
 
-        vxui_anim_state* st = vxui__get_anim_state( ctx, src->id, false );
+        uint32_t anim_key = src->id;
+        if ( src->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT ) {
+            if ( src->userData ) {
+                anim_key = ( uint32_t ) ( uintptr_t ) src->userData;
+            } else {
+                anim_key = vxui__decl_id_from_clay_id( ctx, src->id );
+            }
+        }
+        vxui_anim_state* st = vxui__get_anim_state( ctx, anim_key, false );
 
         switch ( src->commandType ) {
             case CLAY_RENDER_COMMAND_TYPE_RECTANGLE: {
@@ -2831,6 +2986,7 @@ static void vxui__translate_clay_commands( vxui_ctx* ctx )
                     ctx->command_ids[ ctx->command_count - 1 ] = src->id;
                 }
                 if ( ctx->command_owner_ids ) {
+                    /* owner_ids carries the stable decl_id for text animation matching (line ~2161). */
                     ctx->command_owner_ids[ ctx->command_count - 1 ] = src->userData ? ( uint32_t ) ( uintptr_t ) src->userData : src->id;
                 }
 
@@ -2842,7 +2998,7 @@ static void vxui__translate_clay_commands( vxui_ctx* ctx )
 
                 cmd->clip_rect = ctx->current_clip_rect;
                 cmd->text = *queued;
-                vxui__capture_retained_cmd( ctx, src->id, cmd );
+                vxui__capture_retained_cmd( ctx, anim_key, cmd );
                 vxui__apply_anim_to_cmd( cmd, st );
                 *queued = cmd->text;
                 break;
@@ -3331,6 +3487,110 @@ void vxui_shutdown( vxui_ctx* ctx )
     }
 }
 
+#ifdef VXUI_DEBUG
+static void vxui__record_layout_issue( vxui_ctx* ctx, vxui_layout_issue issue );
+
+static void vxui__validate_decl_bounds( vxui_ctx* ctx )
+{
+    if ( !ctx ) {
+        return;
+    }
+    for ( int i = 0; i < ctx->decl_count; ++i ) {
+        vxui_decl* decl = &ctx->decls[ i ];
+        if ( !decl->focusable || decl->disabled ) {
+            continue;
+        }
+        vxui_anim_state* st = vxui__get_anim_state( ctx, decl->id, false );
+        if ( !st ) {
+            continue;
+        }
+        if ( st->bounds.w < 4.0f || st->bounds.h < 4.0f ) {
+            vxui__record_layout_issue( ctx, ( vxui_layout_issue ) {
+                .kind = VXUI_LAYOUT_ISSUE_TINY_FOCUSABLE_BOUNDS,
+                .subject_id = decl->id,
+                .bounds = st->bounds,
+                .message = "focusable element has degenerate bounds",
+            } );
+        }
+    }
+}
+
+static void vxui__validate_command_geometry( vxui_ctx* ctx )
+{
+    if ( !ctx ) {
+        return;
+    }
+    for ( int i = 0; i < ctx->command_count; ++i ) {
+        vxui_cmd* cmd = &ctx->commands[ i ];
+        if ( cmd->type == VXUI_CMD_TEXT ) {
+            uint32_t owner_id = ctx->command_owner_ids ? ctx->command_owner_ids[ i ] : 0;
+            vxui_anim_state* owner = vxui__get_anim_state( ctx, owner_id, false );
+            if ( owner && ( owner->bounds.w <= 0.0f || owner->bounds.h <= 0.0f ) ) {
+                vxui__record_layout_issue( ctx, ( vxui_layout_issue ) {
+                    .kind = VXUI_LAYOUT_ISSUE_TEXT_OWNER_BOUNDS_MISMATCH,
+                    .subject_id = owner_id,
+                    .bounds = { cmd->text.pos.x, cmd->text.pos.y, cmd->text.size, cmd->text.size },
+                    .related_bounds = owner->bounds,
+                    .message = "text rendered but owner has no valid bounds",
+                } );
+            }
+        }
+        if ( cmd->type == VXUI_CMD_CLIP_PUSH && cmd->clip.rect.w < 10.0f ) {
+            vxui__record_layout_issue( ctx, ( vxui_layout_issue ) {
+                .kind = VXUI_LAYOUT_ISSUE_CLIP_RECT_NARROWER_THAN_CONTENT,
+                .subject_id = ctx->command_ids ? ctx->command_ids[ i ] : 0,
+                .bounds = cmd->clip.rect,
+                .message = "clip rect suspiciously narrow",
+            } );
+        }
+    }
+}
+
+static void vxui__validate_focus_ring_bounds( vxui_ctx* ctx )
+{
+    if ( !ctx || ctx->focused_id == 0 ) {
+        return;
+    }
+    vxui_anim_state* focused = vxui__get_anim_state( ctx, ctx->focused_id, false );
+    if ( !focused ) {
+        return;
+    }
+    if ( focused->bounds.w < 2.0f || focused->bounds.h < 2.0f ) {
+        vxui__record_layout_issue( ctx, ( vxui_layout_issue ) {
+            .kind = VXUI_LAYOUT_ISSUE_FOCUS_RING_DECGENERATE,
+            .subject_id = ctx->focused_id,
+            .bounds = focused->bounds,
+            .message = "focused element has degenerate bounds for focus ring",
+        } );
+    }
+}
+
+static void vxui__record_layout_issue( vxui_ctx* ctx, vxui_layout_issue issue )
+{
+    if ( !ctx || ctx->layout_issue_count < 0 ) {
+        return;
+    }
+    if ( ctx->layout_issue_count < 64 ) {
+        ctx->layout_issues[ ctx->layout_issue_count ] = issue;
+    } else {
+        ctx->layout_issues_truncated = true;
+    }
+    ctx->layout_issue_count += 1;
+    if ( ctx->layout_issues_log_to_stderr ) {
+        std::fprintf(
+            stderr,
+            "vxui layout issue [%s] subject=%u bounds={%.1f,%.1f,%.1f,%.1f} %s\n",
+            vxui_layout_issue_kind_name( issue.kind ),
+            issue.subject_id,
+            issue.bounds.x,
+            issue.bounds.y,
+            issue.bounds.w,
+            issue.bounds.h,
+            issue.message );
+    }
+}
+#endif
+
 void vxui_begin( vxui_ctx* ctx, float delta_time )
 {
     ctx->frame_index += 1;
@@ -3354,6 +3614,10 @@ vxui_draw_list vxui_end( vxui_ctx* ctx )
     }
     ctx->elapsed_ms += delta_ms;
 
+#ifdef VXUI_DEBUG
+    vxui_debug_clear_layout_issues( ctx );
+#endif
+
     if ( ctx->clay_ctx ) {
         Clay_SetCurrentContext( ctx->clay_ctx );
         ctx->clay_render_commands = Clay_EndLayout();
@@ -3361,8 +3625,16 @@ vxui_draw_list vxui_end( vxui_ctx* ctx )
     }
     vxui__execute_traits( ctx );
 
+#ifdef VXUI_DEBUG
+    vxui__validate_decl_bounds( ctx );
+    vxui__validate_command_geometry( ctx );
+#endif
+
     vxui__resolve_focus( ctx );
     vxui__update_focus_ring( ctx );
+#ifdef VXUI_DEBUG
+    vxui__validate_focus_ring_bounds( ctx );
+#endif
     vxui__emit_focus_ring( ctx );
     for ( int i = 0; i < ctx->command_count; ++i ) {
         uint32_t screen_id = ctx->command_screen_ids ? ctx->command_screen_ids[ i ] : 0;
@@ -3848,6 +4120,74 @@ void vxui_debug_generate_seq_outputs( vxui_ctx* ctx )
     vxui_generate_seq_c( seq, ctx->debug_seq_editor.generated_c, sizeof( ctx->debug_seq_editor.generated_c ) );
     vxui_generate_seq_toml( seq, ctx->debug_seq_editor.generated_toml, sizeof( ctx->debug_seq_editor.generated_toml ) );
 }
+
+int vxui_debug_layout_issue_count( const vxui_ctx* ctx )
+{
+    if ( !ctx ) {
+        return 0;
+    }
+    return ctx->layout_issue_count;
+}
+
+const vxui_layout_issue* vxui_debug_layout_issue_at( const vxui_ctx* ctx, int index )
+{
+    if ( !ctx || index < 0 || index >= ctx->layout_issue_count ) {
+        return nullptr;
+    }
+    return &ctx->layout_issues[ index ];
+}
+
+void vxui_debug_clear_layout_issues( vxui_ctx* ctx )
+{
+    if ( !ctx ) {
+        return;
+    }
+    ctx->layout_issue_count = 0;
+    ctx->layout_issues_truncated = false;
+}
+
+void vxui_set_debug_log_layout_issues( vxui_ctx* ctx, bool enabled )
+{
+    if ( !ctx ) {
+        return;
+    }
+    ctx->layout_issues_log_to_stderr = enabled;
+}
+
+const char* vxui_layout_issue_kind_name( vxui_layout_issue_kind kind )
+{
+    switch ( kind ) {
+        case VXUI_LAYOUT_ISSUE_TINY_FOCUSABLE_BOUNDS:
+            return "tiny_focusable_bounds";
+        case VXUI_LAYOUT_ISSUE_TEXT_EXCEEDS_BUTTON_PADDING:
+            return "text_exceeds_button_padding";
+        case VXUI_LAYOUT_ISSUE_PAIR_CLUSTER_TOO_WIDE:
+            return "pair_cluster_too_wide";
+        case VXUI_LAYOUT_ISSUE_PAIR_CLUSTER_GAP_TOO_LARGE:
+            return "pair_cluster_gap_too_large";
+        case VXUI_LAYOUT_ISSUE_CONTROL_OUTSIDE_CONTENT_PANEL:
+            return "control_outside_content_panel";
+        case VXUI_LAYOUT_ISSUE_SELECTION_RECT_EXCEEDS_PANEL:
+            return "selection_rect_exceeds_panel";
+        case VXUI_LAYOUT_ISSUE_ROW_LANE_MISALIGNED:
+            return "row_lane_misaligned";
+        case VXUI_LAYOUT_ISSUE_SUSPICIOUS_ROW_HEIGHT:
+            return "suspicious_row_height";
+        case VXUI_LAYOUT_ISSUE_RTL_TEXT_OUT_OF_BOUNDS:
+            return "rtl_text_out_of_bounds";
+        case VXUI_LAYOUT_ISSUE_METADATA_CLUSTER_TOO_SPARSE:
+            return "metadata_cluster_too_sparse";
+        case VXUI_LAYOUT_ISSUE_FOCUS_RING_DECGENERATE:
+            return "focus_ring_degenerate";
+        case VXUI_LAYOUT_ISSUE_TEXT_OWNER_BOUNDS_MISMATCH:
+            return "text_owner_bounds_mismatch";
+        case VXUI_LAYOUT_ISSUE_CONTROL_LANE_EXCEEDS_PANEL:
+            return "control_lane_exceeds_panel";
+        case VXUI_LAYOUT_ISSUE_CLIP_RECT_NARROWER_THAN_CONTENT:
+            return "clip_rect_narrower_than_content";
+    }
+    return "unknown";
+}
 #endif
 
 void vxui_list_begin( vxui_ctx* ctx, const char* id, vxui_list_cfg cfg )
@@ -3996,14 +4336,16 @@ void VXUI_LABEL( vxui_ctx* ctx, const char* l10n_key, vxui_label_cfg cfg )
 
     vxui_decl* decl = vxui__push_decl( ctx );
     uint32_t decl_id = vxui_id( l10n_key );
+    uint32_t clay_id = vxui__make_instance_clay_id( ctx, decl_id );
     if ( decl ) {
         decl->kind = VXUI_DECL_LABEL;
         decl->id = decl_id;
+        decl->clay_id = clay_id;
     }
     vxui__get_anim_state( ctx, decl_id, true );
     ctx->current_decl_id = decl_id;
 
-    CLAY( vxui__clay_id_from_hash( decl_id ), {} ) {
+    CLAY( vxui__clay_id_from_hash( clay_id ), vxui__text_leaf_decl( Clay_ElementDeclaration {} ) ) {
         vxui__emit_text( ctx, resolved, font_id, font_size, color, decl_id );
     }
 }
@@ -4028,21 +4370,28 @@ void VXUI_VALUE( vxui_ctx* ctx, const char* l10n_key, float value, vxui_value_cf
 
     vxui_decl* decl = vxui__push_decl( ctx );
     uint32_t decl_id = vxui_id( l10n_key );
+    uint32_t clay_id = vxui__make_instance_clay_id( ctx, decl_id );
     if ( decl ) {
         decl->kind = VXUI_DECL_VALUE;
         decl->id = decl_id;
+        decl->clay_id = clay_id;
     }
     vxui__get_anim_state( ctx, decl_id, true );
     ctx->current_decl_id = decl_id;
 
-    CLAY( vxui__clay_id_from_hash( decl_id ), {
+    CLAY( vxui__clay_id_from_hash( clay_id ), vxui__text_leaf_decl( ( Clay_ElementDeclaration ) {
         .layout = {
             .childGap = 8,
             .layoutDirection = vxui__resolve_dir( CLAY_LEFT_TO_RIGHT, ctx->rtl ),
         },
-    } ) {
-        vxui__emit_text( ctx, resolved, font_id, font_size, color, decl_id );
-        vxui__emit_text( ctx, formatted.c_str(), font_id, font_size, color, decl_id );
+    } ) ) {
+        if ( ctx->rtl ) {
+            vxui__emit_text( ctx, formatted.c_str(), font_id, font_size, color, decl_id );
+            vxui__emit_text( ctx, resolved, font_id, font_size, color, decl_id );
+        } else {
+            vxui__emit_text( ctx, resolved, font_id, font_size, color, decl_id );
+            vxui__emit_text( ctx, formatted.c_str(), font_id, font_size, color, decl_id );
+        }
     }
 }
 
@@ -4055,9 +4404,9 @@ void VXUI_ACTION( vxui_ctx* ctx, const char* id, const char* l10n_key, vxui_acti
     vxui__get_anim_state( ctx, action_id, true );
     ctx->current_decl_id = action_id;
 
-    CLAY( vxui__clay_id_from_hash( action_id ), {
+    CLAY( vxui__clay_id_from_hash( action_id ), vxui__text_leaf_decl( ( Clay_ElementDeclaration ) {
         .userData = cfg.userdata,
-    } ) {
+    } ) ) {
         vxui__emit_text(
             ctx,
             resolved,
@@ -4117,11 +4466,11 @@ void VXUI_OPTION( vxui_ctx* ctx, const char* id, int* index, const char** string
     }
 
     const char* resolved = ( index && strings && count > 0 ) ? vxui__resolve_text( ctx, strings[ *index ] ) : "";
-    CLAY( vxui__clay_id_from_hash( option_id ), {
+    CLAY( vxui__clay_id_from_hash( option_id ), vxui__text_leaf_decl( ( Clay_ElementDeclaration ) {
         .layout = {
             .padding = CLAY_PADDING_ALL( 4 ),
         },
-    } ) {
+    } ) ) {
         vxui__emit_text( ctx, resolved, vxui__effective_font_id( ctx, 0 ), ctx->default_font_size, ctx->default_text_color, option_id );
     }
 }
@@ -4242,11 +4591,15 @@ void VXUI_PROMPT( vxui_ctx* ctx, const char* action_name )
     }
 
     uint32_t prompt_id = vxui_id( action_name );
+    uint32_t clay_id = vxui__make_instance_clay_id( ctx, prompt_id );
     vxui__register_decl( ctx, VXUI_DECL_PROMPT, prompt_id, 0, 0, 0, 0, false, false, true, nullptr, nullptr );
+    if ( ctx->decl_count > 0 ) {
+        ctx->decls[ ctx->decl_count - 1 ].clay_id = clay_id;
+    }
     vxui__get_anim_state( ctx, prompt_id, true );
     ctx->current_decl_id = prompt_id;
 
-    CLAY( vxui__clay_id_from_hash( prompt_id ), {} ) {
+    CLAY( vxui__clay_id_from_hash( clay_id ), vxui__text_leaf_decl( Clay_ElementDeclaration {} ) ) {
         vxui__emit_text( ctx, glyph, binding.font_id != 0 ? binding.font_id : ctx->default_font_id, ctx->default_font_size, ctx->default_text_color, prompt_id );
     }
 }

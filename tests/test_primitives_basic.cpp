@@ -18,17 +18,32 @@ static const char* vxui__primitive_text_fn( const char* key, void* userdata )
 {
     ( void ) userdata;
 
+    if ( std::strcmp( key, "menu.title" ) == 0 ) {
+        return "Main Menu";
+    }
     if ( std::strcmp( key, "menu.start" ) == 0 ) {
         return "Start Game";
     }
     if ( std::strcmp( key, "menu.volume" ) == 0 ) {
         return "Volume";
     }
+    if ( std::strcmp( key, "menu.status" ) == 0 ) {
+        return "Status";
+    }
+    if ( std::strcmp( key, "menu.ready" ) == 0 ) {
+        return "Ready";
+    }
+    if ( std::strcmp( key, "menu.hint" ) == 0 ) {
+        return "Press Start";
+    }
     if ( std::strcmp( key, "menu.quit" ) == 0 ) {
         return "Quit";
     }
     if ( std::strcmp( key, "menu.dynamic" ) == 0 ) {
         return vxui__primitive_text_buffer;
+    }
+    if ( std::strcmp( key, "menu.wrap.long" ) == 0 ) {
+        return "This is a deliberately long localized hint string.\nIt should emit more than one text row.\nThose rows should keep increasing Y positions.";
     }
     return nullptr;
 }
@@ -38,6 +53,18 @@ static void vxui__test_action( vxui_ctx* ctx, uint32_t id, void* userdata )
     ( void ) ctx;
     ( void ) id;
     ( void ) userdata;
+}
+
+static int vxui__collect_text_command_positions( const vxui_draw_list* list, float* ys, int capacity )
+{
+    int count = 0;
+    for ( int i = 0; i < list->length && count < capacity; ++i ) {
+        if ( list->commands[ i ].type != VXUI_CMD_TEXT ) {
+            continue;
+        }
+        ys[ count++ ] = list->commands[ i ].text.pos.y;
+    }
+    return count;
 }
 
 UTEST_F_SETUP( primitives_fixture )
@@ -217,4 +244,122 @@ UTEST_F( primitives_fixture, action_ids_remain_stable_across_repeated_frames )
     }
 
     EXPECT_EQ( ids[ 0 ], ids[ 1 ] );
+}
+
+UTEST_F( primitives_fixture, stacked_labels_emit_increasing_text_y_positions )
+{
+    vxui_set_text_fn( &utest_fixture->ctx, vxui__primitive_text_fn, nullptr );
+
+    vxui_begin( &utest_fixture->ctx, 0.016f );
+    VXUI( &utest_fixture->ctx, "root", {
+        .layout = {
+            .childGap = 10,
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+        },
+    } ) {
+        VXUI_LABEL( &utest_fixture->ctx, "menu.title", ( vxui_label_cfg ) { 0 } );
+        VXUI_LABEL( &utest_fixture->ctx, "menu.start", ( vxui_label_cfg ) { 0 } );
+        VXUI_LABEL( &utest_fixture->ctx, "menu.quit", ( vxui_label_cfg ) { 0 } );
+    }
+
+    vxui_draw_list list = vxui_end( &utest_fixture->ctx );
+    float ys[ 3 ] = {};
+    ASSERT_EQ( vxui__collect_text_command_positions( &list, ys, 3 ), 3 );
+    EXPECT_LT( ys[ 0 ], ys[ 1 ] );
+    EXPECT_LT( ys[ 1 ], ys[ 2 ] );
+}
+
+UTEST_F( primitives_fixture, mixed_text_widgets_render_below_title_in_vertical_stack )
+{
+    vxui_set_text_fn( &utest_fixture->ctx, vxui__primitive_text_fn, nullptr );
+
+    vxui_input_table table = {
+        .confirm = {
+            .font_id = 7,
+            .glyph = 'A',
+        },
+    };
+    vxui_set_input_table( &utest_fixture->ctx, &table );
+
+    vxui_begin( &utest_fixture->ctx, 0.016f );
+    VXUI( &utest_fixture->ctx, "root", {
+        .layout = {
+            .childGap = 12,
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+        },
+    } ) {
+        VXUI_LABEL( &utest_fixture->ctx, "menu.title", ( vxui_label_cfg ) { 0 } );
+        VXUI_ACTION( &utest_fixture->ctx, "start", "menu.start", vxui__test_action, ( vxui_action_cfg ) { 0 } );
+        VXUI( &utest_fixture->ctx, "prompt-row", {
+            .layout = {
+                .childGap = 8,
+                .layoutDirection = CLAY_LEFT_TO_RIGHT,
+            },
+        } ) {
+            VXUI_PROMPT( &utest_fixture->ctx, "action.confirm" );
+            VXUI_LABEL( &utest_fixture->ctx, "menu.status", ( vxui_label_cfg ) { 0 } );
+        }
+        VXUI_LABEL( &utest_fixture->ctx, "menu.ready", ( vxui_label_cfg ) { 0 } );
+        VXUI_LABEL( &utest_fixture->ctx, "menu.hint", ( vxui_label_cfg ) { 0 } );
+        VXUI_LABEL( &utest_fixture->ctx, "menu.quit", ( vxui_label_cfg ) { 0 } );
+    }
+
+    vxui_draw_list list = vxui_end( &utest_fixture->ctx );
+    float ys[ 7 ] = {};
+    int text_count = vxui__collect_text_command_positions( &list, ys, 7 );
+    ASSERT_EQ( text_count, 7 );
+
+    float title_y = ys[ 0 ];
+    for ( int i = 1; i < text_count; ++i ) {
+        EXPECT_GT( ys[ i ], title_y );
+    }
+}
+
+UTEST_F( primitives_fixture, narrow_container_wraps_label_into_increasing_text_rows )
+{
+    vxui_set_text_fn( &utest_fixture->ctx, vxui__primitive_text_fn, nullptr );
+
+    vxui_begin( &utest_fixture->ctx, 0.016f );
+    VXUI( &utest_fixture->ctx, "root", {
+        .layout = {
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+        },
+    } ) {
+        VXUI( &utest_fixture->ctx, "wrap-box", {
+            .layout = {
+                .sizing = { CLAY_SIZING_FIXED( 120 ), CLAY_SIZING_FIT( 0 ) },
+            },
+        } ) {
+            const char* wrapped_text = vxui__primitive_text_fn( "menu.wrap.long", nullptr );
+            Clay_String wrapped = {
+                .isStaticallyAllocated = false,
+                .length = ( int32_t ) std::strlen( wrapped_text ),
+                .chars = wrapped_text,
+            };
+            CLAY( CLAY_ID( "wrap.text" ), {
+                .layout = {
+                    .sizing = { CLAY_SIZING_FIXED( 120 ), CLAY_SIZING_FIT( 0 ) },
+                },
+            } ) {
+                CLAY_TEXT(
+                    wrapped,
+                    CLAY_TEXT_CONFIG( {
+                        .userData = ( void* ) ( uintptr_t ) vxui_id( "menu.wrap.long" ),
+                        .textColor = { 255, 255, 255, 255 },
+                        .fontId = 0,
+                        .fontSize = 18,
+                        .wrapMode = CLAY_TEXT_WRAP_NEWLINES,
+                    } ) );
+            }
+        }
+    }
+
+    vxui_draw_list list = vxui_end( &utest_fixture->ctx );
+    float ys[ 8 ] = {};
+    int text_count = vxui__collect_text_command_positions( &list, ys, 8 );
+
+    ASSERT_GT( text_count, 1 );
+    for ( int i = 1; i < text_count; ++i ) {
+        EXPECT_LT( ys[ i - 1 ], ys[ i ] );
+    }
 }

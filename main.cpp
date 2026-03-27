@@ -40,6 +40,8 @@
 #define VXUI_IMPL
 #include "vxui.h"
 
+#include "vefc/ve_fontcache_backend_test.h"
+
 #ifndef VXUI_SOURCE_DIR
 #define VXUI_SOURCE_DIR "."
 #endif
@@ -51,6 +53,49 @@ enum vxui_demo_font_id
     VXUI_DEMO_FONT_DEBUG,
     VXUI_DEMO_FONT_JAPANESE,
     VXUI_DEMO_FONT_ARABIC,
+    VXUI_DEMO_FONT_SECTION_TITLE,
+    VXUI_DEMO_FONT_JAPANESE_TITLE,
+    VXUI_DEMO_FONT_JAPANESE_SECTION,
+    VXUI_DEMO_FONT_ARABIC_TITLE,
+    VXUI_DEMO_FONT_ARABIC_SECTION,
+    VXUI_DEMO_FONT_FACE_COUNT,
+};
+
+enum vxui_demo_font_role
+{
+    VXUI_DEMO_FONT_ROLE_BODY = 100,
+    VXUI_DEMO_FONT_ROLE_TITLE,
+    VXUI_DEMO_FONT_ROLE_SECTION,
+    VXUI_DEMO_FONT_ROLE_CODE,
+};
+
+enum vxui_demo_locale
+{
+    VXUI_DEMO_LOCALE_ENGLISH = 0,
+    VXUI_DEMO_LOCALE_JAPANESE,
+    VXUI_DEMO_LOCALE_ARABIC,
+};
+
+enum
+{
+    VXUI_DEMO_BODY_SIZE = 24,
+    VXUI_DEMO_TITLE_SIZE = 44,
+    VXUI_DEMO_SECTION_SIZE = 28,
+    VXUI_DEMO_CODE_SIZE = 16,
+};
+
+static constexpr uint16_t VXUI_DEMO_BUTTON_PADDING_X = 12;
+static constexpr uint16_t VXUI_DEMO_BUTTON_PADDING_Y = 6;
+static constexpr uint16_t VXUI_DEMO_INLINE_GAP = 8;
+static constexpr uint16_t VXUI_DEMO_ROW_GAP = 12;
+static constexpr uint16_t VXUI_DEMO_SCREEN_GAP = 16;
+static constexpr float VXUI_DEMO_CONTENT_MAX_WIDTH = 620.0f;
+static constexpr float VXUI_DEMO_FORM_LABEL_WIDTH = 140.0f;
+
+struct vxui_demo_font_metrics
+{
+    ve_font_id font_id;
+    float line_height;
 };
 
 enum vxui_demo_button
@@ -91,9 +136,6 @@ typedef struct vxui_demo_app
     float debug_target_value;
     int last_selected_seq;
     bool button_prev[ VXUI_DEMO_BTN_COUNT ];
-    char locale_status[ 64 ];
-    char prompt_status[ 64 ];
-    char screen_status[ 128 ];
     char preview_status[ 96 ];
     char clipboard_status[ 96 ];
     char reload_status[ 256 ];
@@ -136,11 +178,20 @@ typedef struct vxui_demo_renderer
     std::vector< GLuint > cpu_atlas_textures;
     TinyWindow::vec2_t< unsigned int > window_size;
     ve_fontcache cache;
-    std::vector< uint8_t > ui_font;
-    std::vector< uint8_t > title_font;
-    std::vector< uint8_t > debug_font;
-    std::vector< uint8_t > japanese_font;
-    std::vector< uint8_t > arabic_font;
+    std::array< std::vector< uint8_t >, VXUI_DEMO_FONT_FACE_COUNT > demo_fonts;
+    std::array< float, VXUI_DEMO_FONT_FACE_COUNT > demo_line_heights {};
+    std::vector< std::vector< uint8_t > > backend_test_dynamic_font_buffers;
+    ve_font_id backend_test_primary_font = -1;
+    ve_font_id backend_test_secondary_font = -1;
+    ve_font_id backend_test_small_font = -1;
+    ve_font_id backend_test_latin_font = -1;
+    ve_font_id backend_test_cjk_font = -1;
+    ve_font_id backend_test_huge_font = -1;
+    bool backend_test_mode;
+    GLuint backend_target_fbo;
+    GLuint backend_target_texture;
+    GLuint backend_present_fbo;
+    GLuint backend_present_texture;
     struct vxui_demo_gl_debug
     {
         enum backend
@@ -170,6 +221,9 @@ typedef struct vxui_demo_renderer
     } gl_debug;
 } vxui_demo_renderer;
 
+// Global pointer to renderer for VEFC backend test callbacks (set during --vefc-backend-test)
+static vxui_demo_renderer* g_vxui_demo_backend_test_renderer = nullptr;
+
 static const char* vxui_demo_text( const char* key, void* userdata );
 static FILE* vxui_demo_fopen( const char* path, const char* mode );
 static bool vxui_demo_write_file( const char* path, const char* text );
@@ -180,6 +234,17 @@ static int vxui_demo_find_seq_index( const vxui_ctx* ctx, const char* name );
 static void vxui_demo_sync_step_editor( vxui_demo_app* app );
 static void vxui_demo_apply_step_editor( vxui_demo_app* app );
 static void vxui_demo_refresh_status( vxui_demo_app* app );
+static const char* vxui_demo_locale_code( int locale_index );
+static const char* vxui_demo_locale_name_key( int locale_index );
+static const char* vxui_demo_prompt_name_key( int prompt_table_index );
+static const char* vxui_demo_screen_name_key( const char* screen_name );
+static bool vxui_demo_locale_matches( const char* locale, const char* prefix );
+static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_renderer* renderer, uint32_t requested_font_id, float requested_font_size, const char* locale );
+static void vxui_demo_font_resolver( vxui_ctx* ctx, uint32_t requested_font_id, float requested_font_size, const char* locale, void* userdata, vxui_resolved_font* out );
+static float vxui_demo_control_height( const vxui_demo_renderer* renderer, const char* locale );
+static void vxui_demo_emit_label_pair( vxui_ctx* ctx, const char* id, const char* label_key, const char* value_key, bool rtl );
+static void vxui_demo_emit_prompt_pair( vxui_ctx* ctx, const char* id, const char* action_name, const char* label_key );
+static void vxui_demo_emit_action_button( vxui_ctx* ctx, const char* id, const char* l10n_key, vxui_action_fn fn, vxui_action_cfg cfg, float control_height );
 static void vxui_demo_open_settings( vxui_ctx* ctx, uint32_t id, void* userdata );
 static void vxui_demo_close_settings( vxui_ctx* ctx, uint32_t id, void* userdata );
 static GLuint vxui_demo_compile_program( const char* vs_source, const char* fs_source, const char* label );
@@ -198,6 +263,10 @@ static void vxui_demo_render_text_cmd( vxui_demo_renderer* renderer, const vxui_
 static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, const vxui_rect* clip_rect );
 static void vxui_demo_setup_fontcache_fbo( vxui_demo_renderer* renderer );
 static void vxui_demo_flip_fontcache_upload( ve_fontcache_drawlist* drawlist, ve_fontcache_draw& dcall );
+static void vxui_demo_clear_backend_test_surfaces( vxui_demo_renderer* renderer, bool clear_cpu_atlas_pages );
+static bool vxui_demo_setup_backend_test_fbo( vxui_demo_renderer* renderer );
+static void vxui_demo_shutdown_backend_test_fbo( vxui_demo_renderer* renderer );
+static bool vxui_demo_readback_r8_texture( GLuint texture, int x, int y, int w, int h, uint8_t* out_pixels );
 static bool vxui_demo_button_edge( vxui_demo_app* app, vxui_demo_button button, bool down );
 static bool vxui_demo_key_down( const TinyWindow::tWindow* window, int key );
 static bool vxui_demo_char_down( const TinyWindow::tWindow* window, char ch );
@@ -210,14 +279,11 @@ static const char* vxui_demo_text( const char* key, void* userdata )
 
     if ( app && app->ctx ) {
 #ifdef VXUI_DEBUG
-        if ( std::strcmp( key, "debug.overlay.title" ) == 0 ) {
-            return "Sequence Debugger";
-        }
         if ( std::strcmp( key, "debug.selected_seq" ) == 0 ) {
             if ( app->ctx->debug_seq_editor.selected_seq >= 0 && app->ctx->debug_seq_editor.selected_seq < app->ctx->registered_seq_count ) {
                 return app->ctx->registered_seqs[ app->ctx->debug_seq_editor.selected_seq ].name;
             }
-            return "none";
+            return vxui_demo_text( "common.none", userdata );
         }
         if ( std::strcmp( key, "debug.step.id" ) == 0 ) {
             if ( app->ctx->debug_seq_editor.selected_seq >= 0 && app->ctx->debug_seq_editor.selected_seq < app->ctx->registered_seq_count ) {
@@ -227,7 +293,7 @@ static const char* vxui_demo_text( const char* key, void* userdata )
                     return vxui__get_seq_step_name( seq, 0, fallback, sizeof( fallback ) );
                 }
             }
-            return "none";
+            return vxui_demo_text( "common.none", userdata );
         }
         if ( std::strcmp( key, "debug.generated_c" ) == 0 ) {
             return app->ctx->debug_seq_editor.generated_c[ 0 ] ? app->ctx->debug_seq_editor.generated_c : "(no generated c output)";
@@ -245,18 +311,9 @@ static const char* vxui_demo_text( const char* key, void* userdata )
             return app->reload_status;
         }
 #endif
-        if ( std::strcmp( key, "status.locale" ) == 0 ) {
-            return app->locale_status;
-        }
-        if ( std::strcmp( key, "status.prompts" ) == 0 ) {
-            return app->prompt_status;
-        }
-        if ( std::strcmp( key, "status.screens" ) == 0 ) {
-            return app->screen_status;
-        }
     }
 
-    if ( app && app->locale_index == 1 ) {
+    if ( app && app->locale_index == VXUI_DEMO_LOCALE_JAPANESE ) {
         if ( std::strcmp( key, "menu.main" ) == 0 ) return "メインメニュー";
         if ( std::strcmp( key, "menu.settings" ) == 0 ) return "設定";
         if ( std::strcmp( key, "menu.open_settings" ) == 0 ) return "設定を開く";
@@ -270,10 +327,50 @@ static const char* vxui_demo_text( const char* key, void* userdata )
         if ( std::strcmp( key, "menu.prompts" ) == 0 ) return "プロンプト";
         if ( std::strcmp( key, "menu.controls" ) == 0 ) return "操作";
         if ( std::strcmp( key, "menu.debug" ) == 0 ) return "デバッグ";
+        if ( std::strcmp( key, "debug.overlay.title" ) == 0 ) return "シーケンスデバッガー";
+        if ( std::strcmp( key, "debug.label.preview" ) == 0 ) return "プレビュー";
+        if ( std::strcmp( key, "debug.preview.captured" ) == 0 ) return "取得中";
+        if ( std::strcmp( key, "debug.preview.idle" ) == 0 ) return "待機";
+        if ( std::strcmp( key, "debug.preview.unavailable" ) == 0 ) return "プレビュー取得はデバッグビルド専用です。";
+        if ( std::strcmp( key, "debug.clipboard.copied" ) == 0 ) return "現在の TOML 書き出しをクリップボードにコピーしました。";
+        if ( std::strcmp( key, "debug.clipboard.ready" ) == 0 ) return "C で現在の書き出しをコピーまたは表示します。";
+        if ( std::strcmp( key, "debug.clipboard.unavailable" ) == 0 ) return "シーケンス書き出しツールはデバッグビルド専用です。";
+        if ( std::strcmp( key, "debug.reload.ready" ) == 0 ) return "R で監視中のシーケンスファイルを確認します。";
+        if ( std::strcmp( key, "debug.reload.reloaded" ) == 0 ) return "監視中のシーケンスファイルを再読み込みしました。";
+        if ( std::strcmp( key, "debug.reload.unchanged" ) == 0 ) return "監視中のシーケンスファイルに変更はありません。";
+        if ( std::strcmp( key, "debug.reload.failed_prefix" ) == 0 ) return "再読み込みに失敗しました";
+        if ( std::strcmp( key, "debug.reload.unavailable" ) == 0 ) return "ホットリロードはデバッグビルド専用です。";
         if ( std::strcmp( key, "difficulty.easy" ) == 0 ) return "かんたん";
         if ( std::strcmp( key, "difficulty.normal" ) == 0 ) return "ふつう";
         if ( std::strcmp( key, "difficulty.hard" ) == 0 ) return "むずかしい";
-    } else if ( app && app->locale_index == 2 ) {
+        if ( std::strcmp( key, "status.label.locale" ) == 0 ) return "言語";
+        if ( std::strcmp( key, "status.label.prompts" ) == 0 ) return "プロンプト";
+        if ( std::strcmp( key, "status.label.screens" ) == 0 ) return "画面数";
+        if ( std::strcmp( key, "status.label.top" ) == 0 ) return "最上位";
+        if ( std::strcmp( key, "locale.name.en" ) == 0 ) return "英語";
+        if ( std::strcmp( key, "locale.name.ja" ) == 0 ) return "日本語";
+        if ( std::strcmp( key, "locale.name.ar" ) == 0 ) return "アラビア語";
+        if ( std::strcmp( key, "prompt.name.keyboard" ) == 0 ) return "キーボード";
+        if ( std::strcmp( key, "prompt.name.gamepad" ) == 0 ) return "ゲームパッド";
+        if ( std::strcmp( key, "screen.none" ) == 0 ) return "なし";
+        if ( std::strcmp( key, "common.none" ) == 0 ) return "なし";
+        if ( std::strcmp( key, "slot.0" ) == 0 ) return "オートセーブ";
+        if ( std::strcmp( key, "slot.1" ) == 0 ) return "プロフィール 1";
+        if ( std::strcmp( key, "slot.2" ) == 0 ) return "プロフィール 2";
+        if ( std::strcmp( key, "slot.3" ) == 0 ) return "プロフィール 3";
+        if ( std::strcmp( key, "slot.4" ) == 0 ) return "プロフィール 4";
+        if ( std::strcmp( key, "slot.5" ) == 0 ) return "プロフィール 5";
+        if ( std::strcmp( key, "slot.6" ) == 0 ) return "プロフィール 6";
+        if ( std::strcmp( key, "slot.7" ) == 0 ) return "プロフィール 7";
+        if ( std::strcmp( key, "hint.controls.0" ) == 0 ) return "矢印 / Dパッドで移動、Enter / Space / A で決定。";
+        if ( std::strcmp( key, "hint.controls.1" ) == 0 ) return "Escape / Backspace / B で戻る、[ と ] でタブ切替。";
+        if ( std::strcmp( key, "hint.controls.2" ) == 0 ) return "1 2 3 で言語、4 5 でプロンプト表を切替。";
+#ifdef VXUI_DEBUG
+        if ( std::strcmp( key, "hint.controls.3" ) == 0 ) return "F1 でデバッガー、R でホットリロード確認、C で書き出しをコピー。";
+#else
+        if ( std::strcmp( key, "hint.controls.3" ) == 0 ) return "デバッグビルドでシーケンスデバッガーを有効にできます。";
+#endif
+    } else if ( app && app->locale_index == VXUI_DEMO_LOCALE_ARABIC ) {
         if ( std::strcmp( key, "menu.main" ) == 0 ) return "القائمة الرئيسية";
         if ( std::strcmp( key, "menu.settings" ) == 0 ) return "الإعدادات";
         if ( std::strcmp( key, "menu.open_settings" ) == 0 ) return "افتح الإعدادات";
@@ -284,12 +381,52 @@ static const char* vxui_demo_text( const char* key, void* userdata )
         if ( std::strcmp( key, "menu.confirm" ) == 0 ) return "تأكيد";
         if ( std::strcmp( key, "menu.cancel" ) == 0 ) return "إلغاء";
         if ( std::strcmp( key, "menu.locale" ) == 0 ) return "اللغة";
-        if ( std::strcmp( key, "menu.prompts" ) == 0 ) return "الرموز";
+        if ( std::strcmp( key, "menu.prompts" ) == 0 ) return "جدول الأزرار";
         if ( std::strcmp( key, "menu.controls" ) == 0 ) return "التحكم";
         if ( std::strcmp( key, "menu.debug" ) == 0 ) return "التصحيح";
+        if ( std::strcmp( key, "debug.overlay.title" ) == 0 ) return "مصحح التسلسلات";
+        if ( std::strcmp( key, "debug.label.preview" ) == 0 ) return "المعاينة";
+        if ( std::strcmp( key, "debug.preview.captured" ) == 0 ) return "قيد الالتقاط";
+        if ( std::strcmp( key, "debug.preview.idle" ) == 0 ) return "خامل";
+        if ( std::strcmp( key, "debug.preview.unavailable" ) == 0 ) return "التقاط المعاينة متاح فقط في بناء التصحيح.";
+        if ( std::strcmp( key, "debug.clipboard.copied" ) == 0 ) return "تم نسخ تصدير TOML الحالي إلى الحافظة.";
+        if ( std::strcmp( key, "debug.clipboard.ready" ) == 0 ) return "اضغط C لنسخ التصدير الحالي أو طباعته.";
+        if ( std::strcmp( key, "debug.clipboard.unavailable" ) == 0 ) return "أدوات تصدير التسلسلات متاحة فقط في بناء التصحيح.";
+        if ( std::strcmp( key, "debug.reload.ready" ) == 0 ) return "اضغط R للتحقق من ملف التسلسل المراقب.";
+        if ( std::strcmp( key, "debug.reload.reloaded" ) == 0 ) return "تمت إعادة تحميل ملف التسلسل المراقب.";
+        if ( std::strcmp( key, "debug.reload.unchanged" ) == 0 ) return "لم يتم العثور على تغيير في ملف التسلسل المراقب.";
+        if ( std::strcmp( key, "debug.reload.failed_prefix" ) == 0 ) return "فشل إعادة التحميل";
+        if ( std::strcmp( key, "debug.reload.unavailable" ) == 0 ) return "إعادة التحميل الفوري متاحة فقط في بناء التصحيح.";
         if ( std::strcmp( key, "difficulty.easy" ) == 0 ) return "سهل";
         if ( std::strcmp( key, "difficulty.normal" ) == 0 ) return "عادي";
         if ( std::strcmp( key, "difficulty.hard" ) == 0 ) return "صعب";
+        if ( std::strcmp( key, "status.label.locale" ) == 0 ) return "اللغة";
+        if ( std::strcmp( key, "status.label.prompts" ) == 0 ) return "الأزرار";
+        if ( std::strcmp( key, "status.label.screens" ) == 0 ) return "الشاشات";
+        if ( std::strcmp( key, "status.label.top" ) == 0 ) return "الأعلى";
+        if ( std::strcmp( key, "locale.name.en" ) == 0 ) return "الإنجليزية";
+        if ( std::strcmp( key, "locale.name.ja" ) == 0 ) return "اليابانية";
+        if ( std::strcmp( key, "locale.name.ar" ) == 0 ) return "العربية";
+        if ( std::strcmp( key, "prompt.name.keyboard" ) == 0 ) return "لوحة المفاتيح";
+        if ( std::strcmp( key, "prompt.name.gamepad" ) == 0 ) return "يد التحكم";
+        if ( std::strcmp( key, "screen.none" ) == 0 ) return "لا شيء";
+        if ( std::strcmp( key, "common.none" ) == 0 ) return "لا شيء";
+        if ( std::strcmp( key, "slot.0" ) == 0 ) return "حفظ تلقائي";
+        if ( std::strcmp( key, "slot.1" ) == 0 ) return "الملف 1";
+        if ( std::strcmp( key, "slot.2" ) == 0 ) return "الملف 2";
+        if ( std::strcmp( key, "slot.3" ) == 0 ) return "الملف 3";
+        if ( std::strcmp( key, "slot.4" ) == 0 ) return "الملف 4";
+        if ( std::strcmp( key, "slot.5" ) == 0 ) return "الملف 5";
+        if ( std::strcmp( key, "slot.6" ) == 0 ) return "الملف 6";
+        if ( std::strcmp( key, "slot.7" ) == 0 ) return "الملف 7";
+        if ( std::strcmp( key, "hint.controls.0" ) == 0 ) return "الأسهم / لوحة الاتجاهات للتنقل، و Enter / Space / A للتأكيد.";
+        if ( std::strcmp( key, "hint.controls.1" ) == 0 ) return "Escape / Backspace / B للرجوع، و [ و ] للتبديل بين الأعمدة.";
+        if ( std::strcmp( key, "hint.controls.2" ) == 0 ) return "1 2 3 لتبديل اللغة، و 4 5 لتبديل جدول الأزرار.";
+#ifdef VXUI_DEBUG
+        if ( std::strcmp( key, "hint.controls.3" ) == 0 ) return "F1 لفتح المصحح، و R للتحقق من إعادة التحميل، و C لنسخ المخرجات.";
+#else
+        if ( std::strcmp( key, "hint.controls.3" ) == 0 ) return "شغّل بناء التصحيح لتفعيل مصحح التسلسلات.";
+#endif
     } else {
         if ( std::strcmp( key, "menu.main" ) == 0 ) return "Main Menu";
         if ( std::strcmp( key, "menu.settings" ) == 0 ) return "Settings";
@@ -304,28 +441,265 @@ static const char* vxui_demo_text( const char* key, void* userdata )
         if ( std::strcmp( key, "menu.prompts" ) == 0 ) return "Prompt Table";
         if ( std::strcmp( key, "menu.controls" ) == 0 ) return "Controls";
         if ( std::strcmp( key, "menu.debug" ) == 0 ) return "Debug Overlay";
+        if ( std::strcmp( key, "debug.overlay.title" ) == 0 ) return "Sequence Debugger";
+        if ( std::strcmp( key, "debug.label.preview" ) == 0 ) return "Preview";
+        if ( std::strcmp( key, "debug.preview.captured" ) == 0 ) return "captured";
+        if ( std::strcmp( key, "debug.preview.idle" ) == 0 ) return "idle";
+        if ( std::strcmp( key, "debug.preview.unavailable" ) == 0 ) return "Preview capture is only available in Debug builds.";
+        if ( std::strcmp( key, "debug.clipboard.copied" ) == 0 ) return "Copied current TOML export to the clipboard.";
+        if ( std::strcmp( key, "debug.clipboard.ready" ) == 0 ) return "Press C to copy or print the current export.";
+        if ( std::strcmp( key, "debug.clipboard.unavailable" ) == 0 ) return "Sequence export tools are only available in Debug builds.";
+        if ( std::strcmp( key, "debug.reload.ready" ) == 0 ) return "Press R to poll the watched sequence file.";
+        if ( std::strcmp( key, "debug.reload.reloaded" ) == 0 ) return "Reloaded the watched sequence file.";
+        if ( std::strcmp( key, "debug.reload.unchanged" ) == 0 ) return "No watched sequence change was detected.";
+        if ( std::strcmp( key, "debug.reload.failed_prefix" ) == 0 ) return "Reload failed";
+        if ( std::strcmp( key, "debug.reload.unavailable" ) == 0 ) return "Hot reload is only available in Debug builds.";
         if ( std::strcmp( key, "difficulty.easy" ) == 0 ) return "Easy";
         if ( std::strcmp( key, "difficulty.normal" ) == 0 ) return "Normal";
         if ( std::strcmp( key, "difficulty.hard" ) == 0 ) return "Hard";
+        if ( std::strcmp( key, "status.label.locale" ) == 0 ) return "Locale";
+        if ( std::strcmp( key, "status.label.prompts" ) == 0 ) return "Prompts";
+        if ( std::strcmp( key, "status.label.screens" ) == 0 ) return "Screens";
+        if ( std::strcmp( key, "status.label.top" ) == 0 ) return "Top";
+        if ( std::strcmp( key, "locale.name.en" ) == 0 ) return "English";
+        if ( std::strcmp( key, "locale.name.ja" ) == 0 ) return "Japanese";
+        if ( std::strcmp( key, "locale.name.ar" ) == 0 ) return "Arabic";
+        if ( std::strcmp( key, "prompt.name.keyboard" ) == 0 ) return "Keyboard";
+        if ( std::strcmp( key, "prompt.name.gamepad" ) == 0 ) return "Gamepad";
+        if ( std::strcmp( key, "screen.none" ) == 0 ) return "none";
+        if ( std::strcmp( key, "common.none" ) == 0 ) return "none";
+        if ( std::strcmp( key, "slot.0" ) == 0 ) return "Autosave";
+        if ( std::strcmp( key, "slot.1" ) == 0 ) return "Profile 1";
+        if ( std::strcmp( key, "slot.2" ) == 0 ) return "Profile 2";
+        if ( std::strcmp( key, "slot.3" ) == 0 ) return "Profile 3";
+        if ( std::strcmp( key, "slot.4" ) == 0 ) return "Profile 4";
+        if ( std::strcmp( key, "slot.5" ) == 0 ) return "Profile 5";
+        if ( std::strcmp( key, "slot.6" ) == 0 ) return "Profile 6";
+        if ( std::strcmp( key, "slot.7" ) == 0 ) return "Profile 7";
+        if ( std::strcmp( key, "hint.controls.0" ) == 0 ) return "Arrows / D-pad navigate, Enter / Space / A confirm.";
+        if ( std::strcmp( key, "hint.controls.1" ) == 0 ) return "Escape / Backspace / B cancels, [ and ] tab between lanes.";
+        if ( std::strcmp( key, "hint.controls.2" ) == 0 ) return "1 2 3 switch locale, 4 5 switch prompt table.";
+#ifdef VXUI_DEBUG
+        if ( std::strcmp( key, "hint.controls.3" ) == 0 ) return "F1 toggles the debugger, R polls hot reload, C copies or prints exports.";
+#else
+        if ( std::strcmp( key, "hint.controls.3" ) == 0 ) return "Build a Debug configuration to enable the sequence debugger overlay.";
+#endif
+    }
+    return key;
+}
+
+static const char* vxui_demo_locale_code( int locale_index )
+{
+    switch ( locale_index ) {
+        case VXUI_DEMO_LOCALE_JAPANESE:
+            return "ja-JP";
+        case VXUI_DEMO_LOCALE_ARABIC:
+            return "ar";
+        default:
+            return "en";
+    }
+}
+
+static const char* vxui_demo_locale_name_key( int locale_index )
+{
+    switch ( locale_index ) {
+        case VXUI_DEMO_LOCALE_JAPANESE:
+            return "locale.name.ja";
+        case VXUI_DEMO_LOCALE_ARABIC:
+            return "locale.name.ar";
+        default:
+            return "locale.name.en";
+    }
+}
+
+static const char* vxui_demo_prompt_name_key( int prompt_table_index )
+{
+    return prompt_table_index == 0 ? "prompt.name.keyboard" : "prompt.name.gamepad";
+}
+
+static const char* vxui_demo_screen_name_key( const char* screen_name )
+{
+    if ( screen_name && std::strcmp( screen_name, "main_menu" ) == 0 ) {
+        return "menu.main";
+    }
+    if ( screen_name && std::strcmp( screen_name, "settings" ) == 0 ) {
+        return "menu.settings";
+    }
+    return "screen.none";
+}
+
+static bool vxui_demo_locale_matches( const char* locale, const char* prefix )
+{
+    if ( !locale || !prefix ) {
+        return false;
+    }
+    size_t prefix_len = std::strlen( prefix );
+    if ( std::strncmp( locale, prefix, prefix_len ) != 0 ) {
+        return false;
+    }
+    return locale[ prefix_len ] == '\0' || locale[ prefix_len ] == '-' || locale[ prefix_len ] == '_';
+}
+
+static float vxui_demo_font_line_height( const vxui_demo_renderer* renderer, ve_font_id font_id, float fallback )
+{
+    if ( !renderer || !ve_fontcache_is_valid_font_id( const_cast< ve_fontcache* >( &renderer->cache ), font_id ) ) {
+        return fallback;
     }
 
-    if ( std::strcmp( key, "slot.0" ) == 0 ) return "Autosave";
-    if ( std::strcmp( key, "slot.1" ) == 0 ) return "Profile 1";
-    if ( std::strcmp( key, "slot.2" ) == 0 ) return "Profile 2";
-    if ( std::strcmp( key, "slot.3" ) == 0 ) return "Profile 3";
-    if ( std::strcmp( key, "slot.4" ) == 0 ) return "Profile 4";
-    if ( std::strcmp( key, "slot.5" ) == 0 ) return "Profile 5";
-    if ( std::strcmp( key, "slot.6" ) == 0 ) return "Profile 6";
-    if ( std::strcmp( key, "slot.7" ) == 0 ) return "Profile 7";
-    if ( std::strcmp( key, "hint.controls.0" ) == 0 ) return "Arrows / D-pad navigate, Enter / Space / A confirm.";
-    if ( std::strcmp( key, "hint.controls.1" ) == 0 ) return "Escape / Backspace / B cancels, [ and ] tab between lanes.";
-    if ( std::strcmp( key, "hint.controls.2" ) == 0 ) return "1 2 3 switch locale, 4 5 switch prompt table.";
-#ifdef VXUI_DEBUG
-    if ( std::strcmp( key, "hint.controls.3" ) == 0 ) return "F1 toggles the debugger, R polls hot reload, C copies or prints exports.";
-#else
-    if ( std::strcmp( key, "hint.controls.3" ) == 0 ) return "Build a Debug configuration to enable the sequence debugger overlay.";
-#endif
-    return key;
+    size_t index = ( size_t ) font_id;
+    if ( index < renderer->demo_line_heights.size() && renderer->demo_line_heights[ index ] > 0.0f ) {
+        return renderer->demo_line_heights[ index ];
+    }
+
+    const ve_fontcache_entry& entry = renderer->cache.entry[ index ];
+    int ascent = 0;
+    int descent = 0;
+    int line_gap = 0;
+    stbtt_GetFontVMetrics( &entry.info, &ascent, &descent, &line_gap );
+    return ( float ) ( ascent - descent + line_gap ) * entry.size_scale;
+}
+
+static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_renderer* renderer, uint32_t requested_font_id, float requested_font_size, const char* locale )
+{
+    auto locale_body_face = [&]( void ) -> ve_font_id
+    {
+        if ( vxui_demo_locale_matches( locale, "ja" ) ) {
+            return VXUI_DEMO_FONT_JAPANESE;
+        }
+        if ( vxui_demo_locale_matches( locale, "ar" ) ) {
+            return VXUI_DEMO_FONT_ARABIC;
+        }
+        return VXUI_DEMO_FONT_UI;
+    };
+
+    auto locale_title_face = [&]( void ) -> ve_font_id
+    {
+        if ( vxui_demo_locale_matches( locale, "ja" ) ) {
+            return VXUI_DEMO_FONT_JAPANESE_TITLE;
+        }
+        if ( vxui_demo_locale_matches( locale, "ar" ) ) {
+            return VXUI_DEMO_FONT_ARABIC_TITLE;
+        }
+        return VXUI_DEMO_FONT_TITLE;
+    };
+
+    auto locale_section_face = [&]( void ) -> ve_font_id
+    {
+        if ( vxui_demo_locale_matches( locale, "ja" ) ) {
+            return VXUI_DEMO_FONT_JAPANESE_SECTION;
+        }
+        if ( vxui_demo_locale_matches( locale, "ar" ) ) {
+            return VXUI_DEMO_FONT_ARABIC_SECTION;
+        }
+        return VXUI_DEMO_FONT_SECTION_TITLE;
+    };
+
+    ve_font_id face_id = ( ve_font_id ) requested_font_id;
+    switch ( requested_font_id ) {
+        case VXUI_DEMO_FONT_ROLE_BODY:
+            face_id = locale_body_face();
+            break;
+        case VXUI_DEMO_FONT_ROLE_TITLE:
+            face_id = locale_title_face();
+            break;
+        case VXUI_DEMO_FONT_ROLE_SECTION:
+            face_id = locale_section_face();
+            break;
+        case VXUI_DEMO_FONT_ROLE_CODE:
+            face_id = VXUI_DEMO_FONT_DEBUG;
+            break;
+    }
+
+    float line_height = requested_font_size;
+    if ( renderer ) {
+        line_height = vxui_demo_font_line_height( renderer, face_id, requested_font_size );
+    }
+
+    return { face_id, line_height };
+}
+
+static void vxui_demo_font_resolver( vxui_ctx* ctx, uint32_t requested_font_id, float requested_font_size, const char* locale, void* userdata, vxui_resolved_font* out )
+{
+    ( void ) ctx;
+    if ( !out ) {
+        return;
+    }
+
+    const vxui_demo_renderer* renderer = ( const vxui_demo_renderer* ) userdata;
+    vxui_demo_font_metrics metrics = vxui_demo_resolve_font_metrics( renderer, requested_font_id, requested_font_size, locale );
+    out->font_id = metrics.font_id >= 0 ? ( uint32_t ) metrics.font_id : requested_font_id;
+    out->line_height = metrics.line_height;
+}
+
+static float vxui_demo_control_height( const vxui_demo_renderer* renderer, const char* locale )
+{
+    vxui_demo_font_metrics metrics = vxui_demo_resolve_font_metrics( renderer, VXUI_DEMO_FONT_ROLE_BODY, ( float ) VXUI_DEMO_BODY_SIZE, locale );
+    return std::max( 32.0f, metrics.line_height + VXUI_DEMO_BUTTON_PADDING_Y * 2.0f );
+}
+
+static void vxui_demo_emit_label_pair( vxui_ctx* ctx, const char* id, const char* label_key, const char* value_key, bool rtl )
+{
+    uint32_t pair_id = vxui_id( id );
+    CLAY( vxui__clay_id_from_hash( pair_id ), {
+        .layout = {
+            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+            .childGap = VXUI_DEMO_INLINE_GAP,
+            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+            .layoutDirection = CLAY_LEFT_TO_RIGHT,
+        },
+    } ) {
+        if ( rtl ) {
+            VXUI_LABEL( ctx, value_key, ( vxui_label_cfg ) { 0 } );
+            VXUI_LABEL( ctx, label_key, ( vxui_label_cfg ) { 0 } );
+        } else {
+            VXUI_LABEL( ctx, label_key, ( vxui_label_cfg ) { 0 } );
+            VXUI_LABEL( ctx, value_key, ( vxui_label_cfg ) { 0 } );
+        }
+    }
+}
+
+static void vxui_demo_emit_prompt_pair( vxui_ctx* ctx, const char* id, const char* action_name, const char* label_key )
+{
+    uint32_t pair_id = vxui_id( id );
+    CLAY( vxui__clay_id_from_hash( pair_id ), {
+        .layout = {
+            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+            .childGap = VXUI_DEMO_INLINE_GAP,
+            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+            .layoutDirection = CLAY_LEFT_TO_RIGHT,
+        },
+    } ) {
+        VXUI_PROMPT( ctx, action_name );
+        VXUI_LABEL( ctx, label_key, ( vxui_label_cfg ) { 0 } );
+    }
+}
+
+static void vxui_demo_emit_action_button( vxui_ctx* ctx, const char* id, const char* l10n_key, vxui_action_fn fn, vxui_action_cfg cfg, float control_height )
+{
+    const char* resolved = vxui__resolve_text( ctx, l10n_key );
+    uint32_t action_id = vxui_id( id );
+
+    vxui__register_action( ctx, action_id, fn, cfg );
+    vxui__get_anim_state( ctx, action_id, true );
+    ctx->current_decl_id = action_id;
+
+    CLAY( vxui__clay_id_from_hash( action_id ), {
+        .layout = {
+            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIXED( control_height ) },
+            .padding = { ( uint16_t ) VXUI_DEMO_BUTTON_PADDING_X, ( uint16_t ) VXUI_DEMO_BUTTON_PADDING_X, ( uint16_t ) VXUI_DEMO_BUTTON_PADDING_Y, ( uint16_t ) VXUI_DEMO_BUTTON_PADDING_Y },
+            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+        },
+        .backgroundColor = { 26, 44, 72, 255 },
+        .cornerRadius = CLAY_CORNER_RADIUS( 8 ),
+    } ) {
+        vxui__emit_text(
+            ctx,
+            resolved,
+            VXUI_DEMO_FONT_ROLE_BODY,
+            ( float ) VXUI_DEMO_BODY_SIZE,
+            ctx->default_text_color,
+            action_id );
+    }
 }
 
 static FILE* vxui_demo_fopen( const char* path, const char* mode )
@@ -486,33 +860,27 @@ static void vxui_demo_refresh_status( vxui_demo_app* app )
         return;
     }
 
-    const char* locale = app->locale_index == 0 ? "en" : app->locale_index == 1 ? "ja-JP" : "ar";
-    const char* prompts = app->prompt_table_index == 0 ? "Keyboard" : "Gamepad";
-    std::snprintf( app->locale_status, sizeof( app->locale_status ), "Locale: %s", locale );
-    std::snprintf( app->prompt_status, sizeof( app->prompt_status ), "Prompts: %s", prompts );
-
-    const vxui_screen* top = app->ctx->screen_count > 0 ? &app->ctx->screens[ app->ctx->screen_count - 1 ] : nullptr;
-    std::snprintf( app->screen_status, sizeof( app->screen_status ), "Screens: %d | Top: %s", app->ctx->screen_count, top ? top->name : "none" );
-
 #ifdef VXUI_DEBUG
+    const char* preview_state = vxui_demo_text( app->ctx->debug_seq_editor.preview_playing ? "debug.preview.captured" : "debug.preview.idle", app );
     std::snprintf(
         app->preview_status,
         sizeof( app->preview_status ),
-        "Preview: %s (%d cmds)",
-        app->ctx->debug_seq_editor.preview_playing ? "captured" : "idle",
+        "%s: %s (%d cmds)",
+        vxui_demo_text( "debug.label.preview", app ),
+        preview_state,
         app->ctx->debug_seq_editor.preview_snapshot.command_count );
     std::snprintf(
         app->clipboard_status,
         sizeof( app->clipboard_status ),
         "%s",
-        app->copied_to_clipboard ? "Copied current TOML export to the clipboard." : "Press C to copy or print the current export." );
+        app->copied_to_clipboard ? vxui_demo_text( "debug.clipboard.copied", app ) : vxui_demo_text( "debug.clipboard.ready", app ) );
     if ( app->reload_status[ 0 ] == '\0' ) {
-        std::snprintf( app->reload_status, sizeof( app->reload_status ), "%s", "Press R to poll the watched sequence file." );
+        std::snprintf( app->reload_status, sizeof( app->reload_status ), "%s", vxui_demo_text( "debug.reload.ready", app ) );
     }
 #else
-    std::snprintf( app->preview_status, sizeof( app->preview_status ), "%s", "Preview capture is only available in Debug builds." );
-    std::snprintf( app->clipboard_status, sizeof( app->clipboard_status ), "%s", "Sequence export tools are only available in Debug builds." );
-    std::snprintf( app->reload_status, sizeof( app->reload_status ), "%s", "Hot reload is only available in Debug builds." );
+    std::snprintf( app->preview_status, sizeof( app->preview_status ), "%s", vxui_demo_text( "debug.preview.unavailable", app ) );
+    std::snprintf( app->clipboard_status, sizeof( app->clipboard_status ), "%s", vxui_demo_text( "debug.clipboard.unavailable", app ) );
+    std::snprintf( app->reload_status, sizeof( app->reload_status ), "%s", vxui_demo_text( "debug.reload.unavailable", app ) );
 #endif
 }
 
@@ -650,6 +1018,528 @@ static void vxui_demo_flip_fontcache_upload( ve_fontcache_drawlist* drawlist, ve
     ( void ) drawlist;
     ( void ) dcall;
 #endif
+}
+
+static void vxui_demo_clear_framebuffer_colour( vxui_demo_renderer* renderer, GLuint framebuffer )
+{
+    GLint previous_framebuffer = 0;
+    glGetIntegerv( GL_FRAMEBUFFER_BINDING, &previous_framebuffer );
+    glBindFramebuffer( GL_FRAMEBUFFER, framebuffer );
+    glViewport(
+        0,
+        0,
+        framebuffer == 0 ? static_cast< GLsizei >( renderer->window_size.width ) : ( framebuffer == renderer->fontcache_fbo[ 0 ] ? VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH : VE_FONTCACHE_ATLAS_WIDTH ),
+        framebuffer == 0 ? static_cast< GLsizei >( renderer->window_size.height ) : ( framebuffer == renderer->fontcache_fbo[ 0 ] ? VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT : VE_FONTCACHE_ATLAS_HEIGHT ) );
+    glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
+    glClear( GL_COLOR_BUFFER_BIT );
+    glBindFramebuffer( GL_FRAMEBUFFER, static_cast< GLuint >( previous_framebuffer ) );
+}
+
+static void vxui_demo_clear_backend_test_surface( vxui_demo_renderer* renderer, GLuint texture, int width, int height )
+{
+    if ( texture == 0 ) {
+        return;
+    }
+    static GLuint clear_fbo = 0;
+    if ( clear_fbo == 0 ) {
+        glGenFramebuffers( 1, &clear_fbo );
+    }
+    GLint previous_read_framebuffer = 0;
+    GLint previous_draw_framebuffer = 0;
+    glGetIntegerv( GL_READ_FRAMEBUFFER_BINDING, &previous_read_framebuffer );
+    glGetIntegerv( GL_DRAW_FRAMEBUFFER_BINDING, &previous_draw_framebuffer );
+
+    glBindFramebuffer( GL_FRAMEBUFFER, clear_fbo );
+    glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0 );
+    glViewport( 0, 0, width, height );
+    glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
+    glClear( GL_COLOR_BUFFER_BIT );
+
+    glBindFramebuffer( GL_READ_FRAMEBUFFER, static_cast< GLuint >( previous_read_framebuffer ) );
+    glBindFramebuffer( GL_DRAW_FRAMEBUFFER, static_cast< GLuint >( previous_draw_framebuffer ) );
+}
+
+static void vxui_demo_clear_cpu_atlas_pages( vxui_demo_renderer* renderer, bool clear_all )
+{
+#ifdef VE_FONTCACHE_FREETYPE_RASTERISATION
+    if ( renderer->cpu_atlas_textures.empty() ) {
+        return;
+    }
+    static std::vector< uint8_t > zeros( static_cast< size_t >( VE_FONTCACHE_CPU_ATLAS_PAGE_SIZE ) * VE_FONTCACHE_CPU_ATLAS_PAGE_SIZE, 0 );
+    GLint previous_texture = 0;
+    glGetIntegerv( GL_TEXTURE_BINDING_2D, &previous_texture );
+    glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+    glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+    size_t count = clear_all ? renderer->cpu_atlas_textures.size() : 1;
+    for ( size_t i = 0; i < count; ++i ) {
+        if ( renderer->cpu_atlas_textures[ i ] == 0 ) {
+            continue;
+        }
+        glBindTexture( GL_TEXTURE_2D, renderer->cpu_atlas_textures[ i ] );
+        glTexSubImage2D(
+            GL_TEXTURE_2D,
+            0,
+            0,
+            0,
+            VE_FONTCACHE_CPU_ATLAS_PAGE_SIZE,
+            VE_FONTCACHE_CPU_ATLAS_PAGE_SIZE,
+            GL_RED,
+            GL_UNSIGNED_BYTE,
+            zeros.data() );
+    }
+    glBindTexture( GL_TEXTURE_2D, static_cast< GLuint >( previous_texture ) );
+#else
+    ( void ) renderer;
+    ( void ) clear_all;
+#endif
+}
+
+static void vxui_demo_clear_backend_test_surfaces( vxui_demo_renderer* renderer, bool clear_cpu_atlas_pages )
+{
+    vxui_demo_clear_framebuffer_colour( renderer, renderer->fontcache_fbo[ 0 ] );
+    vxui_demo_clear_framebuffer_colour( renderer, renderer->fontcache_fbo[ 1 ] );
+    vxui_demo_clear_backend_test_surface( renderer, renderer->backend_target_texture, static_cast< int >( renderer->window_size.width ), static_cast< int >( renderer->window_size.height ) );
+    vxui_demo_clear_backend_test_surface( renderer, renderer->backend_present_texture, static_cast< int >( renderer->window_size.width ), static_cast< int >( renderer->window_size.height ) );
+    if ( clear_cpu_atlas_pages ) {
+        vxui_demo_clear_cpu_atlas_pages( renderer, true );
+    }
+}
+
+static bool vxui_demo_setup_backend_test_fbo( vxui_demo_renderer* renderer )
+{
+    glGenFramebuffers( 1, &renderer->backend_target_fbo );
+    glGenTextures( 1, &renderer->backend_target_texture );
+    glBindTexture( GL_TEXTURE_2D, renderer->backend_target_texture );
+    glTexImage2D( GL_TEXTURE_2D, 0, GL_R8, renderer->window_size.width, renderer->window_size.height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+    glBindFramebuffer( GL_FRAMEBUFFER, renderer->backend_target_fbo );
+    glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->backend_target_texture, 0 );
+
+    glGenFramebuffers( 1, &renderer->backend_present_fbo );
+    glGenTextures( 1, &renderer->backend_present_texture );
+    glBindTexture( GL_TEXTURE_2D, renderer->backend_present_texture );
+    glTexImage2D( GL_TEXTURE_2D, 0, GL_R8, renderer->window_size.width, renderer->window_size.height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+    glBindFramebuffer( GL_FRAMEBUFFER, renderer->backend_present_fbo );
+    glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->backend_present_texture, 0 );
+
+    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+    vxui_demo_gl_debug_label( renderer, GL_FRAMEBUFFER, renderer->backend_target_fbo, "vxui.backend_test.target_fbo" );
+    vxui_demo_gl_debug_label( renderer, GL_TEXTURE, renderer->backend_target_texture, "vxui.backend_test.target_texture" );
+    vxui_demo_gl_debug_label( renderer, GL_FRAMEBUFFER, renderer->backend_present_fbo, "vxui.backend_test.present_fbo" );
+    vxui_demo_gl_debug_label( renderer, GL_TEXTURE, renderer->backend_present_texture, "vxui.backend_test.present_texture" );
+    return true;
+}
+
+static void vxui_demo_shutdown_backend_test_fbo( vxui_demo_renderer* renderer )
+{
+    if ( renderer->backend_target_fbo ) {
+        glDeleteFramebuffers( 1, &renderer->backend_target_fbo );
+        renderer->backend_target_fbo = 0;
+    }
+    if ( renderer->backend_target_texture ) {
+        glDeleteTextures( 1, &renderer->backend_target_texture );
+        renderer->backend_target_texture = 0;
+    }
+    if ( renderer->backend_present_fbo ) {
+        glDeleteFramebuffers( 1, &renderer->backend_present_fbo );
+        renderer->backend_present_fbo = 0;
+    }
+    if ( renderer->backend_present_texture ) {
+        glDeleteTextures( 1, &renderer->backend_present_texture );
+        renderer->backend_present_texture = 0;
+    }
+}
+
+static bool vxui_demo_readback_r8_texture( GLuint texture, int x, int y, int w, int h, uint8_t* out_pixels )
+{
+    if ( texture == 0 || !out_pixels ) {
+        return false;
+    }
+    static GLuint readback_fbo = 0;
+    if ( readback_fbo == 0 ) {
+        glGenFramebuffers( 1, &readback_fbo );
+    }
+    GLint previous_read_framebuffer = 0;
+    glGetIntegerv( GL_READ_FRAMEBUFFER_BINDING, &previous_read_framebuffer );
+    glBindFramebuffer( GL_READ_FRAMEBUFFER, readback_fbo );
+    glFramebufferTexture2D( GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0 );
+    glReadBuffer( GL_COLOR_ATTACHMENT0 );
+    glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+    glReadPixels( x, y, w, h, GL_RED, GL_UNSIGNED_BYTE, out_pixels );
+    glBindFramebuffer( GL_READ_FRAMEBUFFER, static_cast< GLuint >( previous_read_framebuffer ) );
+    return true;
+}
+
+static void vxui_demo_backend_test_reset_surfaces()
+{
+    // Reset surfaces will be called with a valid renderer pointer via lambda capture
+}
+
+static bool vxui_demo_backend_test_readback( const char* name, int x, int y, int w, int h, uint8_t* out_pixels )
+{
+    extern vxui_demo_renderer* g_vxui_demo_backend_test_renderer;
+    vxui_demo_renderer* renderer = g_vxui_demo_backend_test_renderer;
+    if ( !renderer || !name || !out_pixels ) {
+        return false;
+    }
+
+    if ( std::strcmp( name, "glyph_buffer" ) == 0 ) {
+        GLint previous_read_framebuffer = 0;
+        glGetIntegerv( GL_READ_FRAMEBUFFER_BINDING, &previous_read_framebuffer );
+        glBindFramebuffer( GL_READ_FRAMEBUFFER, renderer->fontcache_fbo[ 0 ] );
+        glReadBuffer( GL_COLOR_ATTACHMENT0 );
+        glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+        glReadPixels( x, y, w, h, GL_RED, GL_UNSIGNED_BYTE, out_pixels );
+        glBindFramebuffer( GL_READ_FRAMEBUFFER, static_cast< GLuint >( previous_read_framebuffer ) );
+        return true;
+    } else if ( std::strcmp( name, "atlas" ) == 0 ) {
+        GLint previous_read_framebuffer = 0;
+        glGetIntegerv( GL_READ_FRAMEBUFFER_BINDING, &previous_read_framebuffer );
+        glBindFramebuffer( GL_READ_FRAMEBUFFER, renderer->fontcache_fbo[ 1 ] );
+        glReadBuffer( GL_COLOR_ATTACHMENT0 );
+        glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+        glReadPixels( x, y, w, h, GL_RED, GL_UNSIGNED_BYTE, out_pixels );
+        glBindFramebuffer( GL_READ_FRAMEBUFFER, static_cast< GLuint >( previous_read_framebuffer ) );
+        return true;
+    } else if ( std::strcmp( name, "target_linear" ) == 0 || std::strcmp( name, "target" ) == 0 ) {
+        return vxui_demo_readback_r8_texture( renderer->backend_target_texture, x, y, w, h, out_pixels );
+    } else if ( std::strcmp( name, "presented" ) == 0 ) {
+        return vxui_demo_readback_r8_texture( renderer->backend_present_texture, x, y, w, h, out_pixels );
+#ifdef VE_FONTCACHE_FREETYPE_RASTERISATION
+    } else if ( std::strcmp( name, "cpu_atlas_page_0" ) == 0 ) {
+        if ( renderer->cpu_atlas_textures.empty() || renderer->cpu_atlas_textures[ 0 ] == 0 ) {
+            return false;
+        }
+        return vxui_demo_readback_r8_texture( renderer->cpu_atlas_textures[ 0 ], x, y, w, h, out_pixels );
+#endif
+    }
+    return false;
+}
+
+static bool vxui_demo_backend_test_write_surface( const char* name, int x, int y, int w, int h, const uint8_t* pixels )
+{
+    extern vxui_demo_renderer* g_vxui_demo_backend_test_renderer;
+    vxui_demo_renderer* renderer = g_vxui_demo_backend_test_renderer;
+    if ( !renderer || !name || !pixels || x < 0 || y < 0 || w <= 0 || h <= 0 ) {
+        return false;
+    }
+
+    GLuint texture = 0;
+    int texture_width = 0;
+    int texture_height = 0;
+    if ( std::strcmp( name, "glyph_buffer" ) == 0 ) {
+        texture = renderer->fontcache_fbo_texture[ 0 ];
+        texture_width = VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH;
+        texture_height = VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT;
+    } else if ( std::strcmp( name, "atlas" ) == 0 ) {
+        texture = renderer->fontcache_fbo_texture[ 1 ];
+        texture_width = VE_FONTCACHE_ATLAS_WIDTH;
+        texture_height = VE_FONTCACHE_ATLAS_HEIGHT;
+    } else if ( std::strcmp( name, "target_linear" ) == 0 ) {
+        texture = renderer->backend_target_texture;
+        texture_width = static_cast< int >( renderer->window_size.width );
+        texture_height = static_cast< int >( renderer->window_size.height );
+    } else if ( std::strcmp( name, "presented" ) == 0 ) {
+        texture = renderer->backend_present_texture;
+        texture_width = static_cast< int >( renderer->window_size.width );
+        texture_height = static_cast< int >( renderer->window_size.height );
+#ifdef VE_FONTCACHE_FREETYPE_RASTERISATION
+    } else if ( std::strcmp( name, "cpu_atlas_page_0" ) == 0 ) {
+        renderer->cpu_atlas_textures.resize( 1 );
+        if ( renderer->cpu_atlas_textures[ 0 ] == 0 ) {
+            glGenTextures( 1, &renderer->cpu_atlas_textures[ 0 ] );
+            glBindTexture( GL_TEXTURE_2D, renderer->cpu_atlas_textures[ 0 ] );
+            glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+            glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+            glTexImage2D( GL_TEXTURE_2D, 0, GL_R8, VE_FONTCACHE_CPU_ATLAS_PAGE_SIZE, VE_FONTCACHE_CPU_ATLAS_PAGE_SIZE, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr );
+            glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+            glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+            glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+            glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+        }
+        texture = renderer->cpu_atlas_textures[ 0 ];
+        texture_width = VE_FONTCACHE_CPU_ATLAS_PAGE_SIZE;
+        texture_height = VE_FONTCACHE_CPU_ATLAS_PAGE_SIZE;
+#endif
+    } else {
+        return false;
+    }
+
+    if ( x + w > texture_width || y + h > texture_height ) {
+        return false;
+    }
+
+    GLint previous_texture = 0;
+    glGetIntegerv( GL_TEXTURE_BINDING_2D, &previous_texture );
+    GLint previous_fbo = 0;
+    glGetIntegerv( GL_FRAMEBUFFER_BINDING, &previous_fbo );
+
+    // Detach texture from FBO before uploading
+    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+    glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+    glBindTexture( GL_TEXTURE_2D, texture );
+    // Clear any pending errors before TexSubImage2D
+    while ( glGetError() != GL_NO_ERROR ) {}
+    glTexSubImage2D( GL_TEXTURE_2D, 0, x, y, w, h, GL_RED, GL_UNSIGNED_BYTE, pixels );
+    GLenum gl_err = glGetError();
+    if ( gl_err != GL_NO_ERROR ) {
+        std::fprintf( stderr, "VEFC backend test write_surface GL error 0x%x for %s\n", gl_err, name );
+    }
+
+    glBindTexture( GL_TEXTURE_2D, static_cast< GLuint >( previous_texture ) );
+    glBindFramebuffer( GL_FRAMEBUFFER, static_cast< GLuint >( previous_fbo ) );
+    return true;
+}
+
+static void vxui_demo_backend_test_execute_pipeline()
+{
+    extern vxui_demo_renderer* g_vxui_demo_backend_test_renderer;
+    vxui_demo_renderer* renderer = g_vxui_demo_backend_test_renderer;
+    if ( !renderer ) return;
+    // Clear target surface, render drawlist, finish — mirrors VEFC demo's execute_pipeline.
+    vxui_demo_clear_backend_test_surface( renderer, renderer->backend_target_texture,
+        static_cast< int >( renderer->window_size.width ), static_cast< int >( renderer->window_size.height ) );
+    renderer->backend_test_mode = true;
+    vxui_demo_render_fontcache_drawlist( renderer, nullptr );
+    renderer->backend_test_mode = false;
+    glFinish();
+}
+
+static void vxui_demo_backend_test_execute_present()
+{
+    extern vxui_demo_renderer* g_vxui_demo_backend_test_renderer;
+    vxui_demo_renderer* renderer = g_vxui_demo_backend_test_renderer;
+    if ( !renderer ) {
+        return;
+    }
+    // Copy target to present surface using two separate FBOs to avoid same-FBO blit issues
+    static GLuint copy_read_fbo = 0;
+    static GLuint copy_write_fbo = 0;
+    if ( copy_read_fbo == 0 ) {
+        glGenFramebuffers( 1, &copy_read_fbo );
+        glGenFramebuffers( 1, &copy_write_fbo );
+    }
+    GLint previous_read_framebuffer = 0;
+    GLint previous_draw_framebuffer = 0;
+    glGetIntegerv( GL_READ_FRAMEBUFFER_BINDING, &previous_read_framebuffer );
+    glGetIntegerv( GL_DRAW_FRAMEBUFFER_BINDING, &previous_draw_framebuffer );
+
+    // Read from target texture
+    glBindFramebuffer( GL_READ_FRAMEBUFFER, copy_read_fbo );
+    glFramebufferTexture2D( GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->backend_target_texture, 0 );
+    glReadBuffer( GL_COLOR_ATTACHMENT0 );
+
+    // Draw to present texture
+    glBindFramebuffer( GL_DRAW_FRAMEBUFFER, copy_write_fbo );
+    glFramebufferTexture2D( GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->backend_present_texture, 0 );
+    glDrawBuffer( GL_COLOR_ATTACHMENT0 );
+
+    glBlitFramebuffer(
+        0, 0,
+        static_cast< GLint >( renderer->window_size.width ), static_cast< GLint >( renderer->window_size.height ),
+        0, 0,
+        static_cast< GLint >( renderer->window_size.width ), static_cast< GLint >( renderer->window_size.height ),
+        GL_COLOR_BUFFER_BIT,
+        GL_NEAREST );
+
+    glBindFramebuffer( GL_READ_FRAMEBUFFER, static_cast< GLuint >( previous_read_framebuffer ) );
+    glBindFramebuffer( GL_DRAW_FRAMEBUFFER, static_cast< GLuint >( previous_draw_framebuffer ) );
+    glFinish();
+}
+
+static void vxui_demo_backend_test_execute_frame()
+{
+    extern vxui_demo_renderer* g_vxui_demo_backend_test_renderer;
+    vxui_demo_renderer* renderer = g_vxui_demo_backend_test_renderer;
+    if ( !renderer ) {
+        return;
+    }
+    vxui_demo_clear_backend_test_surfaces( renderer, renderer->cache.use_freetype ? false : true );
+    ve_fontcache_flush_drawlist( &renderer->cache );
+    ve_fontcache_configure_snap( &renderer->cache, renderer->window_size.width, renderer->window_size.height );
+
+    const float sx = 1.0f / renderer->window_size.width;
+    const float sy = 1.0f / renderer->window_size.height;
+
+    // Draw text in all 4 test regions matching VEFC demo's backend_test_execute_frame.
+    // Use available fonts with fallback to UI font for missing ones.
+    const ve_font_id ui_font = VXUI_DEMO_FONT_UI;
+    const ve_font_id title_font = ve_fontcache_is_valid_font_id( &renderer->cache, VXUI_DEMO_FONT_TITLE ) ? VXUI_DEMO_FONT_TITLE : ui_font;
+    const ve_font_id cjk_font = ve_fontcache_is_valid_font_id( &renderer->cache, VXUI_DEMO_FONT_JAPANESE ) ? VXUI_DEMO_FONT_JAPANESE : ui_font;
+    const ve_font_id arabic_font = ve_fontcache_is_valid_font_id( &renderer->cache, VXUI_DEMO_FONT_ARABIC ) ? VXUI_DEMO_FONT_ARABIC : ui_font;
+
+    // Top-left region
+    ve_fontcache_draw_text( &renderer->cache, cjk_font, u8"ゑ", 0.08f, 0.84f, sx, sy, false );
+    ve_fontcache_draw_text( &renderer->cache, title_font, u8"VEFontCache Demo", 0.18f, 0.84f, sx, sy, false );
+    ve_fontcache_draw_text( &renderer->cache, ui_font, u8"Backend conformance frame using real demo fonts and strings.", 0.08f, 0.78f, sx, sy, false );
+    // Top-right region
+    ve_fontcache_draw_text( &renderer->cache, cjk_font, u8"床前明月光 疑是地上霜", 0.58f, 0.78f, sx, sy, false );
+    // Bottom-left region
+    ve_fontcache_draw_text( &renderer->cache, arabic_font, u8"حب السماء لا تمطر غير الأحلام", 0.08f, 0.42f, sx, sy, false );
+    ve_fontcache_draw_text( &renderer->cache, ui_font, u8"The quick brown fox jumps over the lazy dog.", 0.08f, 0.32f, sx, sy, false );
+    // Bottom-right region
+    ve_fontcache_draw_text( &renderer->cache, ui_font, u8"CODE CODE CODE 0123456789", 0.62f, 0.42f, sx, sy, false );
+    ve_fontcache_draw_text( &renderer->cache, cjk_font, u8"漢字キャッシュ圧力", 0.62f, 0.26f, sx, sy, false );
+
+    vxui_demo_backend_test_execute_pipeline();
+    vxui_demo_backend_test_execute_present();
+}
+
+static void vxui_demo_backend_test_finalise_state()
+{
+    extern vxui_demo_renderer* g_vxui_demo_backend_test_renderer;
+    vxui_demo_renderer* renderer = g_vxui_demo_backend_test_renderer;
+    if ( !renderer ) {
+        return;
+    }
+    ve_fontcache_reset_transient_test_state( &renderer->cache );
+    vxui_demo_clear_backend_test_surfaces( renderer, true );
+    glFinish();
+}
+
+static ve_fontcache_backend_test_font_set vxui_demo_provision_fonts(
+    ve_fontcache* target_cache,
+    const ve_fontcache_backend_test_font_spec* roles,
+    size_t role_count )
+{
+    extern vxui_demo_renderer* g_vxui_demo_backend_test_renderer;
+    vxui_demo_renderer* renderer = g_vxui_demo_backend_test_renderer;
+    ve_fontcache_backend_test_font_set font_set;
+    if ( !renderer || target_cache != &renderer->cache ) {
+        for ( size_t i = 0; i < role_count; ++i ) {
+            font_set.mark_unavailable( roles[ i ].role, "backend test runner expected the active renderer cache" );
+        }
+        return font_set;
+    }
+
+    auto load_backend_test_font = [&]( ve_font_id& slot, const char* relative_path, float size_px ) -> ve_font_id {
+        if ( slot >= 0 && ve_fontcache_is_valid_font_id( &renderer->cache, slot ) ) {
+            return slot;
+        }
+        const std::filesystem::path source_dir = std::filesystem::path( VXUI_SOURCE_DIR );
+        renderer->backend_test_dynamic_font_buffers.emplace_back();
+        std::vector< uint8_t >& buffer = renderer->backend_test_dynamic_font_buffers.back();
+        slot = ve_fontcache_loadfile(
+            &renderer->cache,
+            ( source_dir / relative_path ).string().c_str(),
+            buffer,
+            size_px );
+        return slot;
+    };
+
+    const ve_font_id primary_font = load_backend_test_font( renderer->backend_test_primary_font, "vefc/demo/fonts/NotoSansJP-Light.otf", 19.0f );
+    const ve_font_id secondary_font = load_backend_test_font( renderer->backend_test_secondary_font, "vefc/demo/fonts/OpenSans-Regular.ttf", 42.0f );
+    const ve_font_id small_font = load_backend_test_font( renderer->backend_test_small_font, "vefc/demo/fonts/Roboto-Regular.ttf", 10.0f );
+    const ve_font_id latin_font = load_backend_test_font( renderer->backend_test_latin_font, "vefc/demo/fonts/Bitter-Regular.ttf", 44.0f );
+    const ve_font_id cjk_font = load_backend_test_font( renderer->backend_test_cjk_font, "vefc/demo/fonts/NotoSerifSC-Regular.otf", 54.0f );
+    ve_font_id huge_font = load_backend_test_font( renderer->backend_test_huge_font, "vefc/demo/fonts/NotoSansJP-Light.otf", 200.0f );
+    if ( huge_font < 0 && !renderer->cache.use_freetype ) {
+        huge_font = load_backend_test_font( renderer->backend_test_huge_font, "vefc/demo/fonts/OpenSans-Regular.ttf", 200.0f );
+    }
+
+    const auto assign_role = [&]( ve_fontcache_backend_test_font_role role, ve_font_id id, const char* reason ) {
+        if ( id >= 0 ) {
+            font_set.set( role, id );
+        } else {
+            font_set.mark_unavailable( role, reason );
+        }
+    };
+
+    assign_role(
+        VE_FONTCACHE_BACKEND_TEST_FONT_ROLE_PRIMARY,
+        primary_font >= 0 ? primary_font : VXUI_DEMO_FONT_JAPANESE,
+        "primary font not available" );
+    assign_role(
+        VE_FONTCACHE_BACKEND_TEST_FONT_ROLE_SECONDARY,
+        secondary_font >= 0 ? secondary_font : VXUI_DEMO_FONT_UI,
+        "secondary font not available" );
+    assign_role(
+        VE_FONTCACHE_BACKEND_TEST_FONT_ROLE_SMALL,
+        small_font >= 0 ? small_font : VXUI_DEMO_FONT_DEBUG,
+        "small font not available" );
+    assign_role(
+        VE_FONTCACHE_BACKEND_TEST_FONT_ROLE_LATIN,
+        latin_font >= 0 ? latin_font : ( secondary_font >= 0 ? secondary_font : VXUI_DEMO_FONT_UI ),
+        "latin font not available" );
+    assign_role(
+        VE_FONTCACHE_BACKEND_TEST_FONT_ROLE_CJK,
+        cjk_font >= 0 ? cjk_font : ( primary_font >= 0 ? primary_font : VXUI_DEMO_FONT_JAPANESE ),
+        "cjk font not available" );
+    assign_role(
+        VE_FONTCACHE_BACKEND_TEST_FONT_ROLE_HUGE,
+        huge_font >= 0 ? huge_font : ( primary_font >= 0 ? primary_font : VXUI_DEMO_FONT_UI ),
+        "huge font not available" );
+    assign_role( VE_FONTCACHE_BACKEND_TEST_FONT_ROLE_ARABIC, renderer->cache.use_freetype ? VXUI_DEMO_FONT_ARABIC : -1,
+        renderer->cache.use_freetype ? "arabic font not available" : "Arabic role is only used in FreeType mode" );
+    assign_role( VE_FONTCACHE_BACKEND_TEST_FONT_ROLE_HEBREW, -1, "Hebrew font not available in demo" );
+    return font_set;
+}
+
+static ve_font_id vxui_demo_reload_font()
+{
+    extern vxui_demo_renderer* g_vxui_demo_backend_test_renderer;
+    vxui_demo_renderer* renderer = g_vxui_demo_backend_test_renderer;
+    if ( !renderer ) {
+        return -1;
+    }
+    const std::filesystem::path source_dir = std::filesystem::path( VXUI_SOURCE_DIR );
+    renderer->backend_test_dynamic_font_buffers.emplace_back();
+    std::vector< uint8_t >& reload_buffer = renderer->backend_test_dynamic_font_buffers.back();
+    const std::filesystem::path font_path = source_dir / ( renderer->cache.use_freetype
+        ? "vefc/demo/fonts/NotoSansJP-Light.otf"
+        : "vefc/demo/fonts/OpenSans-Regular.ttf" );
+    return ve_fontcache_loadfile(
+        &renderer->cache,
+        font_path.string().c_str(),
+        reload_buffer,
+        19.0f );
+}
+
+static void vxui_demo_prepare_real_text()
+{
+    extern vxui_demo_renderer* g_vxui_demo_backend_test_renderer;
+    vxui_demo_renderer* renderer = g_vxui_demo_backend_test_renderer;
+    if ( !renderer ) {
+        return;
+    }
+    const bool use_freetype = renderer->cache.use_freetype;
+    ve_fontcache_shutdown( &renderer->cache );
+    renderer->cache = ve_fontcache();
+    renderer->backend_test_dynamic_font_buffers.clear();
+    renderer->backend_test_primary_font = -1;
+    renderer->backend_test_secondary_font = -1;
+    renderer->backend_test_small_font = -1;
+    renderer->backend_test_latin_font = -1;
+    renderer->backend_test_cjk_font = -1;
+    renderer->backend_test_huge_font = -1;
+    ve_fontcache_init( &renderer->cache, use_freetype );
+    ve_fontcache_configure_snap( &renderer->cache, renderer->window_size.width, renderer->window_size.height );
+    vxui_demo_load_fonts( renderer );
+    vxui_demo_clear_backend_test_surfaces( renderer, true );
+}
+
+static void vxui_demo_reinit_cache_for_backend_test( vxui_demo_renderer* renderer, bool use_freetype )
+{
+    ve_fontcache_shutdown( &renderer->cache );
+    renderer->cache = ve_fontcache();
+    renderer->backend_test_dynamic_font_buffers.clear();
+    renderer->backend_test_primary_font = -1;
+    renderer->backend_test_secondary_font = -1;
+    renderer->backend_test_small_font = -1;
+    renderer->backend_test_latin_font = -1;
+    renderer->backend_test_cjk_font = -1;
+    renderer->backend_test_huge_font = -1;
+    ve_fontcache_init( &renderer->cache, use_freetype );
+    ve_fontcache_configure_snap( &renderer->cache, renderer->window_size.width, renderer->window_size.height );
+    vxui_demo_load_fonts( renderer );
+    vxui_demo_clear_backend_test_surfaces( renderer, true );
 }
 
 using GLDEBUGPROC = void ( APIENTRYP )( GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam );
@@ -1003,6 +1893,7 @@ static void vxui_demo_shutdown_renderer( vxui_demo_renderer* renderer )
     if ( !renderer->cpu_atlas_textures.empty() ) {
         glDeleteTextures( ( GLsizei ) renderer->cpu_atlas_textures.size(), renderer->cpu_atlas_textures.data() );
     }
+    vxui_demo_shutdown_backend_test_fbo( renderer );
     ve_fontcache_shutdown( &renderer->cache );
 }
 
@@ -1011,27 +1902,32 @@ static bool vxui_demo_load_fonts( vxui_demo_renderer* renderer )
     struct font_load
     {
         const char* relative_path;
-        std::vector< uint8_t >* buffer;
+        vxui_demo_font_id font_id;
         float size_px;
-        int expected_id;
     };
     const std::filesystem::path source_dir = std::filesystem::path( VXUI_SOURCE_DIR );
     const font_load fonts[] = {
-        { "vefc/demo/fonts/OpenSans-Regular.ttf", &renderer->ui_font, 24.0f, VXUI_DEMO_FONT_UI },
-        { "vefc/demo/fonts/Bitter-Regular.ttf", &renderer->title_font, 44.0f, VXUI_DEMO_FONT_TITLE },
-        { "vefc/demo/fonts/NovaMono-Regular.ttf", &renderer->debug_font, 16.0f, VXUI_DEMO_FONT_DEBUG },
-        { "vefc/demo/fonts/NotoSansJP-Regular.otf", &renderer->japanese_font, 24.0f, VXUI_DEMO_FONT_JAPANESE },
-        { "vefc/demo/fonts/Tajawal-Regular.ttf", &renderer->arabic_font, 24.0f, VXUI_DEMO_FONT_ARABIC },
+        { "vefc/demo/fonts/OpenSans-Regular.ttf", VXUI_DEMO_FONT_UI, ( float ) VXUI_DEMO_BODY_SIZE },
+        { "vefc/demo/fonts/Bitter-Regular.ttf", VXUI_DEMO_FONT_TITLE, ( float ) VXUI_DEMO_TITLE_SIZE },
+        { "vefc/demo/fonts/NovaMono-Regular.ttf", VXUI_DEMO_FONT_DEBUG, ( float ) VXUI_DEMO_CODE_SIZE },
+        { "vefc/demo/fonts/NotoSansJP-Regular.otf", VXUI_DEMO_FONT_JAPANESE, ( float ) VXUI_DEMO_BODY_SIZE },
+        { "vefc/demo/fonts/Tajawal-Regular.ttf", VXUI_DEMO_FONT_ARABIC, ( float ) VXUI_DEMO_BODY_SIZE },
+        { "vefc/demo/fonts/Bitter-Regular.ttf", VXUI_DEMO_FONT_SECTION_TITLE, ( float ) VXUI_DEMO_SECTION_SIZE },
+        { "vefc/demo/fonts/NotoSansJP-Regular.otf", VXUI_DEMO_FONT_JAPANESE_TITLE, ( float ) VXUI_DEMO_TITLE_SIZE },
+        { "vefc/demo/fonts/NotoSansJP-Regular.otf", VXUI_DEMO_FONT_JAPANESE_SECTION, ( float ) VXUI_DEMO_SECTION_SIZE },
+        { "vefc/demo/fonts/Tajawal-Regular.ttf", VXUI_DEMO_FONT_ARABIC_TITLE, ( float ) VXUI_DEMO_TITLE_SIZE },
+        { "vefc/demo/fonts/Tajawal-Regular.ttf", VXUI_DEMO_FONT_ARABIC_SECTION, ( float ) VXUI_DEMO_SECTION_SIZE },
     };
 
-    ve_fontcache_init( &renderer->cache, true );
     for ( const font_load& font : fonts ) {
         const std::filesystem::path full_path = source_dir / font.relative_path;
-        ve_font_id id = ve_fontcache_loadfile( &renderer->cache, full_path.string().c_str(), *font.buffer, font.size_px );
-        if ( id != font.expected_id ) {
-            std::fprintf( stderr, "Failed to load demo font '%s' with the expected id %d (got %lld).\n", full_path.string().c_str(), font.expected_id, ( long long ) id );
+        std::vector< uint8_t >& buffer = renderer->demo_fonts[ font.font_id ];
+        ve_font_id id = ve_fontcache_loadfile( &renderer->cache, full_path.string().c_str(), buffer, font.size_px );
+        if ( id != font.font_id ) {
+            std::fprintf( stderr, "Failed to load demo font '%s' with the expected id %d (got %lld).\n", full_path.string().c_str(), font.font_id, ( long long ) id );
             return false;
         }
+        renderer->demo_line_heights[ font.font_id ] = vxui_demo_font_line_height( renderer, id, font.size_px );
     }
     return true;
 }
@@ -1134,7 +2030,8 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
         } else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET || dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED || dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_CPU_CACHED ) {
             begin_pass_group( 2, "VEFC Target Text" );
             glUseProgram( renderer->fontcache_shader_draw_text );
-            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            GLuint target_fbo = renderer->backend_test_mode ? renderer->backend_target_fbo : 0;
+            glBindFramebuffer( GL_FRAMEBUFFER, target_fbo );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, renderer->window_size.width, renderer->window_size.height );
             if ( clip_rect && clip_rect->w > 0.0f && clip_rect->h > 0.0f ) {
@@ -1148,6 +2045,7 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
                 glDisable( GL_SCISSOR_TEST );
             }
             glUniform1i( glGetUniformLocation( renderer->fontcache_shader_draw_text, "src_texture" ), 0 );
+            GLuint src_tex = 0;
 #ifdef VE_FONTCACHE_FREETYPE_RASTERISATION
             if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_CPU_CACHED ) {
                 if ( dcall.atlas_page >= ( uint32_t ) renderer->cpu_atlas_textures.size() ) {
@@ -1156,16 +2054,17 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
                     glUniform1ui( glGetUniformLocation( renderer->fontcache_shader_draw_text, "downsample" ), 0 );
                     glActiveTexture( GL_TEXTURE0 );
                     glBindTexture( GL_TEXTURE_2D, renderer->cpu_atlas_textures[ dcall.atlas_page ] );
+                    src_tex = renderer->cpu_atlas_textures[ dcall.atlas_page ];
                 }
             } else
 #endif
             {
                 glUniform1ui( glGetUniformLocation( renderer->fontcache_shader_draw_text, "downsample" ), dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED ? 1u : 0u );
                 glActiveTexture( GL_TEXTURE0 );
-                glBindTexture( GL_TEXTURE_2D, dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED ? renderer->fontcache_fbo_texture[ 0 ] : renderer->fontcache_fbo_texture[ 1 ] );
+                src_tex = dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED ? renderer->fontcache_fbo_texture[ 0 ] : renderer->fontcache_fbo_texture[ 1 ];
+                glBindTexture( GL_TEXTURE_2D, src_tex );
             }
             glUniform4fv( glGetUniformLocation( renderer->fontcache_shader_draw_text, "colour" ), 1, dcall.colour );
-            glEnable( GL_FRAMEBUFFER_SRGB );
 #ifdef VE_FONTCACHE_FREETYPE_RASTERISATION
         } else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_ATLAS_PAGE_TEXTURE_CREATE ) {
             begin_pass_group( 3, "VEFC CPU Atlas Create" );
@@ -1352,8 +2251,16 @@ static bool vxui_demo_gamepad_down( const TinyWindow::gamepad_t* gamepad, int bu
     return gamepad && button >= 0 && button < ( int ) gamepad->buttonStates.size() && gamepad->buttonStates[ button ];
 }
 
-int main( void )
+int main( int argc, char** argv )
 {
+    bool vefc_backend_test_mode = false;
+    for ( int i = 1; i < argc; ++i ) {
+        if ( std::strcmp( argv[ i ], "--vefc-backend-test" ) == 0 ) {
+            vefc_backend_test_mode = true;
+            break;
+        }
+    }
+
     // Disable MSVC CRT error dialogs
     _set_error_mode( _OUT_TO_STDERR );
     _CrtSetReportMode( _CRT_ERROR, _CRTDBG_MODE_FILE );
@@ -1369,9 +2276,10 @@ int main( void )
      cfg.versionMajor = 3;
      cfg.versionMinor = 3;
      cfg.enableSRGB = false;
-     cfg.resolution.width = 1280;
-     cfg.resolution.height = 720;
+     cfg.resolution.width = vefc_backend_test_mode ? 1920 : 1280;
+     cfg.resolution.height = vefc_backend_test_mode ? 1080 : 720;
      cfg.SetProfile( TinyWindow::profile_t::core );
+     cfg.startHidden = vefc_backend_test_mode;
 
      std::unique_ptr< TinyWindow::windowManager > manager( new TinyWindow::windowManager() );
      std::unique_ptr< TinyWindow::tWindow > window( manager->AddWindow( cfg ) );
@@ -1414,7 +2322,15 @@ int main( void )
 
     vxui_demo_renderer renderer = {};
     renderer.window_size = window->settings.resolution;
-    if ( !vxui_demo_init_renderer( &renderer ) || !vxui_demo_load_fonts( &renderer ) ) {
+    if ( !vxui_demo_init_renderer( &renderer ) ) {
+         std::fprintf( stderr, "Failed to initialize the VXUI demo renderer.\n" );
+         vxui_demo_shutdown_renderer( &renderer );
+         window.reset( nullptr );
+         manager->ShutDown();
+         return 1;
+    }
+    ve_fontcache_init( &renderer.cache, true );
+    if ( !vxui_demo_load_fonts( &renderer ) ) {
          std::fprintf( stderr, "Failed to initialize the VXUI demo renderer.\n" );
          vxui_demo_shutdown_renderer( &renderer );
          window.reset( nullptr );
@@ -1423,6 +2339,109 @@ int main( void )
      }
 
     ve_fontcache_configure_snap( &renderer.cache, renderer.window_size.width, renderer.window_size.height );
+
+    if ( vefc_backend_test_mode ) {
+        // Setup backend test FBO for VEFC backend tests
+        if ( !vxui_demo_setup_backend_test_fbo( &renderer ) ) {
+            std::fprintf( stderr, "Failed to setup backend test FBO.\n" );
+            vxui_demo_shutdown_renderer( &renderer );
+            window.reset( nullptr );
+            manager->ShutDown();
+            return 1;
+        }
+
+        ve_fontcache_backend_test_options options = {};
+        options.cache = &renderer.cache;
+        options.provision_fonts = []( ve_fontcache* target_cache, const ve_fontcache_backend_test_font_spec* roles, size_t role_count ) -> ve_fontcache_backend_test_font_set {
+            return vxui_demo_provision_fonts( target_cache, roles, role_count );
+        };
+        options.capabilities.has_present_surface = true;
+        options.capabilities.has_target_linear_surface = true;
+#ifdef VE_FONTCACHE_FREETYPE_RASTERISATION
+        options.capabilities.has_cpu_atlas_surface = true;
+        options.capabilities.supports_freetype_mode = true;
+#endif
+#ifdef VE_FONTCACHE_HARFBUZZ
+        //options.capabilities.supports_harfbuzz_mode = true;
+        options.capabilities.supports_harfbuzz_mode = false; // TEMP DISABLED
+#endif
+        options.execute_pipeline = []() { vxui_demo_backend_test_execute_pipeline(); };
+        options.execute_present = []() { vxui_demo_backend_test_execute_present(); };
+        options.execute_frame = []() { vxui_demo_backend_test_execute_frame(); };
+        options.readback_surface = []( const char* name, int x, int y, int w, int h, uint8_t* out_pixels ) -> bool { return vxui_demo_backend_test_readback( name, x, y, w, h, out_pixels ); };
+        options.reset_surfaces = []() {
+            extern vxui_demo_renderer* g_vxui_demo_backend_test_renderer;
+            vxui_demo_renderer* r = g_vxui_demo_backend_test_renderer;
+            if ( r ) {
+                vxui_demo_clear_backend_test_surfaces( r, true );
+                glFinish();
+            }
+        };
+        options.write_surface = []( const char* name, int x, int y, int w, int h, const uint8_t* pixels ) -> bool { return vxui_demo_backend_test_write_surface( name, x, y, w, h, pixels ); };
+        options.reload_font = []() -> ve_font_id { return vxui_demo_reload_font(); };
+        options.prepare_real_text = []() { vxui_demo_prepare_real_text(); };
+        options.finalise_test_state = []() { vxui_demo_backend_test_finalise_state(); };
+
+        // Set global renderer pointer for backend test callbacks
+        g_vxui_demo_backend_test_renderer = &renderer;
+
+        // Run VEFC backend tests
+        ve_fontcache_backend_test_result result_stb = {};
+        ve_fontcache_backend_test_result result_freetype = {};
+        ve_fontcache_backend_test_result combined_result = {};
+
+        // stb mode
+        if ( !options.capabilities.supports_freetype_mode ) {
+            result_stb = ve_fontcache_backend_test_run( options );
+            combined_result.passed += result_stb.passed;
+            combined_result.failed += result_stb.failed;
+            combined_result.skipped += result_stb.skipped;
+        } else {
+            std::printf( "=== VEFC Backend Tests: stb mode ===\n" );
+            vxui_demo_reinit_cache_for_backend_test( &renderer, false );
+            result_stb = ve_fontcache_backend_test_run( options );
+            std::printf( "stb mode: %d passed, %d failed, %d skipped\n", result_stb.passed, result_stb.failed, result_stb.skipped );
+            for ( const auto& failure : result_stb.failures ) {
+                std::printf( "  FAIL[stb]: %s\n", failure.c_str() );
+            }
+            combined_result.passed += result_stb.passed;
+            combined_result.failed += result_stb.failed;
+            combined_result.skipped += result_stb.skipped;
+
+            // Switch to FreeType mode
+            std::printf( "\n=== VEFC Backend Tests: FreeType mode ===\n" );
+            vxui_demo_reinit_cache_for_backend_test( &renderer, true );
+            options.prepare_real_text = []() { vxui_demo_prepare_real_text(); };
+            result_freetype = ve_fontcache_backend_test_run( options );
+            std::printf( "FreeType mode: %d passed, %d failed, %d skipped\n", result_freetype.passed, result_freetype.failed, result_freetype.skipped );
+            for ( const auto& failure : result_freetype.failures ) {
+                std::printf( "  FAIL[ft]: %s\n", failure.c_str() );
+            }
+            combined_result.passed += result_freetype.passed;
+            combined_result.failed += result_freetype.failed;
+            combined_result.skipped += result_freetype.skipped;
+        }
+
+        std::printf( "\n=== Combined VEFC Backend Test Summary ===\n" );
+        std::printf( "Total: %d passed, %d failed, %d skipped\n", combined_result.passed, combined_result.failed, combined_result.skipped );
+        if ( !combined_result.failures.empty() ) {
+            std::printf( "\nAll failures:\n" );
+            for ( const auto& failure : combined_result.failures ) {
+                std::printf( "  - %s\n", failure.c_str() );
+            }
+        }
+        if ( !combined_result.skipped_tests.empty() ) {
+            std::printf( "\nSkipped tests:\n" );
+            for ( const auto& skip : combined_result.skipped_tests ) {
+                std::printf( "  - %s\n", skip.c_str() );
+            }
+        }
+
+        vxui_demo_shutdown_renderer( &renderer );
+        window.reset( nullptr );
+        manager->ShutDown();
+        return combined_result.failed > 0 ? 1 : 0;
+    }
 
     std::vector< uint8_t > memory( ( size_t ) vxui_min_memory_size() );
     vxui_ctx ctx = {};
@@ -1435,10 +2454,11 @@ int main( void )
             .max_elements = 256,
             .max_anim_states = 256,
             .max_sequences = 16,
-        } );
+    } );
     vxui_set_fontcache( &ctx, &renderer.cache );
-    ctx.default_font_id = VXUI_DEMO_FONT_UI;
-    ctx.default_font_size = 24.0f;
+    vxui_set_font_resolver( &ctx, vxui_demo_font_resolver, &renderer );
+    ctx.default_font_id = VXUI_DEMO_FONT_ROLE_BODY;
+    ctx.default_font_size = ( float ) VXUI_DEMO_BODY_SIZE;
     ctx.default_text_color = ( vxui_color ) { 242, 244, 255, 255 };
 
     vxui_demo_app app = {};
@@ -1448,9 +2468,6 @@ int main( void )
     app.last_selected_seq = -1;
     vxui_set_text_fn( &ctx, vxui_demo_text, &app );
 
-    vxui_set_locale_font( &ctx, "en", VXUI_DEMO_FONT_UI );
-    vxui_set_locale_font( &ctx, "ja", VXUI_DEMO_FONT_JAPANESE );
-    vxui_set_locale_font( &ctx, "ar", VXUI_DEMO_FONT_ARABIC );
     vxui_set_locale( &ctx, "en" );
 
     const char* difficulty_keys[] = { "difficulty.easy", "difficulty.normal", "difficulty.hard" };
@@ -1459,24 +2476,24 @@ int main( void )
     const char* prop_labels[] = { "opacity", "scale", "slide_x", "slide_y" };
 #endif
     const vxui_input_table keyboard_table = {
-        .confirm = { VXUI_DEMO_FONT_UI, 'E' },
-        .cancel = { VXUI_DEMO_FONT_UI, 'Q' },
-        .tab_left = { VXUI_DEMO_FONT_UI, '[' },
-        .tab_right = { VXUI_DEMO_FONT_UI, ']' },
-        .up = { VXUI_DEMO_FONT_UI, '^' },
-        .down = { VXUI_DEMO_FONT_UI, 'v' },
-        .left = { VXUI_DEMO_FONT_UI, '<' },
-        .right = { VXUI_DEMO_FONT_UI, '>' },
+        .confirm = { VXUI_DEMO_FONT_ROLE_BODY, 'E' },
+        .cancel = { VXUI_DEMO_FONT_ROLE_BODY, 'Q' },
+        .tab_left = { VXUI_DEMO_FONT_ROLE_BODY, '[' },
+        .tab_right = { VXUI_DEMO_FONT_ROLE_BODY, ']' },
+        .up = { VXUI_DEMO_FONT_ROLE_BODY, '^' },
+        .down = { VXUI_DEMO_FONT_ROLE_BODY, 'v' },
+        .left = { VXUI_DEMO_FONT_ROLE_BODY, '<' },
+        .right = { VXUI_DEMO_FONT_ROLE_BODY, '>' },
     };
     const vxui_input_table gamepad_table = {
-        .confirm = { VXUI_DEMO_FONT_DEBUG, 'A' },
-        .cancel = { VXUI_DEMO_FONT_DEBUG, 'B' },
-        .tab_left = { VXUI_DEMO_FONT_DEBUG, 'L' },
-        .tab_right = { VXUI_DEMO_FONT_DEBUG, 'R' },
-        .up = { VXUI_DEMO_FONT_DEBUG, '^' },
-        .down = { VXUI_DEMO_FONT_DEBUG, 'v' },
-        .left = { VXUI_DEMO_FONT_DEBUG, '<' },
-        .right = { VXUI_DEMO_FONT_DEBUG, '>' },
+        .confirm = { VXUI_DEMO_FONT_ROLE_BODY, 'A' },
+        .cancel = { VXUI_DEMO_FONT_ROLE_BODY, 'B' },
+        .tab_left = { VXUI_DEMO_FONT_ROLE_BODY, 'L' },
+        .tab_right = { VXUI_DEMO_FONT_ROLE_BODY, 'R' },
+        .up = { VXUI_DEMO_FONT_ROLE_BODY, '^' },
+        .down = { VXUI_DEMO_FONT_ROLE_BODY, 'v' },
+        .left = { VXUI_DEMO_FONT_ROLE_BODY, '<' },
+        .right = { VXUI_DEMO_FONT_ROLE_BODY, '>' },
     };
     vxui_set_input_table( &ctx, &keyboard_table );
 
@@ -1614,13 +2631,13 @@ int main( void )
             app.reload_status[ 0 ] = '\0';
             char reload_error[ 256 ] = {};
             if ( vxui_poll_seq_hot_reload( &ctx, now_ms, reload_error, sizeof( reload_error ) ) ) {
-                std::snprintf( app.reload_status, sizeof( app.reload_status ), "%s", "Reloaded the watched sequence file." );
+                std::snprintf( app.reload_status, sizeof( app.reload_status ), "%s", vxui_demo_text( "debug.reload.reloaded", &app ) );
                 vxui_demo_sync_step_editor( &app );
                 vxui_debug_generate_seq_outputs( &ctx );
             } else if ( reload_error[ 0 ] ) {
-                std::snprintf( app.reload_status, sizeof( app.reload_status ), "Reload failed: %s", reload_error );
+                std::snprintf( app.reload_status, sizeof( app.reload_status ), "%s: %s", vxui_demo_text( "debug.reload.failed_prefix", &app ), reload_error );
             } else {
-                std::snprintf( app.reload_status, sizeof( app.reload_status ), "%s", "No watched sequence change was detected." );
+                std::snprintf( app.reload_status, sizeof( app.reload_status ), "%s", vxui_demo_text( "debug.reload.unchanged", &app ) );
             }
         }
         if ( vxui_demo_button_edge( &app, VXUI_DEMO_BTN_DEBUG_COPY, vxui_demo_char_down( window.get(), 'C' ) ) ) {
@@ -1646,125 +2663,234 @@ int main( void )
 #endif
         vxui_demo_refresh_status( &app );
 
+        const bool rtl = ctx.rtl;
+        const float control_height = vxui_demo_control_height( &renderer, ctx.locale );
+        const vxui_screen* top_screen = ctx.screen_count > 0 ? &ctx.screens[ ctx.screen_count - 1 ] : nullptr;
+        const char* locale_name_key = vxui_demo_locale_name_key( app.locale_index );
+        const char* prompt_name_key = vxui_demo_prompt_name_key( app.prompt_table_index );
+        const char* top_name_key = vxui_demo_screen_name_key( top_screen ? top_screen->name : nullptr );
+        const vxui_label_cfg title_cfg = {
+            .font_id = VXUI_DEMO_FONT_ROLE_TITLE,
+            .font_size = ( float ) VXUI_DEMO_TITLE_SIZE,
+            .color = { 255, 247, 225, 255 },
+        };
+        const vxui_label_cfg section_cfg = {
+            .font_id = VXUI_DEMO_FONT_ROLE_SECTION,
+            .font_size = ( float ) VXUI_DEMO_SECTION_SIZE,
+            .color = { 255, 214, 153, 255 },
+        };
+
         if ( app.show_settings ) {
             VXUI( &ctx, "settings", {
                 .layout = {
                     .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( 0 ) },
                     .padding = CLAY_PADDING_ALL( 18 ),
-                    .childGap = 12,
-                    .layoutDirection = CLAY_TOP_TO_BOTTOM,
                 },
                 .backgroundColor = { 11, 18, 34, 255 },
             } ) {
-                VXUI_LABEL( &ctx, "menu.settings", ( vxui_label_cfg ) {
-                    .font_id = app.locale_index == 0 ? VXUI_DEMO_FONT_TITLE : 0u,
-                    .font_size = 44.0f,
-                    .color = { 255, 247, 225, 255 },
-                } );
-                VXUI_TRAIT( VXUI_TRAIT_SPIN, ( vxui_demo_spin ) { .speed = 2.0f, .padding = 6.0f } );
-
-                VXUI( &ctx, "settings.row.difficulty", {
+                VXUI( &ctx, "settings.content", {
                     .layout = {
-                        .childGap = 16,
-                        .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-                        .layoutDirection = CLAY_LEFT_TO_RIGHT,
+                        .sizing = { CLAY_SIZING_GROW( 0, VXUI_DEMO_CONTENT_MAX_WIDTH ), CLAY_SIZING_FIT( 0 ) },
+                        .childGap = VXUI_DEMO_SCREEN_GAP,
+                        .childAlignment = { .x = rtl ? CLAY_ALIGN_X_RIGHT : CLAY_ALIGN_X_LEFT },
+                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
                     },
                 } ) {
-                    VXUI_LABEL( &ctx, "menu.difficulty", ( vxui_label_cfg ) { 0 } );
-                    VXUI_OPTION( &ctx, "settings.difficulty", &app.difficulty, difficulty_keys, 3, ( vxui_option_cfg ) { 0 } );
-                }
-
-                VXUI( &ctx, "settings.row.volume", {
+                VXUI( &ctx, "settings.title", {
                     .layout = {
-                        .childGap = 16,
-                        .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-                        .layoutDirection = CLAY_LEFT_TO_RIGHT,
+                        .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+                        .childGap = 0,
+                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
                     },
                 } ) {
-                    VXUI_LABEL( &ctx, "menu.volume", ( vxui_label_cfg ) { 0 } );
-                    VXUI_SLIDER( &ctx, "settings.volume", &app.volume, 0.0f, 1.0f, ( vxui_slider_cfg ) {
-                        .show_value = true,
-                    } );
+                    VXUI_LABEL( &ctx, "menu.settings", title_cfg );
+                    VXUI_TRAIT( VXUI_TRAIT_SPIN, ( vxui_demo_spin ) { .speed = 2.0f, .padding = 6.0f } );
                 }
 
-                VXUI_LABEL( &ctx, "menu.saves", ( vxui_label_cfg ) { 0 } );
-                VXUI_LIST_BEGIN( &ctx, "settings.saves", ( vxui_list_cfg ) {
-                    .max_visible = 6,
-                    .item_height = 22.0f,
+                VXUI( &ctx, "settings.form", {
+                    .layout = {
+                        .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
+                        .childGap = VXUI_DEMO_ROW_GAP,
+                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                    },
                 } ) {
-                    for ( int i = 0; i < 8; ++i ) {
-                        VXUI_LIST_ITEM( &ctx, i ) {
-                            VXUI_LABEL( &ctx, slot_keys[ i ], ( vxui_label_cfg ) { 0 } );
+                    VXUI( &ctx, "settings.form.difficulty", {
+                        .layout = {
+                            .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
+                            .childGap = VXUI_DEMO_ROW_GAP,
+                            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+                            .layoutDirection = CLAY_LEFT_TO_RIGHT,
+                        },
+                    } ) {
+                        CLAY( vxui__clay_id_from_hash( vxui_id( "settings.form.difficulty.label" ) ), {
+                            .layout = {
+                                .sizing = { CLAY_SIZING_FIXED( VXUI_DEMO_FORM_LABEL_WIDTH ), CLAY_SIZING_FIT( 0 ) },
+                            },
+                        } ) {
+                            VXUI_LABEL( &ctx, "menu.difficulty", ( vxui_label_cfg ) { 0 } );
+                        }
+                        VXUI_OPTION( &ctx, "settings.difficulty", &app.difficulty, difficulty_keys, 3, ( vxui_option_cfg ) { 0 } );
+                    }
+
+                    VXUI( &ctx, "settings.form.volume", {
+                        .layout = {
+                            .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
+                            .childGap = VXUI_DEMO_ROW_GAP,
+                            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+                            .layoutDirection = CLAY_LEFT_TO_RIGHT,
+                        },
+                    } ) {
+                        CLAY( vxui__clay_id_from_hash( vxui_id( "settings.form.volume.label" ) ), {
+                            .layout = {
+                                .sizing = { CLAY_SIZING_FIXED( VXUI_DEMO_FORM_LABEL_WIDTH ), CLAY_SIZING_FIT( 0 ) },
+                            },
+                        } ) {
+                            VXUI_LABEL( &ctx, "menu.volume", ( vxui_label_cfg ) { 0 } );
+                        }
+                        VXUI_SLIDER( &ctx, "settings.volume", &app.volume, 0.0f, 1.0f, ( vxui_slider_cfg ) {
+                            .show_value = true,
+                        } );
+                    }
+                }
+
+                VXUI( &ctx, "settings.saves_section", {
+                    .layout = {
+                        .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
+                        .childGap = VXUI_DEMO_ROW_GAP,
+                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                    },
+                } ) {
+                    VXUI_LABEL( &ctx, "menu.saves", section_cfg );
+                    VXUI_LIST_BEGIN( &ctx, "settings.saves", ( vxui_list_cfg ) {
+                        .max_visible = 6,
+                        .item_height = control_height,
+                    } ) {
+                        for ( int i = 0; i < 8; ++i ) {
+                            VXUI_LIST_ITEM( &ctx, i ) {
+                                VXUI_LABEL( &ctx, slot_keys[ i ], ( vxui_label_cfg ) { 0 } );
+                            }
                         }
                     }
                 }
 
-                VXUI( &ctx, "settings.prompts", {
+                VXUI( &ctx, "settings.footer", {
                     .layout = {
-                        .childGap = 8,
-                        .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-                        .layoutDirection = CLAY_LEFT_TO_RIGHT,
+                        .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
+                        .childGap = VXUI_DEMO_ROW_GAP,
+                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
                     },
                 } ) {
-                    VXUI_PROMPT( &ctx, "action.confirm" );
-                    VXUI_LABEL( &ctx, "menu.confirm", ( vxui_label_cfg ) { 0 } );
-                    VXUI_PROMPT( &ctx, "action.cancel" );
-                    VXUI_LABEL( &ctx, "menu.cancel", ( vxui_label_cfg ) { 0 } );
+                    VXUI( &ctx, "settings.prompts", {
+                        .layout = {
+                            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+                            .childGap = VXUI_DEMO_INLINE_GAP,
+                            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+                            .layoutDirection = vxui__resolve_dir( CLAY_LEFT_TO_RIGHT, rtl ),
+                        },
+                    } ) {
+                        vxui_demo_emit_prompt_pair( &ctx, "settings.prompt.confirm", "action.confirm", "menu.confirm" );
+                        vxui_demo_emit_prompt_pair( &ctx, "settings.prompt.cancel", "action.cancel", "menu.cancel" );
+                    }
+
+                    VXUI( &ctx, "settings.status", {
+                        .layout = {
+                            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+                            .childGap = VXUI_DEMO_ROW_GAP,
+                            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                        },
+                    } ) {
+                        vxui_demo_emit_label_pair( &ctx, "settings.status.locale", "status.label.locale", locale_name_key, rtl );
+                        vxui_demo_emit_label_pair( &ctx, "settings.status.prompts", "status.label.prompts", prompt_name_key, rtl );
+                        vxui_demo_emit_label_pair( &ctx, "settings.status.screens", "status.label.screens", top_name_key, rtl );
+                    }
+
+                    vxui_demo_emit_action_button( &ctx, "settings.back", "menu.back", vxui_demo_close_settings, ( vxui_action_cfg ) {
+                        .userdata = &app,
+                    }, control_height );
+                    VXUI_TRAIT( VXUI_TRAIT_GLOW, ( vxui_demo_glow ) { .padding = 6.0f, .alpha = 0.25f } );
                 }
-
-                VXUI_LABEL( &ctx, "status.locale", ( vxui_label_cfg ) { 0 } );
-                VXUI_LABEL( &ctx, "status.prompts", ( vxui_label_cfg ) { 0 } );
-                VXUI_LABEL( &ctx, "status.screens", ( vxui_label_cfg ) { 0 } );
-
-                VXUI_ACTION( &ctx, "settings.back", "menu.back", vxui_demo_close_settings, ( vxui_action_cfg ) {
-                    .userdata = &app,
-                } );
-                VXUI_TRAIT( VXUI_TRAIT_GLOW, ( vxui_demo_glow ) { .padding = 6.0f, .alpha = 0.25f } );
-            }
+                } /* settings.content */
+            } /* settings */
         } else {
             VXUI( &ctx, "main_menu", {
                 .layout = {
                     .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( 0 ) },
                     .padding = CLAY_PADDING_ALL( 18 ),
-                    .childGap = 16,
-                    .layoutDirection = CLAY_TOP_TO_BOTTOM,
                 },
                 .backgroundColor = { 8, 12, 22, 255 },
             } ) {
-                VXUI_LABEL( &ctx, "menu.main", ( vxui_label_cfg ) {
-                    .font_id = app.locale_index == 0 ? VXUI_DEMO_FONT_TITLE : 0u,
-                    .font_size = 44.0f,
-                    .color = { 255, 247, 225, 255 },
-                } );
-                VXUI_TRAIT( VXUI_TRAIT_PULSE, ( vxui_demo_pulse ) { .speed = 2.0f, .scale = 0.05f, .alpha = 0.14f } );
-
-                VXUI_ACTION( &ctx, "main.settings", "menu.open_settings", vxui_demo_open_settings, ( vxui_action_cfg ) {
-                    .userdata = &app,
-                } );
-                VXUI_TRAIT( VXUI_TRAIT_GLOW, ( vxui_demo_glow ) { .padding = 6.0f, .alpha = 0.20f } );
-                VXUI_TRAIT( VXUI_TRAIT_SCANLINE, ( vxui_demo_scanline ) { .spacing = 6.0f, .alpha = 0.10f } );
-
-                VXUI( &ctx, "main.prompts", {
+                VXUI( &ctx, "main.content", {
                     .layout = {
-                        .childGap = 8,
-                        .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-                        .layoutDirection = CLAY_LEFT_TO_RIGHT,
+                        .sizing = { CLAY_SIZING_GROW( 0, VXUI_DEMO_CONTENT_MAX_WIDTH ), CLAY_SIZING_FIT( 0 ) },
+                        .childGap = VXUI_DEMO_SCREEN_GAP,
+                        .childAlignment = { .x = rtl ? CLAY_ALIGN_X_RIGHT : CLAY_ALIGN_X_LEFT },
+                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
                     },
                 } ) {
-                    VXUI_PROMPT( &ctx, "action.confirm" );
-                    VXUI_LABEL( &ctx, "menu.confirm", ( vxui_label_cfg ) { 0 } );
-                    VXUI_PROMPT( &ctx, "action.cancel" );
-                    VXUI_LABEL( &ctx, "menu.cancel", ( vxui_label_cfg ) { 0 } );
+                VXUI( &ctx, "main.hero", {
+                    .layout = {
+                        .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+                        .childGap = 0,
+                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                    },
+                } ) {
+                    VXUI_LABEL( &ctx, "menu.main", title_cfg );
+                    VXUI_TRAIT( VXUI_TRAIT_PULSE, ( vxui_demo_pulse ) { .speed = 2.0f, .scale = 0.05f, .alpha = 0.14f } );
+
+                    vxui_demo_emit_action_button( &ctx, "main.settings", "menu.open_settings", vxui_demo_open_settings, ( vxui_action_cfg ) {
+                        .userdata = &app,
+                    }, control_height );
+                    VXUI_TRAIT( VXUI_TRAIT_GLOW, ( vxui_demo_glow ) { .padding = 6.0f, .alpha = 0.20f } );
+                    VXUI_TRAIT( VXUI_TRAIT_SCANLINE, ( vxui_demo_scanline ) { .spacing = 6.0f, .alpha = 0.10f } );
                 }
 
-                VXUI_LABEL( &ctx, "status.locale", ( vxui_label_cfg ) { 0 } );
-                VXUI_LABEL( &ctx, "status.prompts", ( vxui_label_cfg ) { 0 } );
-                VXUI_LABEL( &ctx, "status.screens", ( vxui_label_cfg ) { 0 } );
-                VXUI_LABEL( &ctx, "hint.controls.0", ( vxui_label_cfg ) { 0 } );
-                VXUI_LABEL( &ctx, "hint.controls.1", ( vxui_label_cfg ) { 0 } );
-                VXUI_LABEL( &ctx, "hint.controls.2", ( vxui_label_cfg ) { 0 } );
-                VXUI_LABEL( &ctx, "hint.controls.3", ( vxui_label_cfg ) { 0 } );
-            }
+                VXUI( &ctx, "main.meta", {
+                    .layout = {
+                        .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+                        .childGap = VXUI_DEMO_SCREEN_GAP,
+                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                    },
+                } ) {
+                    VXUI( &ctx, "main.prompts", {
+                        .layout = {
+                            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+                            .childGap = VXUI_DEMO_INLINE_GAP,
+                            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+                            .layoutDirection = vxui__resolve_dir( CLAY_LEFT_TO_RIGHT, rtl ),
+                        },
+                    } ) {
+                        vxui_demo_emit_prompt_pair( &ctx, "main.prompt.confirm", "action.confirm", "menu.confirm" );
+                        vxui_demo_emit_prompt_pair( &ctx, "main.prompt.cancel", "action.cancel", "menu.cancel" );
+                    }
+
+                    VXUI( &ctx, "main.status", {
+                        .layout = {
+                            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+                            .childGap = VXUI_DEMO_ROW_GAP,
+                            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                        },
+                    } ) {
+                        vxui_demo_emit_label_pair( &ctx, "main.status.locale", "status.label.locale", locale_name_key, rtl );
+                        vxui_demo_emit_label_pair( &ctx, "main.status.prompts", "status.label.prompts", prompt_name_key, rtl );
+                        vxui_demo_emit_label_pair( &ctx, "main.status.screens", "status.label.screens", top_name_key, rtl );
+                    }
+                }
+
+                VXUI( &ctx, "main.help", {
+                    .layout = {
+                        .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
+                        .childGap = VXUI_DEMO_ROW_GAP,
+                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                    },
+                } ) {
+                    VXUI_LABEL( &ctx, "menu.controls", section_cfg );
+                    VXUI_LABEL( &ctx, "hint.controls.0", ( vxui_label_cfg ) { 0 } );
+                    VXUI_LABEL( &ctx, "hint.controls.1", ( vxui_label_cfg ) { 0 } );
+                    VXUI_LABEL( &ctx, "hint.controls.2", ( vxui_label_cfg ) { 0 } );
+                    VXUI_LABEL( &ctx, "hint.controls.3", ( vxui_label_cfg ) { 0 } );
+                }
+                } /* main.content */
+            } /* main_menu */
         }
 
 #ifdef VXUI_DEBUG
@@ -1781,14 +2907,15 @@ int main( void )
             VXUI( &ctx, "debug.overlay", {
                 .layout = {
                     .padding = CLAY_PADDING_ALL( 12 ),
-                    .childGap = 8,
+                    .childGap = VXUI_DEMO_INLINE_GAP,
+                    .childAlignment = { .x = ctx.rtl ? CLAY_ALIGN_X_RIGHT : CLAY_ALIGN_X_LEFT },
                     .layoutDirection = CLAY_TOP_TO_BOTTOM,
                 },
                 .backgroundColor = { 22, 24, 38, 224 },
             } ) {
                 VXUI_LABEL( &ctx, "debug.overlay.title", ( vxui_label_cfg ) {
-                    .font_id = VXUI_DEMO_FONT_TITLE,
-                    .font_size = 28.0f,
+                    .font_id = VXUI_DEMO_FONT_ROLE_SECTION,
+                    .font_size = ( float ) VXUI_DEMO_SECTION_SIZE,
                     .color = { 255, 214, 153, 255 },
                 } );
                 VXUI_LABEL( &ctx, "menu.debug", ( vxui_label_cfg ) { 0 } );
@@ -1810,13 +2937,13 @@ int main( void )
                 VXUI_LABEL( &ctx, "debug.reload", ( vxui_label_cfg ) { 0 } );
                 VXUI_LABEL( &ctx, "debug.clipboard", ( vxui_label_cfg ) { 0 } );
                 VXUI_LABEL( &ctx, "debug.generated_c", ( vxui_label_cfg ) {
-                    .font_id = VXUI_DEMO_FONT_DEBUG,
-                    .font_size = 16.0f,
+                    .font_id = VXUI_DEMO_FONT_ROLE_CODE,
+                    .font_size = ( float ) VXUI_DEMO_CODE_SIZE,
                     .color = { 184, 220, 255, 255 },
                 } );
                 VXUI_LABEL( &ctx, "debug.generated_toml", ( vxui_label_cfg ) {
-                    .font_id = VXUI_DEMO_FONT_DEBUG,
-                    .font_size = 16.0f,
+                    .font_id = VXUI_DEMO_FONT_ROLE_CODE,
+                    .font_size = ( float ) VXUI_DEMO_CODE_SIZE,
                     .color = { 184, 255, 208, 255 },
                 } );
             }
@@ -1829,6 +2956,30 @@ int main( void )
             vxui_debug_capture_preview( &ctx, &list );
             ctx.debug_seq_editor.preview_playing = ctx.debug_seq_editor.preview_snapshot.command_count > 0;
             vxui_demo_refresh_status( &app );
+        }
+        int issue_count = vxui_debug_layout_issue_count( &ctx );
+        if ( issue_count > 0 ) {
+            std::fprintf( stderr, "vxui demo: %d layout issue(s) detected:\n", issue_count );
+            int printed = 0;
+            for ( int i = 0; i < issue_count && printed < 8; ++i ) {
+                const vxui_layout_issue* issue = vxui_debug_layout_issue_at( &ctx, i );
+                if ( issue ) {
+                    std::fprintf(
+                        stderr,
+                        "  [%s] subject=%u bounds={%.1f,%.1f,%.1f,%.1f} %s\n",
+                        vxui_layout_issue_kind_name( issue->kind ),
+                        issue->subject_id,
+                        issue->bounds.x,
+                        issue->bounds.y,
+                        issue->bounds.w,
+                        issue->bounds.h,
+                        issue->message );
+                    printed++;
+                }
+            }
+            if ( issue_count > 8 ) {
+                std::fprintf( stderr, "  ... and %d more\n", issue_count - 8 );
+            }
         }
 #endif
 

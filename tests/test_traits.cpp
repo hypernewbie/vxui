@@ -60,6 +60,18 @@ static vxui_anim_state* vxui__find_anim_state( vxui_ctx* ctx, uint32_t id )
     return nullptr;
 }
 
+static int vxui__collect_trait_text_positions( const vxui_draw_list* list, float* ys, int capacity )
+{
+    int count = 0;
+    for ( int i = 0; i < list->length && count < capacity; ++i ) {
+        if ( list->commands[ i ].type != VXUI_CMD_TEXT ) {
+            continue;
+        }
+        ys[ count++ ] = list->commands[ i ].text.pos.y;
+    }
+    return count;
+}
+
 UTEST_F_SETUP( traits_fixture )
 {
     utest_fixture->memory_size = vxui_min_memory_size();
@@ -218,4 +230,31 @@ UTEST_F( traits_fixture, nested_vxui_scope_restores_current_decl_id_for_followin
     ASSERT_TRUE( host != nullptr );
     EXPECT_EQ( host->trait_count, 1 );
     EXPECT_TRUE( child == nullptr || child->trait_count == 0 );
+}
+
+UTEST_F( traits_fixture, pulse_trait_preserves_text_row_order_for_sibling_labels )
+{
+    vxui_begin( &utest_fixture->ctx, 0.016f );
+    VXUI( &utest_fixture->ctx, "pulse.root", {
+        .layout = {
+            .childGap = 10,
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+        },
+    } ) {
+        VXUI_LABEL( &utest_fixture->ctx, "pulse.top", ( vxui_label_cfg ) { 0 } );
+        VXUI_LABEL( &utest_fixture->ctx, "pulse.middle", ( vxui_label_cfg ) { 0 } );
+        VXUI_TRAIT( VXUI_TRAIT_PULSE, ( vxui__pulse_params ) { .speed = 2.0f, .scale = 0.1f, .alpha = 0.2f } );
+        VXUI_LABEL( &utest_fixture->ctx, "pulse.bottom", ( vxui_label_cfg ) { 0 } );
+    }
+
+    vxui_draw_list list = vxui_end( &utest_fixture->ctx );
+    vxui_anim_state* st = vxui__find_anim_state( &utest_fixture->ctx, vxui_id( "pulse.middle" ) );
+    float ys[ 3 ] = {};
+
+    ASSERT_TRUE( st != nullptr );
+    EXPECT_EQ( st->trait_count, 1 );
+    EXPECT_TRUE( st->scale_current != 1.0f || st->opacity_current != 1.0f );
+    ASSERT_EQ( vxui__collect_trait_text_positions( &list, ys, 3 ), 3 );
+    EXPECT_LT( ys[ 0 ], ys[ 1 ] );
+    EXPECT_LT( ys[ 1 ], ys[ 2 ] );
 }

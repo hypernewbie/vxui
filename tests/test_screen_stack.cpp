@@ -50,6 +50,18 @@ static bool vxui__screen_stack_has_text( const vxui_draw_list* list, const char*
     return false;
 }
 
+static int vxui__screen_stack_collect_text_ys( const vxui_draw_list* list, float* ys, int capacity )
+{
+    int count = 0;
+    for ( int i = 0; i < list->length && count < capacity; ++i ) {
+        if ( list->commands[ i ].type != VXUI_CMD_TEXT ) {
+            continue;
+        }
+        ys[ count++ ] = list->commands[ i ].text.pos.y;
+    }
+    return count;
+}
+
 UTEST_F_SETUP( screen_stack_fixture )
 {
     utest_fixture->memory_size = vxui_min_memory_size();
@@ -271,4 +283,27 @@ UTEST_F( screen_stack_fixture, pop_keeps_exiting_snapshot_while_focus_returns_to
 
     EXPECT_EQ( vxui_focused_id( &utest_fixture->ctx ), vxui_id( "main.open" ) );
     EXPECT_TRUE( vxui__screen_stack_has_text( &list, "Settings" ) );
+}
+
+UTEST_F( screen_stack_fixture, live_screen_text_stack_preserves_increasing_y_after_screen_anim_reapply )
+{
+    vxui_push_screen( &utest_fixture->ctx, "main_menu" );
+
+    vxui_begin( &utest_fixture->ctx, 0.016f );
+    VXUI( &utest_fixture->ctx, "main_menu", {
+        .layout = {
+            .childGap = 12,
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+        },
+    } ) {
+        VXUI_LABEL( &utest_fixture->ctx, "screen.main", ( vxui_label_cfg ) { 0 } );
+        VXUI_LABEL( &utest_fixture->ctx, "screen.settings", ( vxui_label_cfg ) { 0 } );
+        VXUI_LABEL( &utest_fixture->ctx, "screen.back", ( vxui_label_cfg ) { 0 } );
+    }
+
+    vxui_draw_list list = vxui_end( &utest_fixture->ctx );
+    float ys[ 3 ] = {};
+    ASSERT_EQ( vxui__screen_stack_collect_text_ys( &list, ys, 3 ), 3 );
+    EXPECT_LT( ys[ 0 ], ys[ 1 ] );
+    EXPECT_LT( ys[ 1 ], ys[ 2 ] );
 }
