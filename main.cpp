@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifndef NOMINMAX
@@ -242,6 +243,8 @@ typedef struct vxui_demo_renderer
     GLuint fontcache_fbo_texture[ 2 ];
     std::vector< GLuint > cpu_atlas_textures;
     TinyWindow::vec2_t< unsigned int > window_size;
+    TinyWindow::vec2_t< unsigned int > snap_configured_window_size {};
+    bool snap_configured = false;
     ve_fontcache cache;
     std::array< std::vector< uint8_t >, VXUI_DEMO_FONT_FACE_COUNT > demo_fonts;
     std::array< float, VXUI_DEMO_FONT_FACE_COUNT > demo_line_heights {};
@@ -260,6 +263,29 @@ typedef struct vxui_demo_renderer
     bool shot_capture_mode;
     GLuint shot_capture_fbo;
     GLuint shot_capture_texture;
+    struct vxui_demo_uniform_cache
+    {
+        struct primitive_uniforms
+        {
+            GLint bounds = -1;
+            GLint viewport = -1;
+            GLint size = -1;
+            GLint color = -1;
+            GLint radius = -1;
+            GLint border = -1;
+        } primitive;
+        struct fontcache_blit_atlas_uniforms
+        {
+            GLint src_texture = -1;
+            GLint region = -1;
+        } blit_atlas;
+        struct fontcache_draw_text_uniforms
+        {
+            GLint src_texture = -1;
+            GLint downsample = -1;
+            GLint colour = -1;
+        } draw_text;
+    } uniforms;
     struct vxui_demo_gl_debug
     {
         enum backend
@@ -335,10 +361,6 @@ static bool vxui_demo_locale_matches( const char* locale, const char* prefix );
 static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_renderer* renderer, uint32_t requested_font_id, float requested_font_size, const char* locale );
 static void vxui_demo_font_resolver( vxui_ctx* ctx, uint32_t requested_font_id, float requested_font_size, const char* locale, void* userdata, vxui_resolved_font* out );
 static float vxui_demo_control_height( const vxui_demo_renderer* renderer, const char* locale );
-static void vxui_demo_emit_compact_meta_row( vxui_ctx* ctx, const char* id, const char* label_key, const char* value_key, bool rtl, const vxui_label_cfg* text_cfg = nullptr );
-static void vxui_demo_emit_label_pair( vxui_ctx* ctx, const char* id, const char* label_key, const char* value_key, bool rtl );
-static void vxui_demo_emit_prompt_pair( vxui_ctx* ctx, const char* id, const char* action_name, const char* label_key, const vxui_label_cfg* label_cfg = nullptr );
-static void vxui_demo_emit_status_summary( vxui_ctx* ctx, const char* id, const char* locale_name_key, const char* prompt_name_key, const char* top_name_key, int screen_count, bool rtl );
 static void vxui_demo_emit_save_slot_row( vxui_ctx* ctx, const char* id, const char* label_key, float width, float height, bool rtl );
 static void vxui_demo_emit_action_button( vxui_ctx* ctx, const char* id, const char* l10n_key, vxui_action_fn fn, vxui_action_cfg cfg, float control_height );
 static bool vxui_demo_get_anim_bounds( const vxui_ctx* ctx, uint32_t id, vxui_rect* out );
@@ -371,6 +393,9 @@ static void vxui_demo_gl_debug_label( vxui_demo_renderer* renderer, GLenum ident
 static void vxui_demo_gl_debug_begin( vxui_demo_renderer* renderer, const char* label );
 static void vxui_demo_gl_debug_end( vxui_demo_renderer* renderer );
 static void vxui_demo_gl_debug_event( vxui_demo_renderer* renderer, const char* label );
+static void vxui_demo_set_window_size( vxui_demo_renderer* renderer, TinyWindow::vec2_t< unsigned int > window_size );
+static void vxui_demo_configure_snap_if_needed( vxui_demo_renderer* renderer, bool force );
+static bool vxui_demo_cache_shader_uniforms( vxui_demo_renderer* renderer );
 static bool vxui_demo_init_renderer( vxui_demo_renderer* renderer );
 static void vxui_demo_shutdown_renderer( vxui_demo_renderer* renderer );
 static bool vxui_demo_load_fonts( vxui_demo_renderer* renderer );
@@ -1127,173 +1152,6 @@ static float vxui_demo_control_height( const vxui_demo_renderer* renderer, const
 {
     vxui_demo_font_metrics metrics = vxui_demo_resolve_font_metrics( renderer, VXUI_DEMO_FONT_ROLE_BODY, ( float ) VXUI_DEMO_BODY_SIZE, locale );
     return std::max( 32.0f, metrics.line_height + VXUI_DEMO_BUTTON_PADDING_Y * 2.0f );
-}
-
-template <typename TEmitControl>
-static void vxui_demo_emit_form_row(
-    vxui_ctx* ctx,
-    const char* id,
-    const char* label_key,
-    float label_lane_width,
-    float control_lane_width,
-    bool rtl,
-    TEmitControl&& emit_control )
-{
-    uint32_t row_id = vxui_id( id );
-    std::string label_lane_id = std::string( id ) + ".label_lane";
-    std::string control_lane_id = std::string( id ) + ".control";
-    CLAY( vxui__clay_id_from_hash( row_id ), {
-        .layout = {
-            .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
-            .childGap = VXUI_DEMO_ROW_GAP,
-            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-            .layoutDirection = CLAY_LEFT_TO_RIGHT,
-        },
-    } ) {
-        auto emit_label_lane = [&]() {
-            CLAY( vxui__clay_id_from_hash( vxui_id( label_lane_id.c_str() ) ), {
-                .layout = {
-                    .sizing = { CLAY_SIZING_FIXED( label_lane_width ), CLAY_SIZING_FIT( 0 ) },
-                    .childAlignment = { .x = rtl ? CLAY_ALIGN_X_RIGHT : CLAY_ALIGN_X_LEFT },
-                },
-            } ) {
-                VXUI_LABEL( ctx, label_key, ( vxui_label_cfg ) { 0 } );
-            }
-        };
-
-        auto emit_control_lane = [&]() {
-            CLAY( vxui__clay_id_from_hash( vxui_id( control_lane_id.c_str() ) ), {
-                .layout = {
-                    .sizing = { CLAY_SIZING_FIXED( control_lane_width ), CLAY_SIZING_FIT( 0 ) },
-                    .childAlignment = { .x = rtl ? CLAY_ALIGN_X_RIGHT : CLAY_ALIGN_X_LEFT },
-                    .layoutDirection = CLAY_TOP_TO_BOTTOM,
-                },
-            } ) {
-                emit_control();
-            }
-        };
-
-        if ( rtl ) {
-            emit_control_lane();
-            emit_label_lane();
-        } else {
-            emit_label_lane();
-            emit_control_lane();
-        }
-    }
-}
-
-template <typename TEmitChildren>
-static void vxui_demo_emit_footer_action_bar( vxui_ctx* ctx, const char* id, bool rtl, TEmitChildren&& emit_children )
-{
-    const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
-    uint32_t bar_id = vxui_id( id );
-    CLAY( vxui__clay_id_from_hash( bar_id ), {
-        .layout = {
-            .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
-            .padding = CLAY_PADDING_ALL( 6 ),
-            .childGap = 6,
-            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-            .layoutDirection = vxui__resolve_dir( CLAY_LEFT_TO_RIGHT, rtl ),
-        },
-        .backgroundColor = vxui_demo_clay_color( theme.action_fill ),
-        .cornerRadius = CLAY_CORNER_RADIUS( 8 ),
-        .border = vxui_demo_panel_border( theme.action_border, 1 ),
-    } ) {
-        emit_children();
-    }
-}
-
-static void vxui_demo_emit_compact_meta_row( vxui_ctx* ctx, const char* id, const char* label_key, const char* value_key, bool rtl, const vxui_label_cfg* text_cfg )
-{
-    uint32_t pair_id = vxui_id( id );
-    CLAY( vxui__clay_id_from_hash( pair_id ), {
-        .layout = {
-            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
-            .childGap = VXUI_DEMO_INLINE_GAP,
-            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-            .layoutDirection = CLAY_LEFT_TO_RIGHT,
-        },
-    } ) {
-        if ( rtl ) {
-            VXUI_LABEL( ctx, value_key, text_cfg ? *text_cfg : ( vxui_label_cfg ) { 0 } );
-            VXUI_LABEL( ctx, label_key, text_cfg ? *text_cfg : ( vxui_label_cfg ) { 0 } );
-        } else {
-            VXUI_LABEL( ctx, label_key, text_cfg ? *text_cfg : ( vxui_label_cfg ) { 0 } );
-            VXUI_LABEL( ctx, value_key, text_cfg ? *text_cfg : ( vxui_label_cfg ) { 0 } );
-        }
-    }
-}
-
-static void vxui_demo_emit_label_pair( vxui_ctx* ctx, const char* id, const char* label_key, const char* value_key, bool rtl )
-{
-    vxui_demo_emit_compact_meta_row( ctx, id, label_key, value_key, rtl );
-}
-
-static void vxui_demo_emit_prompt_pair( vxui_ctx* ctx, const char* id, const char* action_name, const char* label_key, const vxui_label_cfg* label_cfg )
-{
-    uint32_t pair_id = vxui_id( id );
-    CLAY( vxui__clay_id_from_hash( pair_id ), {
-        .layout = {
-            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
-            .childGap = VXUI_DEMO_INLINE_GAP,
-            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-            .layoutDirection = CLAY_LEFT_TO_RIGHT,
-        },
-    } ) {
-        VXUI_PROMPT( ctx, action_name );
-        VXUI_LABEL( ctx, label_key, label_cfg ? *label_cfg : ( vxui_label_cfg ) { 0 } );
-    }
-}
-
-static void vxui_demo_emit_status_summary(
-    vxui_ctx* ctx,
-    const char* id,
-    const char* locale_name_key,
-    const char* prompt_name_key,
-    const char* top_name_key,
-    int screen_count,
-    bool rtl )
-{
-    const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
-    const vxui_label_cfg meta_cfg = vxui_demo_text_style( VXUI_DEMO_FONT_ROLE_BODY, 13.0f, theme.muted_text );
-    const vxui_value_cfg value_cfg = vxui_demo_value_style( VXUI_DEMO_FONT_ROLE_BODY, 13.0f, theme.muted_text, "%.0f" );
-    const uint32_t summary_id = vxui_id( id );
-    const std::string primary_id = std::string( id ) + ".row.primary";
-    const std::string locale_id = std::string( id ) + ".locale";
-    const std::string prompts_id = std::string( id ) + ".prompts";
-    const std::string screens_id = std::string( id ) + ".screens";
-    const std::string top_id = std::string( id ) + ".top";
-    CLAY( vxui__clay_id_from_hash( summary_id ), {
-        .layout = {
-            .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
-            .padding = CLAY_PADDING_ALL( 6 ),
-            .childGap = 6,
-            .layoutDirection = CLAY_LEFT_TO_RIGHT,
-        },
-        .backgroundColor = vxui_demo_clay_color( theme.secondary_panel_fill ),
-        .cornerRadius = CLAY_CORNER_RADIUS( 8 ),
-    } ) {
-        CLAY( vxui__clay_id_from_hash( vxui_id( primary_id.c_str() ) ), {
-            .layout = {
-                .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
-                .childGap = 6,
-                .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-                .layoutDirection = vxui__resolve_dir( CLAY_LEFT_TO_RIGHT, rtl ),
-            },
-        } ) {
-            vxui_demo_emit_compact_meta_row( ctx, locale_id.c_str(), "status.label.locale", locale_name_key, rtl, &meta_cfg );
-            vxui_demo_emit_compact_meta_row( ctx, prompts_id.c_str(), "status.label.prompts", prompt_name_key, rtl, &meta_cfg );
-            CLAY( vxui__clay_id_from_hash( vxui_id( screens_id.c_str() ) ), {
-                .layout = {
-                    .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
-                },
-            } ) {
-                VXUI_VALUE( ctx, "status.label.screens", ( float ) screen_count, value_cfg );
-            }
-            vxui_demo_emit_compact_meta_row( ctx, top_id.c_str(), "status.label.top", top_name_key, rtl, &meta_cfg );
-        }
-    }
 }
 
 static void vxui_demo_emit_save_slot_row( vxui_ctx* ctx, const char* id, const char* label_key, float width, float height, bool rtl )
@@ -2285,6 +2143,7 @@ static void vxui_demo_backend_test_execute_pipeline()
     renderer->backend_test_mode = true;
     vxui_demo_render_fontcache_drawlist( renderer, nullptr );
     renderer->backend_test_mode = false;
+    // Backend conformance tests read back immediately after submission.
     glFinish();
 }
 
@@ -2327,6 +2186,7 @@ static void vxui_demo_backend_test_execute_present()
 
     glBindFramebuffer( GL_READ_FRAMEBUFFER, static_cast< GLuint >( previous_read_framebuffer ) );
     glBindFramebuffer( GL_DRAW_FRAMEBUFFER, static_cast< GLuint >( previous_draw_framebuffer ) );
+    // Backend tests require the copied present surface to be fully visible to readback.
     glFinish();
 }
 
@@ -2339,7 +2199,7 @@ static void vxui_demo_backend_test_execute_frame()
     }
     vxui_demo_clear_backend_test_surfaces( renderer, renderer->cache.use_freetype ? false : true );
     ve_fontcache_flush_drawlist( &renderer->cache );
-    ve_fontcache_configure_snap( &renderer->cache, renderer->window_size.width, renderer->window_size.height );
+    vxui_demo_configure_snap_if_needed( renderer, false );
 
     const float sx = 1.0f / renderer->window_size.width;
     const float sy = 1.0f / renderer->window_size.height;
@@ -2377,6 +2237,7 @@ static void vxui_demo_backend_test_finalise_state()
     }
     ve_fontcache_reset_transient_test_state( &renderer->cache );
     vxui_demo_clear_backend_test_surfaces( renderer, true );
+    // Backend teardown still relies on a fully quiesced GL state for follow-up checks.
     glFinish();
 }
 
@@ -2496,7 +2357,8 @@ static void vxui_demo_prepare_real_text()
     renderer->backend_test_cjk_font = -1;
     renderer->backend_test_huge_font = -1;
     ve_fontcache_init( &renderer->cache, use_freetype );
-    ve_fontcache_configure_snap( &renderer->cache, renderer->window_size.width, renderer->window_size.height );
+    renderer->snap_configured = false;
+    vxui_demo_configure_snap_if_needed( renderer, true );
     vxui_demo_load_fonts( renderer );
     vxui_demo_clear_backend_test_surfaces( renderer, true );
 }
@@ -2513,7 +2375,8 @@ static void vxui_demo_reinit_cache_for_backend_test( vxui_demo_renderer* rendere
     renderer->backend_test_cjk_font = -1;
     renderer->backend_test_huge_font = -1;
     ve_fontcache_init( &renderer->cache, use_freetype );
-    ve_fontcache_configure_snap( &renderer->cache, renderer->window_size.width, renderer->window_size.height );
+    renderer->snap_configured = false;
+    vxui_demo_configure_snap_if_needed( renderer, true );
     vxui_demo_load_fonts( renderer );
     vxui_demo_clear_backend_test_surfaces( renderer, true );
 }
@@ -2699,6 +2562,91 @@ void vxui_demo_gl_debug_event( vxui_demo_renderer* renderer, const char* label )
     }
 }
 
+static void vxui_demo_set_window_size( vxui_demo_renderer* renderer, TinyWindow::vec2_t< unsigned int > window_size )
+{
+    if ( !renderer ) {
+        return;
+    }
+    if ( window_size.width == 0 ) {
+        window_size.width = 1;
+    }
+    if ( window_size.height == 0 ) {
+        window_size.height = 1;
+    }
+
+    const bool changed =
+        renderer->window_size.width != window_size.width ||
+        renderer->window_size.height != window_size.height;
+    renderer->window_size = window_size;
+    if ( changed ) {
+        vxui_demo_configure_snap_if_needed( renderer, false );
+    }
+}
+
+static void vxui_demo_configure_snap_if_needed( vxui_demo_renderer* renderer, bool force )
+{
+    if ( !renderer ) {
+        return;
+    }
+    if ( renderer->window_size.width == 0 ) {
+        renderer->window_size.width = 1;
+    }
+    if ( renderer->window_size.height == 0 ) {
+        renderer->window_size.height = 1;
+    }
+
+    if ( !force &&
+         renderer->snap_configured &&
+         renderer->snap_configured_window_size.width == renderer->window_size.width &&
+         renderer->snap_configured_window_size.height == renderer->window_size.height ) {
+        return;
+    }
+
+    ve_fontcache_configure_snap( &renderer->cache, renderer->window_size.width, renderer->window_size.height );
+    renderer->snap_configured_window_size = renderer->window_size;
+    renderer->snap_configured = true;
+}
+
+static bool vxui_demo_cache_shader_uniforms( vxui_demo_renderer* renderer )
+{
+    if ( !renderer ) {
+        return false;
+    }
+
+    auto fetch_uniform = []( GLuint program, const char* program_name, const char* uniform_name, GLint* out_location ) -> bool
+    {
+        *out_location = glGetUniformLocation( program, uniform_name );
+        if ( *out_location >= 0 ) {
+            return true;
+        }
+        std::fprintf( stderr, "Failed to resolve uniform '%s' for program '%s'.\n", uniform_name, program_name );
+        return false;
+    };
+
+    bool ok = true;
+    ok &= fetch_uniform( renderer->primitive_program, "primitive", "u_bounds", &renderer->uniforms.primitive.bounds );
+    ok &= fetch_uniform( renderer->primitive_program, "primitive", "u_viewport", &renderer->uniforms.primitive.viewport );
+    ok &= fetch_uniform( renderer->primitive_program, "primitive", "u_size", &renderer->uniforms.primitive.size );
+    ok &= fetch_uniform( renderer->primitive_program, "primitive", "u_color", &renderer->uniforms.primitive.color );
+    ok &= fetch_uniform( renderer->primitive_program, "primitive", "u_radius", &renderer->uniforms.primitive.radius );
+    ok &= fetch_uniform( renderer->primitive_program, "primitive", "u_border", &renderer->uniforms.primitive.border );
+    ok &= fetch_uniform( renderer->fontcache_shader_blit_atlas, "fontcache-blit-atlas", "src_texture", &renderer->uniforms.blit_atlas.src_texture );
+    ok &= fetch_uniform( renderer->fontcache_shader_blit_atlas, "fontcache-blit-atlas", "region", &renderer->uniforms.blit_atlas.region );
+    ok &= fetch_uniform( renderer->fontcache_shader_draw_text, "fontcache-draw-text", "src_texture", &renderer->uniforms.draw_text.src_texture );
+    ok &= fetch_uniform( renderer->fontcache_shader_draw_text, "fontcache-draw-text", "downsample", &renderer->uniforms.draw_text.downsample );
+    ok &= fetch_uniform( renderer->fontcache_shader_draw_text, "fontcache-draw-text", "colour", &renderer->uniforms.draw_text.colour );
+    if ( !ok ) {
+        return false;
+    }
+
+    glUseProgram( renderer->fontcache_shader_blit_atlas );
+    glUniform1i( renderer->uniforms.blit_atlas.src_texture, 0 );
+    glUseProgram( renderer->fontcache_shader_draw_text );
+    glUniform1i( renderer->uniforms.draw_text.src_texture, 0 );
+    glUseProgram( 0 );
+    return true;
+}
+
 static bool vxui_demo_init_renderer( vxui_demo_renderer* renderer )
 {
     static const char* kPrimitiveVs = R"(#version 330 core
@@ -2832,6 +2780,9 @@ void main( void )
     if ( !renderer->primitive_program || !renderer->fontcache_shader_render_glyph || !renderer->fontcache_shader_blit_atlas || !renderer->fontcache_shader_draw_text ) {
         return false;
     }
+    if ( !vxui_demo_cache_shader_uniforms( renderer ) ) {
+        return false;
+    }
 
     glGenVertexArrays( 1, &renderer->vao );
     glBindVertexArray( renderer->vao );
@@ -2913,17 +2864,17 @@ static void vxui_demo_draw_primitive( vxui_demo_renderer* renderer, vxui_rect bo
 {
     glUseProgram( renderer->primitive_program );
     glBindVertexArray( renderer->vao );
-    glUniform4f( glGetUniformLocation( renderer->primitive_program, "u_bounds" ), bounds.x, bounds.y, bounds.w, bounds.h );
-    glUniform2f( glGetUniformLocation( renderer->primitive_program, "u_viewport" ), ( float ) renderer->window_size.width, ( float ) renderer->window_size.height );
-    glUniform2f( glGetUniformLocation( renderer->primitive_program, "u_size" ), bounds.w, bounds.h );
+    glUniform4f( renderer->uniforms.primitive.bounds, bounds.x, bounds.y, bounds.w, bounds.h );
+    glUniform2f( renderer->uniforms.primitive.viewport, ( float ) renderer->window_size.width, ( float ) renderer->window_size.height );
+    glUniform2f( renderer->uniforms.primitive.size, bounds.w, bounds.h );
     glUniform4f(
-        glGetUniformLocation( renderer->primitive_program, "u_color" ),
+        renderer->uniforms.primitive.color,
         color.r / 255.0f,
         color.g / 255.0f,
         color.b / 255.0f,
         color.a / 255.0f );
-    glUniform1f( glGetUniformLocation( renderer->primitive_program, "u_radius" ), radius );
-    glUniform1f( glGetUniformLocation( renderer->primitive_program, "u_border" ), border_width );
+    glUniform1f( renderer->uniforms.primitive.radius, radius );
+    glUniform1f( renderer->uniforms.primitive.border, border_width );
     glDrawArrays( GL_TRIANGLES, 0, 6 );
 }
 
@@ -2999,8 +2950,7 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
             glViewport( 0, 0, VE_FONTCACHE_ATLAS_WIDTH, VE_FONTCACHE_ATLAS_HEIGHT );
             glEnable( GL_SCISSOR_TEST );
             glScissor( 0, 0, VE_FONTCACHE_ATLAS_WIDTH, VE_FONTCACHE_ATLAS_HEIGHT );
-            glUniform1i( glGetUniformLocation( renderer->fontcache_shader_blit_atlas, "src_texture" ), 0 );
-            glUniform1ui( glGetUniformLocation( renderer->fontcache_shader_blit_atlas, "region" ), dcall.region );
+            glUniform1ui( renderer->uniforms.blit_atlas.region, dcall.region );
             glActiveTexture( GL_TEXTURE0 );
             glBindTexture( GL_TEXTURE_2D, renderer->fontcache_fbo_texture[ 0 ] );
             glDisable( GL_FRAMEBUFFER_SRGB );
@@ -3021,14 +2971,13 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
             } else {
                 glDisable( GL_SCISSOR_TEST );
             }
-            glUniform1i( glGetUniformLocation( renderer->fontcache_shader_draw_text, "src_texture" ), 0 );
             GLuint src_tex = 0;
 #ifdef VE_FONTCACHE_FREETYPE_RASTERISATION
             if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_CPU_CACHED ) {
                 if ( dcall.atlas_page >= ( uint32_t ) renderer->cpu_atlas_textures.size() ) {
                     std::fprintf( stderr, "vxui_demo: TARGET_CPU_CACHED draw arrived but cpu_atlas_textures[%u] not created\n", dcall.atlas_page );
                 } else {
-                    glUniform1ui( glGetUniformLocation( renderer->fontcache_shader_draw_text, "downsample" ), 0 );
+                    glUniform1ui( renderer->uniforms.draw_text.downsample, 0 );
                     glActiveTexture( GL_TEXTURE0 );
                     glBindTexture( GL_TEXTURE_2D, renderer->cpu_atlas_textures[ dcall.atlas_page ] );
                     src_tex = renderer->cpu_atlas_textures[ dcall.atlas_page ];
@@ -3036,12 +2985,12 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
             } else
 #endif
             {
-                glUniform1ui( glGetUniformLocation( renderer->fontcache_shader_draw_text, "downsample" ), dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED ? 1u : 0u );
+                glUniform1ui( renderer->uniforms.draw_text.downsample, dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED ? 1u : 0u );
                 glActiveTexture( GL_TEXTURE0 );
                 src_tex = dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED ? renderer->fontcache_fbo_texture[ 0 ] : renderer->fontcache_fbo_texture[ 1 ];
                 glBindTexture( GL_TEXTURE_2D, src_tex );
             }
-            glUniform4fv( glGetUniformLocation( renderer->fontcache_shader_draw_text, "colour" ), 1, dcall.colour );
+            glUniform4fv( renderer->uniforms.draw_text.colour, 1, dcall.colour );
 #ifdef VE_FONTCACHE_FREETYPE_RASTERISATION
         } else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_ATLAS_PAGE_TEXTURE_CREATE ) {
             begin_pass_group( 3, "VEFC CPU Atlas Create" );
@@ -3578,7 +3527,8 @@ int main( int argc, char** argv )
          return 1;
      }
 
-    ve_fontcache_configure_snap( &renderer.cache, renderer.window_size.width, renderer.window_size.height );
+    renderer.snap_configured = false;
+    vxui_demo_configure_snap_if_needed( &renderer, true );
 
     if ( vefc_backend_test_mode ) {
         // Setup backend test FBO for VEFC backend tests
@@ -3614,6 +3564,7 @@ int main( int argc, char** argv )
             vxui_demo_renderer* r = g_vxui_demo_backend_test_renderer;
             if ( r ) {
                 vxui_demo_clear_backend_test_surfaces( r, true );
+                // Backend tests immediately inspect the reset surfaces.
                 glFinish();
             }
         };
@@ -3847,6 +3798,7 @@ int main( int argc, char** argv )
 #endif
         vxui_demo_present_draw_list( &renderer, &ctx, &list );
         window->SwapDrawBuffers();
+        // Shot capture reads back immediately after the single presented frame.
         glFinish();
 
         char capture_error[ 256 ] = {};
@@ -3877,22 +3829,21 @@ int main( int argc, char** argv )
     }
 
     std::chrono::steady_clock::time_point previous = std::chrono::steady_clock::now();
+    const std::chrono::steady_clock::duration kInteractiveFrameBudget =
+        std::chrono::duration_cast< std::chrono::steady_clock::duration >( std::chrono::duration< double >( 1.0 / 60.0 ) );
     while ( !window->shouldClose ) {
+        const std::chrono::steady_clock::time_point frame_start = std::chrono::steady_clock::now();
         manager->PollForEvents();
-        renderer.window_size = window->settings.resolution;
-        if ( renderer.window_size.width == 0 ) renderer.window_size.width = 1;
-        if ( renderer.window_size.height == 0 ) renderer.window_size.height = 1;
+        vxui_demo_set_window_size( &renderer, window->settings.resolution );
         ctx.cfg.screen_width = ( int ) renderer.window_size.width;
         ctx.cfg.screen_height = ( int ) renderer.window_size.height;
-        ve_fontcache_configure_snap( &renderer.cache, renderer.window_size.width, renderer.window_size.height );
 
-        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-        float dt = std::chrono::duration< float >( now - previous ).count();
-        previous = now;
+        float dt = std::chrono::duration< float >( frame_start - previous ).count();
+        previous = frame_start;
         if ( dt <= 0.0f || dt > 0.1f ) {
             dt = 1.0f / 60.0f;
         }
-        uint64_t now_ms = ( uint64_t ) std::chrono::duration_cast< std::chrono::milliseconds >( now.time_since_epoch() ).count();
+        uint64_t now_ms = ( uint64_t ) std::chrono::duration_cast< std::chrono::milliseconds >( frame_start.time_since_epoch() ).count();
 
 #ifdef VXUI_DEBUG
         if ( ctx.debug_seq_editor.selected_seq != app.last_selected_seq ) {
@@ -4163,6 +4114,11 @@ int main( int argc, char** argv )
             window->shouldClose = true;
         }
         window->SwapDrawBuffers();
+        const std::chrono::steady_clock::time_point frame_end = std::chrono::steady_clock::now();
+        const std::chrono::steady_clock::time_point target_end = frame_start + kInteractiveFrameBudget;
+        if ( frame_end < target_end ) {
+            std::this_thread::sleep_until( target_end );
+        }
     }
 
     Clay_SetCurrentContext( nullptr );
@@ -4220,6 +4176,24 @@ static vxui_menu_style vxui_demo_menu_style_form_deck( float label_lane_width )
     style.padding_x = 14.0f;
     style.padding_y = 10.0f;
     vxui_demo_apply_form_menu_theme( style );
+    return style;
+}
+
+static vxui_menu_style vxui_demo_menu_style_footer_strip( void )
+{
+    const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
+    vxui_menu_style style = vxui_menu_style_footer_strip();
+    style.body_font_id = VXUI_DEMO_FONT_ROLE_BODY;
+    style.title_font_id = VXUI_DEMO_FONT_ROLE_SECTION;
+    style.badge_font_id = VXUI_DEMO_FONT_ROLE_BODY;
+    style.section_gap = ( float ) VXUI_DEMO_LAYOUT_SECTION_GAP;
+    style.panel_fill_color = theme.utility_fill;
+    style.row_border_color = theme.utility_border;
+    style.row_focus_border_color = theme.utility_border;
+    style.text_color = theme.utility_text;
+    style.focused_text_color = theme.utility_text;
+    style.secondary_text_color = theme.muted_text;
+    style.prompt_text_color = theme.utility_text;
     return style;
 }
 
@@ -4514,67 +4488,82 @@ static void vxui_demo_emit_stat_bar( vxui_ctx* ctx, const char* id, const char* 
     }
 }
 
-static void vxui_demo_emit_status_panel( vxui_ctx* ctx, const char* id, const vxui_demo_app* app, bool rtl )
-{
-    const char* locale_name_key = vxui_demo_locale_name_key( app ? app->locale_index : 0 );
-    const char* prompt_name_key = vxui_demo_prompt_name_key( app ? app->prompt_table_index : 0 );
-    const char* top_name_key = vxui_demo_footer_top_name( app, ctx );
-    const int screen_count = ctx ? ctx->screen_count : 0;
-    vxui_demo_emit_status_summary( ctx, id, locale_name_key, prompt_name_key, top_name_key, screen_count, rtl );
-}
-
-template <typename TEmitChildren>
-static void vxui_demo_emit_screen_surface(
-    vxui_ctx* ctx,
-    const char* root_id,
-    const char* surface_id,
-    float surface_width,
-    float surface_max_height,
-    bool rtl,
-    bool background_scanline,
-    TEmitChildren&& emit_children )
+static vxui_menu_surface_cfg vxui_demo_make_surface_cfg( float surface_width, float surface_max_height )
 {
     const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
-    CLAY( vxui__clay_id_from_hash( vxui_id( root_id ) ), {
-        .layout = {
-            .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( 0 ) },
-            .padding = CLAY_PADDING_ALL( VXUI_DEMO_OUTER_PADDING ),
-            .childAlignment = { .x = CLAY_ALIGN_X_CENTER },
-            .layoutDirection = CLAY_TOP_TO_BOTTOM,
-        },
-        .backgroundColor = vxui_demo_clay_color( theme.app_background_base ),
-    } ) {
-        if ( background_scanline ) {
-            vxui_demo_decl_scope root_decl( ctx, vxui_id( root_id ) );
-            VXUI_TRAIT( VXUI_TRAIT_SCANLINE, ( vxui_demo_scanline ) { .spacing = 10.0f, .alpha = theme.surface_scanline_alpha * 0.45f } );
-        }
-        CLAY( vxui__clay_id_from_hash( vxui_id( surface_id ) ), {
-            .layout = {
-                .sizing = { CLAY_SIZING_FIXED( surface_width ), CLAY_SIZING_GROW( 0, surface_max_height ) },
-                .padding = { VXUI_DEMO_SURFACE_PADDING_X, VXUI_DEMO_SURFACE_PADDING_X, VXUI_DEMO_SURFACE_PADDING_Y, VXUI_DEMO_SURFACE_PADDING_Y },
-                .childGap = VXUI_DEMO_SCREEN_GAP,
-                .childAlignment = { .x = rtl ? CLAY_ALIGN_X_RIGHT : CLAY_ALIGN_X_LEFT },
-                .layoutDirection = CLAY_TOP_TO_BOTTOM,
-            },
-            .backgroundColor = vxui_demo_clay_color( theme.primary_panel_fill ),
-            .cornerRadius = CLAY_CORNER_RADIUS( 18 ),
-            .border = vxui_demo_panel_border( theme.primary_panel_border, 1 ),
-        } ) {
-            emit_children();
-        }
-    }
+    return ( vxui_menu_surface_cfg ) {
+        surface_width,
+        surface_max_height,
+        ( float ) VXUI_DEMO_OUTER_PADDING,
+        ( float ) VXUI_DEMO_SURFACE_PADDING_X,
+        ( float ) VXUI_DEMO_SURFACE_PADDING_Y,
+        ( float ) VXUI_DEMO_SCREEN_GAP,
+        18.0f,
+        1.0f,
+        theme.app_background_base,
+        theme.primary_panel_fill,
+        theme.primary_panel_border,
+    };
+}
+
+static void vxui_demo_emit_surface_scanline( vxui_ctx* ctx, const char* root_id )
+{
+    const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
+    vxui_demo_decl_scope root_decl( ctx, vxui_id( root_id ) );
+    VXUI_TRAIT( VXUI_TRAIT_SCANLINE, ( vxui_demo_scanline ) { .spacing = 10.0f, .alpha = theme.surface_scanline_alpha * 0.45f } );
 }
 
 static void vxui_demo_render_boot_screen( vxui_demo_app* app, vxui_ctx* ctx )
 {
     const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
-    const bool rtl = ctx->rtl;
     const bool background_scanline = app ? app->scanline_index != 0 : true;
     const float viewport_width = std::max( 0.0f, ( float ) ctx->cfg.screen_width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
     const vxui_demo_surface_metrics surface_metrics = vxui_demo_compute_surface_metrics( viewport_width, ctx->locale, VXUI_DEMO_SURFACE_BOOT );
     const float surface_max_height = std::max( 0.0f, ( float ) ctx->cfg.screen_height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
 
-    vxui_demo_emit_screen_surface( ctx, "boot", "boot.surface", surface_metrics.surface_width, surface_max_height, rtl, background_scanline, [&]() {
+    if ( background_scanline ) {
+        vxui_demo_emit_surface_scanline( ctx, "boot" );
+    }
+    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, surface_max_height );
+    vxui_menu_surface_begin( ctx, "boot", "boot.surface", &surface_cfg );
+    {
+        const std::string screen_count_text = std::to_string( ctx ? ctx->screen_count : 0 );
+        vxui_menu_prompt_item footer_prompts[] = {
+            { "action.confirm", "boot.line.2", false, "boot.footer.prompt.confirm" },
+        };
+        vxui_menu_status_item footer_status[] = {
+            { "status.short.locale", vxui_demo_footer_locale_key( app ? app->locale_index : 0 ), VXUI_MENU_STATUS_PRIMARY, false, false, "boot.footer.status.locale" },
+            { "status.short.prompts", vxui_demo_footer_prompt_key( app ? app->prompt_table_index : 0 ), VXUI_MENU_STATUS_SECONDARY, true, false, "boot.footer.status.prompts" },
+            { "status.short.screens", screen_count_text.c_str(), VXUI_MENU_STATUS_SECONDARY, true, false, "boot.footer.status.screens" },
+            { "status.short.top", vxui_demo_footer_top_name( app, ctx ), VXUI_MENU_STATUS_PRIMARY, false, false, "boot.footer.status.top" },
+        };
+        vxui_menu_footer_cfg footer_cfg = {
+            footer_prompts,
+            ( int ) ( sizeof( footer_prompts ) / sizeof( footer_prompts[ 0 ] ) ),
+            footer_status,
+            ( int ) ( sizeof( footer_status ) / sizeof( footer_status[ 0 ] ) ),
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            surface_max_height <= 680.0f ? 3 : 4,
+            false,
+        };
+        vxui_menu_style footer_style = vxui_demo_menu_style_footer_strip();
+        vxui_menu_screen_cfg screen_cfg = {
+            VXUI_MENU_SHELL_FORM,
+            &footer_style,
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            680.0f,
+            0.0f,
+            false,
+            {},
+            {},
+            {},
+            {},
+            {},
+            footer_cfg,
+        };
+        vxui_menu_state shell_state = {};
+
+        vxui_menu_screen_begin( ctx, &shell_state, "boot.shell", &screen_cfg );
         VXUI_LABEL( ctx, "boot.line.0", ( vxui_label_cfg ) {
             .font_id = VXUI_DEMO_FONT_ROLE_TITLE,
             .font_size = 42.0f,
@@ -4592,35 +4581,61 @@ static void vxui_demo_render_boot_screen( vxui_demo_app* app, vxui_ctx* ctx )
         vxui_demo_emit_stat_bar( ctx, "boot.bar.sync", "Link Sync", 0.92f );
         vxui_demo_emit_stat_bar( ctx, "boot.bar.safety", "Safety Envelope", 0.78f );
         vxui_demo_emit_stat_bar( ctx, "boot.bar.radar", "Radar Uplink", 0.84f );
-        VXUI( ctx, "boot.footer", {
-            .layout = {
-                .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
-                .padding = CLAY_PADDING_ALL( 16 ),
-                .childGap = 10,
-                .layoutDirection = CLAY_TOP_TO_BOTTOM,
-            },
-            .backgroundColor = vxui_demo_clay_color( theme.utility_fill ),
-            .cornerRadius = CLAY_CORNER_RADIUS( 12 ),
-            .border = vxui_demo_panel_border( theme.utility_border, 1 ),
-        } ) {
-            const vxui_label_cfg prompt_cfg = vxui_demo_text_style( VXUI_DEMO_FONT_ROLE_BODY, 18.0f, theme.utility_text );
-            vxui_demo_emit_prompt_pair( ctx, "boot.prompt.confirm", "action.confirm", "boot.line.2", &prompt_cfg );
-            vxui_demo_emit_status_panel( ctx, "boot.status", app, rtl );
-        }
-    } );
+        vxui_menu_footer( ctx, "boot.footer", &screen_cfg.footer );
+        vxui_menu_screen_end( ctx, &shell_state );
+    }
+    vxui_menu_surface_end( ctx );
 }
 
 static void vxui_demo_render_title_screen( vxui_demo_app* app, vxui_ctx* ctx, const vxui_demo_renderer* renderer )
 {
     const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
-    const bool rtl = ctx->rtl;
     const bool background_scanline = app ? app->scanline_index != 0 : true;
     const float control_height = vxui_demo_control_height( renderer, ctx->locale );
     const float viewport_width = std::max( 0.0f, ( float ) ctx->cfg.screen_width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
     const vxui_demo_surface_metrics surface_metrics = vxui_demo_compute_surface_metrics( viewport_width, ctx->locale, VXUI_DEMO_SURFACE_TITLE );
     const float surface_max_height = std::max( 0.0f, ( float ) ctx->cfg.screen_height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
 
-    vxui_demo_emit_screen_surface( ctx, "title", "title.surface", surface_metrics.surface_width, surface_max_height, rtl, background_scanline, [&]() {
+    if ( background_scanline ) {
+        vxui_demo_emit_surface_scanline( ctx, "title" );
+    }
+    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, surface_max_height );
+    vxui_menu_surface_begin( ctx, "title", "title.surface", &surface_cfg );
+    {
+        const std::string screen_count_text = std::to_string( ctx ? ctx->screen_count : 0 );
+        vxui_menu_status_item footer_status[] = {
+            { "status.short.locale", vxui_demo_footer_locale_key( app ? app->locale_index : 0 ), VXUI_MENU_STATUS_PRIMARY, false, false, "title.footer.status.locale" },
+            { "status.short.prompts", vxui_demo_footer_prompt_key( app ? app->prompt_table_index : 0 ), VXUI_MENU_STATUS_SECONDARY, true, false, "title.footer.status.prompts" },
+            { "status.short.screens", screen_count_text.c_str(), VXUI_MENU_STATUS_SECONDARY, true, false, "title.footer.status.screens" },
+            { "status.short.top", vxui_demo_footer_top_name( app, ctx ), VXUI_MENU_STATUS_PRIMARY, false, false, "title.footer.status.top" },
+        };
+        vxui_menu_footer_cfg footer_cfg = {
+            nullptr,
+            0,
+            footer_status,
+            ( int ) ( sizeof( footer_status ) / sizeof( footer_status[ 0 ] ) ),
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            surface_max_height <= 680.0f ? 3 : 4,
+            false,
+        };
+        vxui_menu_style footer_style = vxui_demo_menu_style_footer_strip();
+        vxui_menu_screen_cfg screen_cfg = {
+            VXUI_MENU_SHELL_FORM,
+            &footer_style,
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            680.0f,
+            0.0f,
+            false,
+            {},
+            {},
+            {},
+            {},
+            {},
+            footer_cfg,
+        };
+        vxui_menu_state shell_state = {};
+
+        vxui_menu_screen_begin( ctx, &shell_state, "title.shell", &screen_cfg );
         VXUI( ctx, "title.hero", {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
@@ -4671,9 +4686,11 @@ static void vxui_demo_render_title_screen( vxui_demo_app* app, vxui_ctx* ctx, co
                 vxui_demo_decl_scope title_enter_decl( ctx, vxui_id( "title.enter" ) );
                 VXUI_TRAIT( VXUI_TRAIT_GLOW, ( vxui_demo_glow ) { .padding = 6.0f, .alpha = 0.18f } );
             }
-            vxui_demo_emit_status_panel( ctx, "title.status.summary", app, rtl );
         }
-    } );
+        vxui_menu_footer( ctx, "title.footer", &screen_cfg.footer );
+        vxui_menu_screen_end( ctx, &shell_state );
+    }
+    vxui_menu_surface_end( ctx );
 }
 
 static void vxui_demo_render_main_menu_screen( vxui_demo_app* app, vxui_ctx* ctx )
@@ -4700,7 +4717,12 @@ static void vxui_demo_render_main_menu_screen( vxui_demo_app* app, vxui_ctx* ctx
     vxui_menu_style command_menu_style = menu_style;
     command_menu_style.panel_fill_color = { 0, 0, 0, 1 };
 
-    vxui_demo_emit_screen_surface( ctx, "main_menu", "main.surface", layout.surface.surface_width, layout.surface_max_height, rtl, background_scanline, [&]() {
+    if ( background_scanline ) {
+        vxui_demo_emit_surface_scanline( ctx, "main_menu" );
+    }
+    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( layout.surface.surface_width, layout.surface_max_height );
+    vxui_menu_surface_begin( ctx, "main_menu", "main.surface", &surface_cfg );
+    {
         const vxui_demo_main_menu_preview* preview = vxui_demo_current_main_menu_preview( app );
         vxui_demo_emit_main_menu_shell(
             ctx,
@@ -4756,7 +4778,8 @@ static void vxui_demo_render_main_menu_screen( vxui_demo_app* app, vxui_ctx* ctx
                 } );
                 vxui_menu_end( ctx, &app->main_menu_state );
             } );
-    } );
+    }
+    vxui_menu_surface_end( ctx );
 }
 
 static void vxui_demo_render_sortie_screen( vxui_demo_app* app, vxui_ctx* ctx )
@@ -4846,7 +4869,7 @@ static void vxui_demo_render_settings_screen( vxui_demo_app* app, vxui_ctx* ctx,
     form_style.badge_font_size = 11.0f;
     form_style.row_height = 36.0f;
     form_style.row_gap = 3.0f;
-    form_style.section_gap = 8.0f;
+    form_style.section_gap = 10.0f;
     form_style.padding_x = 12.0f;
     form_style.padding_y = 8.0f;
     form_style.lane_gap = 12.0f;
@@ -4854,7 +4877,12 @@ static void vxui_demo_render_settings_screen( vxui_demo_app* app, vxui_ctx* ctx,
     vxui_menu_style body_menu_style = form_style;
     body_menu_style.panel_fill_color = { 0, 0, 0, 1 };
 
-    vxui_demo_emit_screen_surface( ctx, "settings", "settings.surface", surface_metrics.surface_width, layout.surface_max_height, rtl, background_scanline, [&]() {
+    if ( background_scanline ) {
+        vxui_demo_emit_surface_scanline( ctx, "settings" );
+    }
+    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, layout.surface_max_height );
+    vxui_menu_surface_begin( ctx, "settings", "settings.surface", &surface_cfg );
+    {
         const std::string settings_screen_count = std::to_string( ctx ? ctx->screen_count : 0 );
         vxui_menu_prompt_item footer_prompts[] = {
             { "action.confirm", "menu.confirm", false, "settings.prompt.confirm" },
@@ -4935,7 +4963,8 @@ static void vxui_demo_render_settings_screen( vxui_demo_app* app, vxui_ctx* ctx,
         vxui_menu_primary_lane_end( ctx );
         vxui_menu_footer( ctx, "settings.footer", &footer_cfg );
         vxui_menu_screen_end( ctx, &shell_state );
-    } );
+    }
+    vxui_menu_surface_end( ctx );
 }
 
 static void vxui_demo_render_records_screen( vxui_demo_app* app, vxui_ctx* ctx )
@@ -4962,14 +4991,52 @@ static void vxui_demo_render_records_screen( vxui_demo_app* app, vxui_ctx* ctx )
 static void vxui_demo_render_credits_screen( vxui_demo_app* app, vxui_ctx* ctx, const vxui_demo_renderer* renderer )
 {
     const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
-    const bool rtl = ctx->rtl;
     const bool background_scanline = app ? app->scanline_index != 0 : true;
     const float control_height = vxui_demo_control_height( renderer, ctx->locale );
     const float viewport_width = std::max( 0.0f, ( float ) ctx->cfg.screen_width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
     const vxui_demo_surface_metrics surface_metrics = vxui_demo_compute_surface_metrics( viewport_width, ctx->locale, VXUI_DEMO_SURFACE_CREDITS );
     const float surface_max_height = std::max( 0.0f, ( float ) ctx->cfg.screen_height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
 
-    vxui_demo_emit_screen_surface( ctx, "credits", "credits.surface", surface_metrics.surface_width, surface_max_height, rtl, background_scanline, [&]() {
+    if ( background_scanline ) {
+        vxui_demo_emit_surface_scanline( ctx, "credits" );
+    }
+    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, surface_max_height );
+    vxui_menu_surface_begin( ctx, "credits", "credits.surface", &surface_cfg );
+    {
+        const std::string screen_count_text = std::to_string( ctx ? ctx->screen_count : 0 );
+        vxui_menu_status_item footer_status[] = {
+            { "status.short.locale", vxui_demo_footer_locale_key( app ? app->locale_index : 0 ), VXUI_MENU_STATUS_PRIMARY, false, false, "credits.footer.status.locale" },
+            { "status.short.prompts", vxui_demo_footer_prompt_key( app ? app->prompt_table_index : 0 ), VXUI_MENU_STATUS_SECONDARY, true, false, "credits.footer.status.prompts" },
+            { "status.short.screens", screen_count_text.c_str(), VXUI_MENU_STATUS_SECONDARY, true, false, "credits.footer.status.screens" },
+            { "status.short.top", vxui_demo_footer_top_name( app, ctx ), VXUI_MENU_STATUS_PRIMARY, false, false, "credits.footer.status.top" },
+        };
+        vxui_menu_footer_cfg footer_cfg = {
+            nullptr,
+            0,
+            footer_status,
+            ( int ) ( sizeof( footer_status ) / sizeof( footer_status[ 0 ] ) ),
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            surface_max_height <= 680.0f ? 3 : 4,
+            false,
+        };
+        vxui_menu_style footer_style = vxui_demo_menu_style_footer_strip();
+        vxui_menu_screen_cfg screen_cfg = {
+            VXUI_MENU_SHELL_FORM,
+            &footer_style,
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            680.0f,
+            0.0f,
+            false,
+            {},
+            {},
+            {},
+            {},
+            {},
+            footer_cfg,
+        };
+        vxui_menu_state shell_state = {};
+
+        vxui_menu_screen_begin( ctx, &shell_state, "credits.shell", &screen_cfg );
         VXUI( ctx, "credits.header", {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
@@ -4998,7 +5065,7 @@ static void vxui_demo_render_credits_screen( vxui_demo_app* app, vxui_ctx* ctx, 
                 .font_size = 24.0f,
                 .color = theme.section_text,
             } );
-            CLAY( vxui__clay_id_from_hash( vxui_id( "credits.body_viewport" ) ), {
+            VXUI( ctx, "credits.body_viewport", {
                 .layout = {
                     .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( 120.0f ) },
                     .layoutDirection = CLAY_TOP_TO_BOTTOM,
@@ -5037,7 +5104,7 @@ static void vxui_demo_render_credits_screen( vxui_demo_app* app, vxui_ctx* ctx, 
             }
         }
 
-        VXUI( ctx, "credits.footer", {
+        VXUI( ctx, "credits.actions", {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
                 .padding = CLAY_PADDING_ALL( 18 ),
@@ -5051,15 +5118,16 @@ static void vxui_demo_render_credits_screen( vxui_demo_app* app, vxui_ctx* ctx, 
             vxui_demo_emit_action_button( ctx, "credits.back", "menu.return_command_deck", vxui_demo_open_main_menu, ( vxui_action_cfg ) {
                 .userdata = app,
             }, control_height );
-            vxui_demo_emit_status_panel( ctx, "credits.footer.status", app, rtl );
         }
-    } );
+        vxui_menu_footer( ctx, "credits.footer", &screen_cfg.footer );
+        vxui_menu_screen_end( ctx, &shell_state );
+    }
+    vxui_menu_surface_end( ctx );
 }
 
 static void vxui_demo_render_launch_stub_screen( vxui_demo_app* app, vxui_ctx* ctx )
 {
     const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
-    const bool rtl = ctx->rtl;
     const bool background_scanline = app ? app->scanline_index != 0 : true;
     const float progress = std::clamp( app->launch_timer / 1.4f, 0.0f, 1.0f );
     const float viewport_width = std::max( 0.0f, ( float ) ctx->cfg.screen_width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
@@ -5067,7 +5135,49 @@ static void vxui_demo_render_launch_stub_screen( vxui_demo_app* app, vxui_ctx* c
     const float surface_max_height = std::max( 0.0f, ( float ) ctx->cfg.screen_height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
     const vxui_demo_mission& mission = VXUI_DEMO_MISSIONS[ std::clamp( app->selected_mission_index, 0, 3 ) ];
 
-    vxui_demo_emit_screen_surface( ctx, "launch_stub", "launch_stub.surface", surface_metrics.surface_width, surface_max_height, rtl, background_scanline, [&]() {
+    if ( background_scanline ) {
+        vxui_demo_emit_surface_scanline( ctx, "launch_stub" );
+    }
+    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, surface_max_height );
+    vxui_menu_surface_begin( ctx, "launch_stub", "launch_stub.surface", &surface_cfg );
+    {
+        const std::string screen_count_text = std::to_string( ctx ? ctx->screen_count : 0 );
+        vxui_menu_prompt_item footer_prompts[] = {
+            { "action.confirm", "launch.prompt", false, "launch_stub.footer.prompt.confirm" },
+        };
+        vxui_menu_status_item footer_status[] = {
+            { "status.short.locale", vxui_demo_footer_locale_key( app ? app->locale_index : 0 ), VXUI_MENU_STATUS_PRIMARY, false, false, "launch_stub.footer.status.locale" },
+            { "status.short.prompts", vxui_demo_footer_prompt_key( app ? app->prompt_table_index : 0 ), VXUI_MENU_STATUS_SECONDARY, true, false, "launch_stub.footer.status.prompts" },
+            { "status.short.screens", screen_count_text.c_str(), VXUI_MENU_STATUS_SECONDARY, true, false, "launch_stub.footer.status.screens" },
+            { "status.short.top", vxui_demo_footer_top_name( app, ctx ), VXUI_MENU_STATUS_PRIMARY, false, false, "launch_stub.footer.status.top" },
+        };
+        vxui_menu_footer_cfg footer_cfg = {
+            footer_prompts,
+            ( int ) ( sizeof( footer_prompts ) / sizeof( footer_prompts[ 0 ] ) ),
+            footer_status,
+            ( int ) ( sizeof( footer_status ) / sizeof( footer_status[ 0 ] ) ),
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            surface_max_height <= 680.0f ? 3 : 4,
+            false,
+        };
+        vxui_menu_style footer_style = vxui_demo_menu_style_footer_strip();
+        vxui_menu_screen_cfg screen_cfg = {
+            VXUI_MENU_SHELL_FORM,
+            &footer_style,
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            680.0f,
+            0.0f,
+            false,
+            {},
+            {},
+            {},
+            {},
+            {},
+            footer_cfg,
+        };
+        vxui_menu_state shell_state = {};
+
+        vxui_menu_screen_begin( ctx, &shell_state, "launch_stub.shell", &screen_cfg );
         VXUI( ctx, "launch_stub.header", {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
@@ -5084,28 +5194,15 @@ static void vxui_demo_render_launch_stub_screen( vxui_demo_app* app, vxui_ctx* c
         }
         VXUI_LABEL( ctx, "Launch path is a stub front-end handoff; no gameplay runtime exists in this sample.", vxui_demo_text_style( VXUI_DEMO_FONT_ROLE_BODY, 20.0f, theme.body_text ) );
         vxui_demo_emit_stat_bar( ctx, "launch_stub.progress", "Launch Sync", progress );
-        VXUI( ctx, "launch_stub.footer", {
-            .layout = {
-                .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
-                .padding = CLAY_PADDING_ALL( 18 ),
-                .childGap = 10,
-                .layoutDirection = CLAY_TOP_TO_BOTTOM,
-            },
-            .backgroundColor = vxui_demo_clay_color( theme.utility_fill ),
-            .cornerRadius = CLAY_CORNER_RADIUS( 12 ),
-            .border = vxui_demo_panel_border( theme.utility_border, 1 ),
-        } ) {
-            const vxui_label_cfg prompt_cfg = vxui_demo_text_style( VXUI_DEMO_FONT_ROLE_BODY, 18.0f, theme.utility_text );
-            vxui_demo_emit_prompt_pair( ctx, "launch_stub.prompt.confirm", "action.confirm", "launch.prompt", &prompt_cfg );
-            vxui_demo_emit_status_panel( ctx, "launch_stub.footer.status", app, rtl );
-        }
-    } );
+        vxui_menu_footer( ctx, "launch_stub.footer", &screen_cfg.footer );
+        vxui_menu_screen_end( ctx, &shell_state );
+    }
+    vxui_menu_surface_end( ctx );
 }
 
 static void vxui_demo_render_results_stub_screen( vxui_demo_app* app, vxui_ctx* ctx, const vxui_demo_renderer* renderer )
 {
     const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
-    const bool rtl = ctx->rtl;
     const bool background_scanline = app ? app->scanline_index != 0 : true;
     const float control_height = vxui_demo_control_height( renderer, ctx->locale );
     const float viewport_width = std::max( 0.0f, ( float ) ctx->cfg.screen_width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
@@ -5113,7 +5210,49 @@ static void vxui_demo_render_results_stub_screen( vxui_demo_app* app, vxui_ctx* 
     const float surface_max_height = std::max( 0.0f, ( float ) ctx->cfg.screen_height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
     const vxui_demo_record& record = VXUI_DEMO_RECORDS[ std::clamp( app->records_entry_index, 0, 3 ) ];
 
-    vxui_demo_emit_screen_surface( ctx, "results_stub", "results_stub.surface", surface_metrics.surface_width, surface_max_height, rtl, background_scanline, [&]() {
+    if ( background_scanline ) {
+        vxui_demo_emit_surface_scanline( ctx, "results_stub" );
+    }
+    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, surface_max_height );
+    vxui_menu_surface_begin( ctx, "results_stub", "results_stub.surface", &surface_cfg );
+    {
+        const std::string screen_count_text = std::to_string( ctx ? ctx->screen_count : 0 );
+        vxui_menu_prompt_item footer_prompts[] = {
+            { "action.confirm", "results.prompt", false, "results_stub.footer.prompt.confirm" },
+        };
+        vxui_menu_status_item footer_status[] = {
+            { "status.short.locale", vxui_demo_footer_locale_key( app ? app->locale_index : 0 ), VXUI_MENU_STATUS_PRIMARY, false, false, "results_stub.footer.status.locale" },
+            { "status.short.prompts", vxui_demo_footer_prompt_key( app ? app->prompt_table_index : 0 ), VXUI_MENU_STATUS_SECONDARY, true, false, "results_stub.footer.status.prompts" },
+            { "status.short.screens", screen_count_text.c_str(), VXUI_MENU_STATUS_SECONDARY, true, false, "results_stub.footer.status.screens" },
+            { "status.short.top", vxui_demo_footer_top_name( app, ctx ), VXUI_MENU_STATUS_PRIMARY, false, false, "results_stub.footer.status.top" },
+        };
+        vxui_menu_footer_cfg footer_cfg = {
+            footer_prompts,
+            ( int ) ( sizeof( footer_prompts ) / sizeof( footer_prompts[ 0 ] ) ),
+            footer_status,
+            ( int ) ( sizeof( footer_status ) / sizeof( footer_status[ 0 ] ) ),
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            surface_max_height <= 680.0f ? 3 : 4,
+            false,
+        };
+        vxui_menu_style footer_style = vxui_demo_menu_style_footer_strip();
+        vxui_menu_screen_cfg screen_cfg = {
+            VXUI_MENU_SHELL_FORM,
+            &footer_style,
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            680.0f,
+            0.0f,
+            false,
+            {},
+            {},
+            {},
+            {},
+            {},
+            footer_cfg,
+        };
+        vxui_menu_state shell_state = {};
+
+        vxui_menu_screen_begin( ctx, &shell_state, "results_stub.shell", &screen_cfg );
         VXUI( ctx, "results_stub.header", {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
@@ -5130,7 +5269,7 @@ static void vxui_demo_render_results_stub_screen( vxui_demo_app* app, vxui_ctx* 
             VXUI_LABEL( ctx, record.clear_text, vxui_demo_text_style( VXUI_DEMO_FONT_ROLE_BODY, 20.0f, theme.success_text ) );
         }
         VXUI_LABEL( ctx, "The front-end loop is complete: sortie selection, launch handoff, and debrief all return to the command deck without hidden gameplay state.", vxui_demo_text_style( VXUI_DEMO_FONT_ROLE_BODY, 20.0f, theme.body_text ) );
-        VXUI( ctx, "results_stub.footer", {
+        VXUI( ctx, "results_stub.actions", {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
                 .padding = CLAY_PADDING_ALL( 18 ),
@@ -5144,11 +5283,11 @@ static void vxui_demo_render_results_stub_screen( vxui_demo_app* app, vxui_ctx* 
             vxui_demo_emit_action_button( ctx, "results_stub.return", "menu.return_command_deck", vxui_demo_open_main_menu, ( vxui_action_cfg ) {
                 .userdata = app,
             }, control_height );
-            const vxui_label_cfg prompt_cfg = vxui_demo_text_style( VXUI_DEMO_FONT_ROLE_BODY, 18.0f, theme.utility_text );
-            vxui_demo_emit_prompt_pair( ctx, "results_stub.prompt.confirm", "action.confirm", "results.prompt", &prompt_cfg );
-            vxui_demo_emit_status_panel( ctx, "results_stub.footer.status", app, rtl );
         }
-    } );
+        vxui_menu_footer( ctx, "results_stub.footer", &screen_cfg.footer );
+        vxui_menu_screen_end( ctx, &shell_state );
+    }
+    vxui_menu_surface_end( ctx );
 }
 
 static void vxui_demo_render_frontend( vxui_demo_app* app, vxui_demo_renderer* renderer, vxui_ctx* ctx )

@@ -284,16 +284,17 @@ inline void vxui_demo_emit_main_menu_shell(
     const bool compact_help = layout.surface_max_height <= 648.0f || tight_preview_width;
     const vxui_demo_controls_block_copy help_copy = vxui_demo_controls_block_copy_for_locale( locale, compact_help );
     const int help_line_count = vxui_demo_controls_block_visible_line_count( help_copy );
+    const int compact_help_line_count = tight_preview_width ? std::min( help_line_count, 2 ) : ( compact_help ? std::min( help_line_count, 3 ) : help_line_count );
 
     vxui_menu_style shell_style = vxui_demo_make_title_deck_menu_style( visuals.body_font_id, visuals.title_font_id );
     shell_style.title_font_id = visuals.title_font_id;
     shell_style.body_font_id = visuals.body_font_id;
     shell_style.badge_font_id = visuals.body_font_id;
-    shell_style.row_gap = compact_vertical ? 8.0f : 10.0f;
-    shell_style.section_gap = compact_vertical ? 10.0f : 14.0f;
+    shell_style.row_gap = compact_vertical ? 6.0f : 8.0f;
+    shell_style.section_gap = compact_vertical ? 8.0f : 10.0f;
     shell_style.lane_gap = layout.deck_gap;
-    shell_style.padding_x = compact_vertical ? 12.0f : 16.0f;
-    shell_style.padding_y = compact_vertical ? 8.0f : 10.0f;
+    shell_style.padding_x = compact_vertical ? 10.0f : 12.0f;
+    shell_style.padding_y = compact_vertical ? 6.0f : 8.0f;
 
     vxui_menu_prompt_item prompt_items[] = {
         { "action.confirm", copy.confirm_label, false, "main.prompt.confirm" },
@@ -312,7 +313,7 @@ inline void vxui_demo_emit_main_menu_shell(
         help_copy.title,
         help_copy.lines,
         help_line_count,
-        compact_help ? std::min( help_line_count, 3 ) : help_line_count,
+        compact_help_line_count,
         false,
     };
     vxui_menu_preview_cfg preview_cfg = {
@@ -324,7 +325,7 @@ inline void vxui_demo_emit_main_menu_shell(
         preview.body,
         preview_compact ? 2 : 3,
         2,
-        nullptr,
+        &help_cfg,
         false,
         "main.preview_header",
         "main.preview_body",
@@ -363,7 +364,6 @@ inline void vxui_demo_emit_main_menu_shell(
 
     vxui_menu_secondary_lane_begin( ctx, "main.preview_panel", &screen_cfg.secondary_lane );
     vxui_menu_preview( ctx, "main.preview", &preview_cfg );
-    vxui_menu_help_legend( ctx, "main.help_legend", &help_cfg );
     vxui_menu_secondary_lane_end( ctx );
 
     vxui_menu_footer( ctx, "main.footer", &footer_cfg );

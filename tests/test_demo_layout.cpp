@@ -108,14 +108,26 @@ static const char* demo_layout_status_label( const char* locale, const char* key
     if ( std::strcmp( key, "status.label.locale" ) == 0 ) {
         return demo_layout_localized( locale, "Locale", "言語", "اللغة" );
     }
+    if ( std::strcmp( key, "status.short.locale" ) == 0 ) {
+        return demo_layout_localized( locale, "Loc", "言語", "لغة" );
+    }
     if ( std::strcmp( key, "status.label.prompts" ) == 0 ) {
         return demo_layout_localized( locale, "Prompts", "プロンプト", "الأزرار" );
+    }
+    if ( std::strcmp( key, "status.short.prompts" ) == 0 ) {
+        return demo_layout_localized( locale, "Input", "入力", "دخل" );
     }
     if ( std::strcmp( key, "status.label.screens" ) == 0 ) {
         return demo_layout_localized( locale, "Screens", "画面数", "الشاشات" );
     }
+    if ( std::strcmp( key, "status.short.screens" ) == 0 ) {
+        return demo_layout_localized( locale, "Views", "画面", "شاشات" );
+    }
     if ( std::strcmp( key, "status.label.top" ) == 0 ) {
         return demo_layout_localized( locale, "Top", "最上位", "الأعلى" );
+    }
+    if ( std::strcmp( key, "status.short.top" ) == 0 ) {
+        return demo_layout_localized( locale, "Top", "上位", "أعلى" );
     }
     return key;
 }
@@ -296,31 +308,33 @@ static void demo_layout_emit_screen_surface(
     bool rtl,
     TEmitChildren&& emit_children )
 {
-    CLAY( Clay_GetElementId( demo_layout_clay_string( root_id ) ), {
-        .layout = {
-            .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( 0 ) },
-            .padding = CLAY_PADDING_ALL( ( uint16_t ) VXUI_DEMO_LAYOUT_OUTER_PADDING ),
-            .childAlignment = { .x = CLAY_ALIGN_X_CENTER },
-            .layoutDirection = CLAY_TOP_TO_BOTTOM,
-        },
-    } ) {
-        CLAY( Clay_GetElementId( demo_layout_clay_string( surface_id ) ), {
-            .layout = {
-                .sizing = { CLAY_SIZING_FIXED( surface_width ), CLAY_SIZING_FIXED( surface_height ) },
-                .padding = {
-                    ( uint16_t ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_X,
-                    ( uint16_t ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_X,
-                    ( uint16_t ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_Y,
-                    ( uint16_t ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_Y,
-                },
-                .childGap = ( uint16_t ) VXUI_DEMO_LAYOUT_SECTION_GAP,
-                .childAlignment = { .x = rtl ? CLAY_ALIGN_X_RIGHT : CLAY_ALIGN_X_LEFT },
-                .layoutDirection = CLAY_TOP_TO_BOTTOM,
-            },
-        } ) {
-            emit_children();
-        }
-    }
+    ( void ) rtl;
+    const vxui_menu_surface_cfg cfg = {
+        surface_width,
+        surface_height,
+        ( float ) VXUI_DEMO_LAYOUT_OUTER_PADDING,
+        ( float ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_X,
+        ( float ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_Y,
+        ( float ) VXUI_DEMO_LAYOUT_SECTION_GAP,
+        18.0f,
+        1.0f,
+        { 0, 0, 0, 0 },
+        { 0, 0, 0, 0 },
+        { 0, 0, 0, 0 },
+    };
+    vxui_menu_surface_begin( &fixture->ctx, root_id, surface_id, &cfg );
+    emit_children();
+    vxui_menu_surface_end( &fixture->ctx );
+}
+
+static vxui_menu_style demo_layout_footer_style( void )
+{
+    vxui_menu_style style = vxui_menu_style_footer_strip();
+    style.body_font_id = VXUI_TEST_FONT_ROLE_BODY;
+    style.title_font_id = VXUI_TEST_FONT_ROLE_BODY;
+    style.badge_font_id = VXUI_TEST_FONT_ROLE_BODY;
+    style.section_gap = ( float ) VXUI_DEMO_LAYOUT_SECTION_GAP;
+    return style;
 }
 
 static const char* demo_layout_detail_text( demo_layout_fixture* fixture, const char* locale )
@@ -465,6 +479,45 @@ static void demo_layout_render_boot( demo_layout_fixture* fixture, const demo_la
         vxui_demo_compute_surface_metrics( viewport_width, test_case.locale, VXUI_DEMO_SURFACE_BOOT );
 
     demo_layout_emit_screen_surface( fixture, "boot", "boot.surface", metrics.surface_width, surface_height, rtl, [&]() {
+        const char* screen_count_text = demo_layout_store( fixture, std::to_string( fixture->ctx.screen_count ) );
+        const char* prompt_label =
+            demo_layout_store_localized( fixture, test_case.locale, "Press confirm to skip handshake", "決定でハンドシェイクをスキップ", "اضغط تأكيد لتجاوز المصافحة" );
+        vxui_menu_prompt_item footer_prompts[] = {
+            { "action.confirm", prompt_label, false, "boot.footer.prompt.confirm" },
+        };
+        vxui_menu_status_item footer_status[] = {
+            { demo_layout_status_label( test_case.locale, "status.short.locale" ), demo_layout_locale_name( test_case.locale ), VXUI_MENU_STATUS_PRIMARY, false, false, "boot.footer.status.locale" },
+            { demo_layout_status_label( test_case.locale, "status.short.prompts" ), demo_layout_prompt_name( test_case.locale, test_case.prompt_table_index ), VXUI_MENU_STATUS_SECONDARY, true, false, "boot.footer.status.prompts" },
+            { demo_layout_status_label( test_case.locale, "status.short.screens" ), screen_count_text, VXUI_MENU_STATUS_SECONDARY, true, false, "boot.footer.status.screens" },
+            { demo_layout_status_label( test_case.locale, "status.short.top" ), demo_layout_screen_name( test_case.locale, test_case.screen_name ), VXUI_MENU_STATUS_PRIMARY, false, false, "boot.footer.status.top" },
+        };
+        vxui_menu_footer_cfg footer_cfg = {
+            footer_prompts,
+            ( int ) ( sizeof( footer_prompts ) / sizeof( footer_prompts[ 0 ] ) ),
+            footer_status,
+            ( int ) ( sizeof( footer_status ) / sizeof( footer_status[ 0 ] ) ),
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            surface_height <= 680.0f ? 3 : 4,
+            false,
+        };
+        vxui_menu_style footer_style = demo_layout_footer_style();
+        vxui_menu_screen_cfg screen_cfg = {
+            VXUI_MENU_SHELL_FORM,
+            &footer_style,
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            680.0f,
+            0.0f,
+            false,
+            {},
+            {},
+            {},
+            {},
+            {},
+            footer_cfg,
+        };
+        vxui_menu_state shell_state = {};
+
+        vxui_menu_screen_begin( &fixture->ctx, &shell_state, "boot.shell", &screen_cfg );
         VXUI( &fixture->ctx, "boot.hero", {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( 180.0f ) },
@@ -478,6 +531,8 @@ static void demo_layout_render_boot( demo_layout_fixture* fixture, const demo_la
             } );
             VXUI_LABEL( &fixture->ctx, demo_layout_detail_text( fixture, test_case.locale ), ( vxui_label_cfg ) { 0 } );
         }
+        vxui_menu_footer( &fixture->ctx, "boot.footer", &screen_cfg.footer );
+        vxui_menu_screen_end( &fixture->ctx, &shell_state );
     } );
 }
 
@@ -490,6 +545,40 @@ static void demo_layout_render_title( demo_layout_fixture* fixture, const demo_l
         vxui_demo_compute_surface_metrics( viewport_width, test_case.locale, VXUI_DEMO_SURFACE_TITLE );
 
     demo_layout_emit_screen_surface( fixture, "title", "title.surface", metrics.surface_width, surface_height, rtl, [&]() {
+        const char* screen_count_text = demo_layout_store( fixture, std::to_string( fixture->ctx.screen_count ) );
+        vxui_menu_status_item footer_status[] = {
+            { demo_layout_status_label( test_case.locale, "status.short.locale" ), demo_layout_locale_name( test_case.locale ), VXUI_MENU_STATUS_PRIMARY, false, false, "title.footer.status.locale" },
+            { demo_layout_status_label( test_case.locale, "status.short.prompts" ), demo_layout_prompt_name( test_case.locale, test_case.prompt_table_index ), VXUI_MENU_STATUS_SECONDARY, true, false, "title.footer.status.prompts" },
+            { demo_layout_status_label( test_case.locale, "status.short.screens" ), screen_count_text, VXUI_MENU_STATUS_SECONDARY, true, false, "title.footer.status.screens" },
+            { demo_layout_status_label( test_case.locale, "status.short.top" ), demo_layout_screen_name( test_case.locale, test_case.screen_name ), VXUI_MENU_STATUS_PRIMARY, false, false, "title.footer.status.top" },
+        };
+        vxui_menu_footer_cfg footer_cfg = {
+            nullptr,
+            0,
+            footer_status,
+            ( int ) ( sizeof( footer_status ) / sizeof( footer_status[ 0 ] ) ),
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            surface_height <= 680.0f ? 3 : 4,
+            false,
+        };
+        vxui_menu_style footer_style = demo_layout_footer_style();
+        vxui_menu_screen_cfg screen_cfg = {
+            VXUI_MENU_SHELL_FORM,
+            &footer_style,
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            680.0f,
+            0.0f,
+            false,
+            {},
+            {},
+            {},
+            {},
+            {},
+            footer_cfg,
+        };
+        vxui_menu_state shell_state = {};
+
+        vxui_menu_screen_begin( &fixture->ctx, &shell_state, "title.shell", &screen_cfg );
         VXUI( &fixture->ctx, "title.hero", {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
@@ -512,9 +601,10 @@ static void demo_layout_render_title( demo_layout_fixture* fixture, const demo_l
                 .layoutDirection = CLAY_TOP_TO_BOTTOM,
             },
         } ) {
-            VXUI_PROMPT( &fixture->ctx, "action.confirm" );
             VXUI_LABEL( &fixture->ctx, demo_layout_store_localized( fixture, test_case.locale, "Enter command deck", "コマンドデッキへ", "الدخول إلى منصة الأوامر" ), ( vxui_label_cfg ) { 0 } );
         }
+        vxui_menu_footer( &fixture->ctx, "title.footer", &screen_cfg.footer );
+        vxui_menu_screen_end( &fixture->ctx, &shell_state );
     } );
 }
 
@@ -679,6 +769,9 @@ static void demo_layout_render_split_screen( demo_layout_fixture* fixture, const
     const char* detail_text = demo_layout_detail_text( fixture, test_case.locale );
     const char* tertiary_text =
         tertiary_id ? demo_layout_store( fixture, std::string( detail_text ) + " Auxiliary lane note." ) : nullptr;
+    const bool show_sortie_tertiary =
+        kind == VXUI_DEMO_SURFACE_SORTIE && vxui_demo_shared_use_sortie_tertiary_lane( layout, compact_detail );
+    const bool compact_shell = compact_footer || layout.surface_max_height <= 680.0f || test_case.width <= 1140;
 
     const char* screen_title = kind == VXUI_DEMO_SURFACE_SORTIE
         ? demo_layout_store_localized( fixture, test_case.locale, "Sortie", "出撃", "الطلعة" )
@@ -689,155 +782,119 @@ static void demo_layout_render_split_screen( demo_layout_fixture* fixture, const
         : demo_layout_store_localized( fixture, test_case.locale, "Records", "記録", "السجلات" );
 
     demo_layout_emit_screen_surface( fixture, root_id, surface_id, layout.surface.surface_width, layout.surface_max_height, rtl, [&]() {
-        vxui_demo_shared_emit_screen_header(
-            &fixture->ctx,
+        vxui_menu_style shell_style = vxui_demo_shared_split_deck_shell_style( visuals, layout.deck_gap, compact_shell );
+        vxui_menu_prompt_item footer_prompts[ 2 ] = {};
+        vxui_menu_status_item footer_status[ 4 ] = {};
+        std::string screen_count_text;
+        vxui_menu_footer_cfg footer_cfg = vxui_demo_shared_make_split_deck_footer_cfg(
+            footer_prompts,
+            footer_status,
+            {
+                demo_layout_locale_name( test_case.locale ),
+                demo_layout_prompt_name( test_case.locale, test_case.prompt_table_index ),
+                demo_layout_screen_name( test_case.locale, root_id ),
+                1,
+            },
+            screen_count_text,
+            compact_footer ? 3 : 4 );
+        vxui_menu_screen_cfg screen_cfg =
+            vxui_demo_shared_make_split_deck_screen_cfg( &shell_style, screen_title, layout, show_sortie_tertiary, footer_cfg );
+        vxui_menu_state shell_state = {};
+
+        vxui_menu_screen_begin( &fixture->ctx, &shell_state, deck_id, &screen_cfg );
+        vxui_menu_header( &fixture->ctx,
             kind == VXUI_DEMO_SURFACE_SORTIE ? "sortie.header"
                 : kind == VXUI_DEMO_SURFACE_LOADOUT ? "loadout.header"
                 : kind == VXUI_DEMO_SURFACE_ARCHIVES ? "archives.header"
                                                      : "records.header",
-            screen_title,
-            visuals,
-            compact_footer ? ( kind == VXUI_DEMO_SURFACE_SORTIE ? 26.0f : 28.0f ) : kind == VXUI_DEMO_SURFACE_SORTIE ? 40.0f : 38.0f,
-            compact_footer );
+            &screen_cfg.header );
 
-        CLAY( Clay_GetElementId( demo_layout_clay_string( deck_id ) ), {
+        vxui_menu_primary_lane_begin( &fixture->ctx, menu_panel_id, &screen_cfg.primary_lane );
+        vxui_menu_begin( &fixture->ctx, menu_state, menu_scope, ( vxui_menu_cfg ) {
+            .style = &form_style,
+            .viewport_height = layout.menu_viewport_height,
+        } );
+        if ( kind == VXUI_DEMO_SURFACE_SORTIE ) {
+            int mission = 0;
+            int difficulty = 1;
+            vxui_menu_option( &fixture->ctx, menu_state, "mission", demo_layout_localized( test_case.locale, "Mission", "任務", "المهمة" ), &mission, kMissionOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
+            vxui_menu_option( &fixture->ctx, menu_state, "difficulty", demo_layout_localized( test_case.locale, "Difficulty", "難易度", "الصعوبة" ), &difficulty, kDifficultyOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
+            vxui_menu_action( &fixture->ctx, menu_state, "start", demo_layout_localized( test_case.locale, "Start Sortie", "出撃開始", "ابدأ الطلعة" ), nullptr, ( vxui_menu_row_cfg ) { 0 }, ( vxui_action_cfg ) { 0 } );
+            vxui_menu_action( &fixture->ctx, menu_state, "back", demo_layout_localized( test_case.locale, "Back", "戻る", "رجوع" ), nullptr, ( vxui_menu_row_cfg ) { 0 }, ( vxui_action_cfg ) { 0 } );
+        } else if ( kind == VXUI_DEMO_SURFACE_LOADOUT ) {
+            int selection = 0;
+            vxui_menu_option( &fixture->ctx, menu_state, "ship", demo_layout_localized( test_case.locale, "Ship", "機体", "المركبة" ), &selection, kShipOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
+            vxui_menu_option( &fixture->ctx, menu_state, "primary", demo_layout_localized( test_case.locale, "Primary", "主兵装", "السلاح الأساسي" ), &selection, kLoadoutOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
+            vxui_menu_option( &fixture->ctx, menu_state, "support", demo_layout_localized( test_case.locale, "Support", "支援", "الدعم" ), &selection, kLoadoutOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
+            vxui_menu_option( &fixture->ctx, menu_state, "system", demo_layout_localized( test_case.locale, "System", "システム", "النظام" ), &selection, kLoadoutOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
+            vxui_menu_action( &fixture->ctx, menu_state, "back", demo_layout_localized( test_case.locale, "Back", "戻る", "رجوع" ), nullptr, ( vxui_menu_row_cfg ) { 0 }, ( vxui_action_cfg ) { 0 } );
+        } else if ( kind == VXUI_DEMO_SURFACE_ARCHIVES ) {
+            int selection = 0;
+            vxui_menu_option( &fixture->ctx, menu_state, "category", demo_layout_localized( test_case.locale, "Category", "カテゴリ", "الفئة" ), &selection, kArchiveOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
+            vxui_menu_option( &fixture->ctx, menu_state, "entry", demo_layout_localized( test_case.locale, "Entry", "項目", "المدخل" ), &selection, kArchiveOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
+            vxui_menu_action( &fixture->ctx, menu_state, "back", demo_layout_localized( test_case.locale, "Back", "戻る", "رجوع" ), nullptr, ( vxui_menu_row_cfg ) { 0 }, ( vxui_action_cfg ) { 0 } );
+        } else {
+            int selection = 0;
+            vxui_menu_option( &fixture->ctx, menu_state, "board", demo_layout_localized( test_case.locale, "Board", "ボード", "اللوحة" ), &selection, kRecordOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
+            vxui_menu_option( &fixture->ctx, menu_state, "run", demo_layout_localized( test_case.locale, "Run", "記録", "النتيجة" ), &selection, kRecordOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
+            vxui_menu_action( &fixture->ctx, menu_state, "back", demo_layout_localized( test_case.locale, "Back", "戻る", "رجوع" ), nullptr, ( vxui_menu_row_cfg ) { 0 }, ( vxui_action_cfg ) { 0 } );
+        }
+        for ( int i = 0; i < fixture->extra_menu_rows; ++i ) {
+            std::string row_id = "overflow_" + std::to_string( i );
+            std::string row_label = "Overflow " + std::to_string( i );
+            vxui_menu_option( &fixture->ctx, menu_state, row_id.c_str(), demo_layout_store( fixture, row_label ), &overflow_selection, kBinaryOptions, 2, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
+        }
+        vxui_menu_end( &fixture->ctx, menu_state );
+        vxui_menu_primary_lane_end( &fixture->ctx );
+
+        const char* detail_body_id = demo_layout_store( fixture, std::string( detail_id ) + ".body" );
+        vxui_menu_secondary_lane_begin( &fixture->ctx, detail_id, &screen_cfg.secondary_lane );
+        CLAY( Clay_GetElementId( demo_layout_clay_string( detail_body_id ) ), {
             .layout = {
-                .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( 200.0f ) },
-                .childGap = ( uint16_t ) layout.deck_gap,
-                .layoutDirection = CLAY_LEFT_TO_RIGHT,
+                .sizing = { CLAY_SIZING_FIXED( detail_body_width ), CLAY_SIZING_FIT( 0 ) },
+                .childGap = detail_body_gap,
+                .layoutDirection = CLAY_TOP_TO_BOTTOM,
             },
         } ) {
-            CLAY( Clay_GetElementId( demo_layout_clay_string( menu_panel_id ) ), {
-                .layout = { .sizing = { CLAY_SIZING_FIXED( layout.primary_lane_width ), CLAY_SIZING_GROW( 0 ) } },
-            } ) {
-                vxui_menu_begin( &fixture->ctx, menu_state, menu_scope, ( vxui_menu_cfg ) {
-                    .style = &form_style,
-                    .viewport_height = layout.menu_viewport_height,
-                } );
-                if ( kind == VXUI_DEMO_SURFACE_SORTIE ) {
-                    int mission = 0;
-                    int difficulty = 1;
-                    vxui_menu_option( &fixture->ctx, menu_state, "mission", demo_layout_localized( test_case.locale, "Mission", "任務", "المهمة" ), &mission, kMissionOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
-                    vxui_menu_option( &fixture->ctx, menu_state, "difficulty", demo_layout_localized( test_case.locale, "Difficulty", "難易度", "الصعوبة" ), &difficulty, kDifficultyOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
-                    vxui_menu_action( &fixture->ctx, menu_state, "start", demo_layout_localized( test_case.locale, "Start Sortie", "出撃開始", "ابدأ الطلعة" ), nullptr, ( vxui_menu_row_cfg ) { 0 }, ( vxui_action_cfg ) { 0 } );
-                    vxui_menu_action( &fixture->ctx, menu_state, "back", demo_layout_localized( test_case.locale, "Back", "戻る", "رجوع" ), nullptr, ( vxui_menu_row_cfg ) { 0 }, ( vxui_action_cfg ) { 0 } );
-                } else if ( kind == VXUI_DEMO_SURFACE_LOADOUT ) {
-                    int selection = 0;
-                    vxui_menu_option( &fixture->ctx, menu_state, "ship", demo_layout_localized( test_case.locale, "Ship", "機体", "المركبة" ), &selection, kShipOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
-                    vxui_menu_option( &fixture->ctx, menu_state, "primary", demo_layout_localized( test_case.locale, "Primary", "主兵装", "السلاح الأساسي" ), &selection, kLoadoutOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
-                    vxui_menu_option( &fixture->ctx, menu_state, "support", demo_layout_localized( test_case.locale, "Support", "支援", "الدعم" ), &selection, kLoadoutOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
-                    vxui_menu_option( &fixture->ctx, menu_state, "system", demo_layout_localized( test_case.locale, "System", "システム", "النظام" ), &selection, kLoadoutOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
-                    vxui_menu_action( &fixture->ctx, menu_state, "back", demo_layout_localized( test_case.locale, "Back", "戻る", "رجوع" ), nullptr, ( vxui_menu_row_cfg ) { 0 }, ( vxui_action_cfg ) { 0 } );
-                } else if ( kind == VXUI_DEMO_SURFACE_ARCHIVES ) {
-                    int selection = 0;
-                    vxui_menu_option( &fixture->ctx, menu_state, "category", demo_layout_localized( test_case.locale, "Category", "カテゴリ", "الفئة" ), &selection, kArchiveOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
-                    vxui_menu_option( &fixture->ctx, menu_state, "entry", demo_layout_localized( test_case.locale, "Entry", "項目", "المدخل" ), &selection, kArchiveOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
-                    vxui_menu_action( &fixture->ctx, menu_state, "back", demo_layout_localized( test_case.locale, "Back", "戻る", "رجوع" ), nullptr, ( vxui_menu_row_cfg ) { 0 }, ( vxui_action_cfg ) { 0 } );
-                } else {
-                    int selection = 0;
-                    vxui_menu_option( &fixture->ctx, menu_state, "board", demo_layout_localized( test_case.locale, "Board", "ボード", "اللوحة" ), &selection, kRecordOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
-                    vxui_menu_option( &fixture->ctx, menu_state, "run", demo_layout_localized( test_case.locale, "Run", "記録", "النتيجة" ), &selection, kRecordOptions, 3, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
-                    vxui_menu_action( &fixture->ctx, menu_state, "back", demo_layout_localized( test_case.locale, "Back", "戻る", "رجوع" ), nullptr, ( vxui_menu_row_cfg ) { 0 }, ( vxui_action_cfg ) { 0 } );
-                }
-                for ( int i = 0; i < fixture->extra_menu_rows; ++i ) {
-                    std::string row_id = "overflow_" + std::to_string( i );
-                    std::string row_label = "Overflow " + std::to_string( i );
-                    vxui_menu_option( &fixture->ctx, menu_state, row_id.c_str(), demo_layout_store( fixture, row_label ), &overflow_selection, kBinaryOptions, 2, ( vxui_menu_row_cfg ) { 0 }, ( vxui_option_cfg ) { 0 } );
-                }
-                vxui_menu_end( &fixture->ctx, menu_state );
-            }
-
-            const char* detail_body_id = demo_layout_store( fixture, std::string( detail_id ) + ".body" );
-            CLAY( Clay_GetElementId( demo_layout_clay_string( detail_id ) ), {
+            CLAY( Clay_GetElementId( demo_layout_clay_string( demo_layout_store( fixture, std::string( detail_id ) + ".copy" ) ) ), {
                 .layout = {
-                    .sizing = { CLAY_SIZING_FIXED( layout.secondary_lane_width ), CLAY_SIZING_GROW( 0 ) },
-                    .padding = CLAY_PADDING_ALL( detail_panel_padding ),
-                    .childGap = detail_panel_gap,
+                    .sizing = { CLAY_SIZING_FIXED( detail_body_width ), CLAY_SIZING_FIT( 0 ) },
+                    .childGap = compact_footer ? uint16_t{ 6 } : detail_body_gap,
                     .layoutDirection = CLAY_TOP_TO_BOTTOM,
                 },
             } ) {
-                CLAY( Clay_GetElementId( demo_layout_clay_string( detail_body_id ) ), {
-                    .layout = {
-                        .sizing = { CLAY_SIZING_FIXED( detail_body_width ), CLAY_SIZING_FIT( 0 ) },
-                        .childGap = detail_body_gap,
-                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
-                    },
-                } ) {
-                    CLAY( Clay_GetElementId( demo_layout_clay_string( demo_layout_store( fixture, std::string( detail_id ) + ".copy" ) ) ), {
-                        .layout = {
-                            .sizing = { CLAY_SIZING_FIXED( detail_body_width ), CLAY_SIZING_FIT( 0 ) },
-                            .childGap = compact_footer ? uint16_t{ 6 } : detail_body_gap,
-                            .layoutDirection = CLAY_TOP_TO_BOTTOM,
-                        },
-                    } ) {
-                        VXUI_LABEL( &fixture->ctx, detail_text, ( vxui_label_cfg ) {
-                            .font_id = visuals.body_font_id,
-                            .font_size = compact_footer ? 11.0f : stress_sortie_detail ? 10.0f : compact_detail ? 11.0f : 16.0f,
-                        } );
-                    }
-                }
-            }
-
-            if ( tertiary_id ) {
-                CLAY( Clay_GetElementId( demo_layout_clay_string( tertiary_id ) ), {
-                    .layout = {
-                        .sizing = { CLAY_SIZING_FIXED( layout.tertiary_lane_width ), CLAY_SIZING_GROW( 0 ) },
-                        .padding = CLAY_PADDING_ALL( tertiary_panel_padding ),
-                        .childGap = tertiary_panel_gap,
-                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
-                    },
-                } ) {
-                    CLAY( Clay_GetElementId( demo_layout_clay_string( demo_layout_store( fixture, std::string( tertiary_id ) + ".body" ) ) ), {
-                        .layout = {
-                            .sizing = { CLAY_SIZING_FIXED( tertiary_body_width ), CLAY_SIZING_FIT( 0 ) },
-                            .layoutDirection = CLAY_TOP_TO_BOTTOM,
-                        },
-                    } ) {
-                        VXUI_LABEL( &fixture->ctx, tertiary_text, ( vxui_label_cfg ) {
-                            .font_id = visuals.body_font_id,
-                            .font_size = compact_footer ? 10.0f : compact_detail ? 13.0f : 14.0f,
-                        } );
-                    }
-                }
-            }
-        }
-
-        CLAY( Clay_GetElementId( demo_layout_clay_string( demo_layout_store( fixture, std::string( root_id ) + ".footer" ) ) ), {
-            .layout = {
-                .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
-                .padding = CLAY_PADDING_ALL( compact_footer ? uint16_t{ 4 } : uint16_t{ 8 } ),
-                .childGap = compact_footer ? uint16_t{ 10 } : uint16_t{ 16 },
-                .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-                .layoutDirection = CLAY_LEFT_TO_RIGHT,
-            },
-        } ) {
-            vxui_demo_shared_emit_footer_action_bar(
-                &fixture->ctx,
-                demo_layout_store( fixture, std::string( root_id ) + ".footer.prompts" ),
-                rtl,
-                compact_footer,
-                [&]() {
-                    const vxui_label_cfg prompt_cfg =
-                        vxui_demo_text_style( visuals.body_font_id, compact_footer ? 11.0f : 15.0f, vxui_demo_command_deck_theme_tokens().utility_text );
-                    vxui_demo_shared_emit_prompt_pair( &fixture->ctx, demo_layout_store( fixture, std::string( root_id ) + ".prompt.confirm" ), "action.confirm", "Confirm", &prompt_cfg );
-                    vxui_demo_shared_emit_prompt_pair( &fixture->ctx, demo_layout_store( fixture, std::string( root_id ) + ".prompt.cancel" ), "action.cancel", "Back", &prompt_cfg );
+                VXUI_LABEL( &fixture->ctx, detail_text, ( vxui_label_cfg ) {
+                    .font_id = visuals.body_font_id,
+                    .font_size = compact_footer ? 11.0f : stress_sortie_detail ? 10.0f : compact_detail ? 11.0f : 16.0f,
                 } );
-            CLAY( Clay_GetElementId( demo_layout_clay_string( demo_layout_store( fixture, std::string( root_id ) + ".footer.spacer" ) ) ), {
-                .layout = { .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) } }
-            } ) {}
-            vxui_demo_shared_emit_status_summary(
-                &fixture->ctx,
-                demo_layout_store( fixture, std::string( root_id ) + ".footer.status" ),
-                {
-                    demo_layout_locale_name( test_case.locale ),
-                    demo_layout_prompt_name( test_case.locale, test_case.prompt_table_index ),
-                    demo_layout_screen_name( test_case.locale, root_id ),
-                    1,
-                },
-                rtl,
-                visuals.body_font_id,
-                compact_footer );
+                if ( kind == VXUI_DEMO_SURFACE_SORTIE && !show_sortie_tertiary && tertiary_text ) {
+                    VXUI_LABEL( &fixture->ctx, tertiary_text, ( vxui_label_cfg ) {
+                        .font_id = visuals.body_font_id,
+                        .font_size = compact_footer ? 10.0f : compact_detail ? 12.0f : 13.0f,
+                    } );
+                }
+            }
         }
+        vxui_menu_secondary_lane_end( &fixture->ctx );
+
+        if ( show_sortie_tertiary ) {
+            vxui_menu_tertiary_lane_begin( &fixture->ctx, tertiary_id, &screen_cfg.tertiary_lane );
+            CLAY( Clay_GetElementId( demo_layout_clay_string( demo_layout_store( fixture, std::string( tertiary_id ) + ".body" ) ) ), {
+                .layout = {
+                    .sizing = { CLAY_SIZING_FIXED( tertiary_body_width ), CLAY_SIZING_FIT( 0 ) },
+                    .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                },
+            } ) {
+                VXUI_LABEL( &fixture->ctx, tertiary_text, ( vxui_label_cfg ) {
+                    .font_id = visuals.body_font_id,
+                    .font_size = compact_footer ? 10.0f : compact_detail ? 13.0f : 14.0f,
+                } );
+            }
+            vxui_menu_tertiary_lane_end( &fixture->ctx );
+        }
+
+        vxui_menu_footer( &fixture->ctx, demo_layout_store( fixture, std::string( root_id ) + ".footer" ), &footer_cfg );
+        vxui_menu_screen_end( &fixture->ctx, &shell_state );
     } );
 }
 
@@ -918,6 +975,40 @@ static void demo_layout_render_credits( demo_layout_fixture* fixture, const demo
         vxui_demo_compute_surface_metrics( viewport_width, test_case.locale, VXUI_DEMO_SURFACE_CREDITS );
 
     demo_layout_emit_screen_surface( fixture, "credits", "credits.surface", metrics.surface_width, surface_height, rtl, [&]() {
+        const char* screen_count_text = demo_layout_store( fixture, std::to_string( fixture->ctx.screen_count ) );
+        vxui_menu_status_item footer_status[] = {
+            { demo_layout_status_label( test_case.locale, "status.short.locale" ), demo_layout_locale_name( test_case.locale ), VXUI_MENU_STATUS_PRIMARY, false, false, "credits.footer.status.locale" },
+            { demo_layout_status_label( test_case.locale, "status.short.prompts" ), demo_layout_prompt_name( test_case.locale, test_case.prompt_table_index ), VXUI_MENU_STATUS_SECONDARY, true, false, "credits.footer.status.prompts" },
+            { demo_layout_status_label( test_case.locale, "status.short.screens" ), screen_count_text, VXUI_MENU_STATUS_SECONDARY, true, false, "credits.footer.status.screens" },
+            { demo_layout_status_label( test_case.locale, "status.short.top" ), demo_layout_screen_name( test_case.locale, test_case.screen_name ), VXUI_MENU_STATUS_PRIMARY, false, false, "credits.footer.status.top" },
+        };
+        vxui_menu_footer_cfg footer_cfg = {
+            nullptr,
+            0,
+            footer_status,
+            ( int ) ( sizeof( footer_status ) / sizeof( footer_status[ 0 ] ) ),
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            surface_height <= 680.0f ? 3 : 4,
+            false,
+        };
+        vxui_menu_style footer_style = demo_layout_footer_style();
+        vxui_menu_screen_cfg screen_cfg = {
+            VXUI_MENU_SHELL_FORM,
+            &footer_style,
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            680.0f,
+            0.0f,
+            false,
+            {},
+            {},
+            {},
+            {},
+            {},
+            footer_cfg,
+        };
+        vxui_menu_state shell_state = {};
+
+        vxui_menu_screen_begin( &fixture->ctx, &shell_state, "credits.shell", &screen_cfg );
         VXUI_LABEL( &fixture->ctx, demo_layout_store_localized( fixture, test_case.locale, "Credits", "クレジット", "الاعتمادات" ), ( vxui_label_cfg ) {
             .font_id = VXUI_TEST_FONT_ROLE_TITLE,
             .font_size = 44.0f,
@@ -934,7 +1025,7 @@ static void demo_layout_render_credits( demo_layout_fixture* fixture, const demo
                 .font_id = VXUI_TEST_FONT_ROLE_BODY,
                 .font_size = 22.0f,
             } );
-            CLAY( Clay_GetElementId( demo_layout_clay_string( "credits.body_viewport" ) ), {
+            VXUI( &fixture->ctx, "credits.body_viewport", {
                 .layout = {
                     .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( 120.0f ) },
                     .layoutDirection = CLAY_TOP_TO_BOTTOM,
@@ -958,7 +1049,7 @@ static void demo_layout_render_credits( demo_layout_fixture* fixture, const demo
                 }
             }
         }
-        VXUI( &fixture->ctx, "credits.footer", {
+        VXUI( &fixture->ctx, "credits.actions", {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
                 .padding = CLAY_PADDING_ALL( 18 ),
@@ -967,6 +1058,8 @@ static void demo_layout_render_credits( demo_layout_fixture* fixture, const demo
         } ) {
             VXUI_LABEL( &fixture->ctx, demo_layout_store_localized( fixture, test_case.locale, "Back", "戻る", "رجوع" ), ( vxui_label_cfg ) { 0 } );
         }
+        vxui_menu_footer( &fixture->ctx, "credits.footer", &screen_cfg.footer );
+        vxui_menu_screen_end( &fixture->ctx, &shell_state );
     } );
 }
 
@@ -979,11 +1072,54 @@ static void demo_layout_render_stub_with_footer( demo_layout_fixture* fixture, c
     const vxui_demo_surface_metrics metrics = vxui_demo_compute_surface_metrics( viewport_width, test_case.locale, kind );
 
     demo_layout_emit_screen_surface( fixture, root_id, vxui_demo_surface_id( kind ), metrics.surface_width, surface_height, rtl, [&]() {
+        const char* screen_count_text = demo_layout_store( fixture, std::to_string( fixture->ctx.screen_count ) );
+        const char* prompt_label = demo_layout_store_localized(
+            fixture,
+            test_case.locale,
+            std::strcmp( root_id, "launch_stub" ) == 0 ? "Confirm handoff" : "Return to command deck",
+            std::strcmp( root_id, "launch_stub" ) == 0 ? "遷移を確定" : "コマンドデッキへ戻る",
+            std::strcmp( root_id, "launch_stub" ) == 0 ? "تأكيد التحويل" : "العودة إلى منصة الأوامر" );
+        vxui_menu_prompt_item footer_prompts[] = {
+            { "action.confirm", prompt_label, false, demo_layout_store( fixture, std::string( root_id ) + ".footer.prompt.confirm" ) },
+        };
+        vxui_menu_status_item footer_status[] = {
+            { demo_layout_status_label( test_case.locale, "status.short.locale" ), demo_layout_locale_name( test_case.locale ), VXUI_MENU_STATUS_PRIMARY, false, false, demo_layout_store( fixture, std::string( root_id ) + ".footer.status.locale" ) },
+            { demo_layout_status_label( test_case.locale, "status.short.prompts" ), demo_layout_prompt_name( test_case.locale, test_case.prompt_table_index ), VXUI_MENU_STATUS_SECONDARY, true, false, demo_layout_store( fixture, std::string( root_id ) + ".footer.status.prompts" ) },
+            { demo_layout_status_label( test_case.locale, "status.short.screens" ), screen_count_text, VXUI_MENU_STATUS_SECONDARY, true, false, demo_layout_store( fixture, std::string( root_id ) + ".footer.status.screens" ) },
+            { demo_layout_status_label( test_case.locale, "status.short.top" ), demo_layout_screen_name( test_case.locale, test_case.screen_name ), VXUI_MENU_STATUS_PRIMARY, false, false, demo_layout_store( fixture, std::string( root_id ) + ".footer.status.top" ) },
+        };
+        vxui_menu_footer_cfg footer_cfg = {
+            footer_prompts,
+            ( int ) ( sizeof( footer_prompts ) / sizeof( footer_prompts[ 0 ] ) ),
+            footer_status,
+            ( int ) ( sizeof( footer_status ) / sizeof( footer_status[ 0 ] ) ),
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            surface_height <= 680.0f ? 3 : 4,
+            false,
+        };
+        vxui_menu_style footer_style = demo_layout_footer_style();
+        vxui_menu_screen_cfg screen_cfg = {
+            VXUI_MENU_SHELL_FORM,
+            &footer_style,
+            VXUI_MENU_SHELL_COMPACT_AUTO,
+            680.0f,
+            0.0f,
+            false,
+            {},
+            {},
+            {},
+            {},
+            {},
+            footer_cfg,
+        };
+        vxui_menu_state shell_state = {};
+
+        vxui_menu_screen_begin( &fixture->ctx, &shell_state, demo_layout_store( fixture, std::string( root_id ) + ".shell" ), &screen_cfg );
         VXUI_LABEL( &fixture->ctx, demo_layout_detail_text( fixture, test_case.locale ), ( vxui_label_cfg ) {
             .font_id = VXUI_TEST_FONT_ROLE_TITLE,
             .font_size = 40.0f,
         } );
-        CLAY( Clay_GetElementId( demo_layout_clay_string( demo_layout_store( fixture, std::string( root_id ) + ".footer" ) ) ), {
+        CLAY( Clay_GetElementId( demo_layout_clay_string( demo_layout_store( fixture, std::string( root_id ) + ".actions" ) ) ), {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
                 .padding = CLAY_PADDING_ALL( 18 ),
@@ -992,6 +1128,8 @@ static void demo_layout_render_stub_with_footer( demo_layout_fixture* fixture, c
         } ) {
             VXUI_LABEL( &fixture->ctx, demo_layout_store_localized( fixture, test_case.locale, "Continue", "続行", "متابعة" ), ( vxui_label_cfg ) { 0 } );
         }
+        vxui_menu_footer( &fixture->ctx, demo_layout_store( fixture, std::string( root_id ) + ".footer" ), &screen_cfg.footer );
+        vxui_menu_screen_end( &fixture->ctx, &shell_state );
     } );
 }
 
@@ -1159,7 +1297,7 @@ static bool demo_layout_preview_body_and_help_do_not_overlap(
     vxui_rect help = {};
     if ( !demo_layout_find_element_bounds( "main.preview_panel", &preview_panel )
         || !demo_layout_find_element_bounds( "main.preview_body", &preview_body )
-        || !demo_layout_find_element_bounds( "main.help_legend", &help ) ) {
+        || !demo_layout_find_element_bounds( "main.preview.help_legend", &help ) ) {
         return false;
     }
 
@@ -1235,9 +1373,13 @@ static int demo_layout_main_menu_visible_help_line_count( const char* locale, in
     const float surface_max_height = std::max( 0.0f, ( float ) screen_height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
     const float viewport_width = std::max( 0.0f, ( float ) screen_width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
     const vxui_demo_main_menu_layout_spec layout = vxui_demo_resolve_main_menu_layout( viewport_width, surface_max_height, locale );
-    const bool compact_help = surface_max_height <= 648.0f || layout.preview_panel_width <= 420.0f;
+    const bool tight_preview_width = layout.preview_panel_width <= 420.0f;
+    const bool compact_help = surface_max_height <= 648.0f || tight_preview_width;
     const vxui_demo_controls_block_copy copy = demo_layout_controls_copy_for_screen_size( locale, screen_width, screen_height );
     const int line_count = vxui_demo_controls_block_visible_line_count( copy );
+    if ( tight_preview_width ) {
+        return std::min( line_count, 2 );
+    }
     return compact_help ? std::min( line_count, 3 ) : line_count;
 }
 
@@ -1300,7 +1442,7 @@ UTEST_F( demo_layout_fixture, main_menu_real_content_matches_production_copy_and
     EXPECT_TRUE( demo_layout_has_text( &list, preview->body ) );
     EXPECT_TRUE( demo_layout_has_text( &list, vxui_demo_badge_text( test_case.locale, preview->badge_key ) ) );
     EXPECT_TRUE( demo_layout_has_text( &list, controls.title ) );
-    ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.help_legend", &help, &help_title, help_lines, help_line_count ) );
+    ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.preview.help_legend", &help, &help_title, help_lines, help_line_count ) );
 }
 
 UTEST_F( demo_layout_fixture, main_menu_production_parity_harness_matches_runtime_layout_structure )
@@ -1323,7 +1465,7 @@ UTEST_F( demo_layout_fixture, main_menu_production_parity_harness_matches_runtim
     ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview_panel", &preview_panel ) );
     ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview_header", &preview_header ) );
     ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview_body", &preview_body ) );
-    ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.help_legend", &help, &help_title, help_lines, help_line_count ) );
+    ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.preview.help_legend", &help, &help_title, help_lines, help_line_count ) );
     ASSERT_TRUE( demo_layout_find_element_bounds( "main.footer", &footer ) );
     ASSERT_TRUE( demo_layout_find_element_bounds( "main.footer.prompts", &footer_prompts ) );
     ASSERT_TRUE( demo_layout_find_element_bounds( "main.footer.status", &footer_status ) );
@@ -1343,7 +1485,7 @@ UTEST_F( demo_layout_fixture, main_menu_preview_help_is_fully_visible_in_support
         vxui_rect help = {};
         ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview_panel", &panel ) );
         ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview_body", &body ) );
-        ASSERT_TRUE( demo_layout_find_element_bounds( "main.help_legend", &help ) );
+        ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview.help_legend", &help ) );
         EXPECT_TRUE( vxui_demo_vertical_stack_order( body, help, 0.0f ) );
         EXPECT_TRUE( vxui_demo_element_fully_visible_inside( panel, help, 0.0f ) );
         EXPECT_TRUE( vxui_demo_text_group_fully_visible( &list, help, [&]( const vxui_cmd& cmd ) {
@@ -1412,7 +1554,7 @@ UTEST_F( demo_layout_fixture, main_menu_preview_panel_contains_visible_text_and_
     ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview_panel", &panel ) );
     ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview_header", &header ) );
     ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview_body", &body ) );
-    ASSERT_TRUE( demo_layout_find_element_bounds( "main.help_legend", &help ) );
+    ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview.help_legend", &help ) );
 
     EXPECT_TRUE( vxui_demo_rect_inside( panel, header, 0.0f ) );
     EXPECT_TRUE( vxui_demo_rect_inside( panel, body, 0.0f ) );
@@ -1434,7 +1576,7 @@ UTEST_F( demo_layout_fixture, main_menu_help_lines_do_not_overlap_in_supported_s
             vxui_rect help = {};
             vxui_rect help_title = {};
             vxui_rect help_lines[ 4 ] = {};
-            ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.help_legend", &help, &help_title, help_lines, help_line_count ) );
+            ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.preview.help_legend", &help, &help_title, help_lines, help_line_count ) );
 
             vxui_rect stack[ 5 ] = { help_title, help_lines[ 0 ], help_lines[ 1 ], help_lines[ 2 ], help_lines[ 3 ] };
             const int stack_count = 1 + help_line_count;
@@ -1456,7 +1598,7 @@ UTEST_F( demo_layout_fixture, main_menu_help_block_lines_remain_fully_visible_an
         vxui_rect help = {};
         vxui_rect help_title = {};
         vxui_rect help_lines[ 4 ] = {};
-        ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.help_legend", &help, &help_title, help_lines, help_line_count ) );
+        ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.preview.help_legend", &help, &help_title, help_lines, help_line_count ) );
 
         vxui_rect stack[ 5 ] = { help_title, help_lines[ 0 ], help_lines[ 1 ], help_lines[ 2 ], help_lines[ 3 ] };
         const int stack_count = 1 + help_line_count;
@@ -1480,7 +1622,7 @@ UTEST_F( demo_layout_fixture, main_menu_preview_body_and_help_regions_do_not_vis
             vxui_rect help_title = {};
             vxui_rect help_lines[ 4 ] = {};
             ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview_body", &preview_body ) );
-            ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.help_legend", &help, &help_title, help_lines, help_line_count ) );
+            ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.preview.help_legend", &help, &help_title, help_lines, help_line_count ) );
 
             EXPECT_TRUE( vxui_demo_vertical_stack_order( preview_body, help, 0.0f ) );
             EXPECT_TRUE( vxui_demo_vertical_stack_order( preview_body, help_title, 0.0f ) );
@@ -1514,7 +1656,7 @@ UTEST_F( demo_layout_fixture, main_menu_footer_status_rows_remain_readable_below
             vxui_rect footer_status_prompts = {};
             vxui_rect footer_status_screens = {};
             vxui_rect footer_status_top = {};
-            ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.help_legend", &help, &help_title, help_lines, help_line_count ) );
+            ASSERT_TRUE( demo_layout_find_controls_block_regions( "main.preview.help_legend", &help, &help_title, help_lines, help_line_count ) );
             ASSERT_TRUE( demo_layout_find_element_bounds( "main.footer", &footer ) );
             ASSERT_TRUE( demo_layout_find_element_bounds( "main.footer.prompts", &footer_prompts ) );
             ASSERT_TRUE( demo_layout_find_element_bounds( "main.footer.status", &footer_status ) );

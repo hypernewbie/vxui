@@ -54,6 +54,30 @@ The authored shell kinds are:
 - `VXUI_MENU_SHELL_SPLIT_DECK`
 - `VXUI_MENU_SHELL_FORM`
 
+Authored demo screens can also wrap the shell in the canonical surface helper:
+
+```cpp
+vxui_menu_surface_cfg surface = {
+    1280.0f,
+    720.0f,
+    16.0f,
+    20.0f,
+    18.0f,
+    16.0f,
+    18.0f,
+    1.0f,
+    { 5, 9, 16, 255 },
+    { 19, 31, 48, 244 },
+    { 36, 58, 88, 255 },
+};
+
+vxui_menu_surface_begin( &ctx, "main", "main.surface", &surface );
+vxui_menu_screen_begin( &ctx, &menu, "main.screen", &screen );
+// ... header, lanes, preview/footer ...
+vxui_menu_screen_end( &ctx, &menu );
+vxui_menu_surface_end( &ctx );
+```
+
 ## Quickstart: Title Menu Shell
 
 ```cpp
