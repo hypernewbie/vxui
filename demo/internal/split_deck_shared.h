@@ -257,11 +257,6 @@ inline const char* const VXUI_DEMO_SHARED_ARCHIVE_SIGNAL_NAMES[] = { "Wake Sweep
 inline const char* const VXUI_DEMO_SHARED_RECORD_BOARD_NAMES[] = { "Global Board", "Ship Board", "Prototype Board" };
 inline const char* const VXUI_DEMO_SHARED_RECORD_NAMES[] = { "Run 01 / Kestrel", "Run 02 / Halberd", "Run 03 / Mistral", "Run 04 / Aurora" };
 
-static inline Clay_ElementId vxui_demo_split_deck_hashed_id( uint32_t id )
-{
-    return ( Clay_ElementId ) { .id = id, .offset = 0, .baseId = 0, .stringId = { 0 } };
-}
-
 inline bool vxui_demo_split_deck_locale_matches( const char* locale, const char* prefix )
 {
     if ( !locale || !prefix ) {
@@ -318,25 +313,23 @@ inline vxui_menu_style vxui_demo_shared_split_deck_shell_style(
     style.body_font_id = visuals.body_font_id;
     style.title_font_id = visuals.title_font_id;
     style.badge_font_id = visuals.body_font_id;
-    style.body_font_size = compact ? 14.0f : 16.0f;
-    style.secondary_font_size = compact ? 11.0f : 13.0f;
-    style.title_font_size = compact ? 24.0f : 30.0f;
-    style.badge_font_size = compact ? 9.0f : 10.0f;
-    style.row_gap = compact ? 6.0f : 8.0f;
-    style.section_gap = compact ? 8.0f : 10.0f;
-    style.padding_x = compact ? 8.0f : 10.0f;
-    style.padding_y = compact ? 6.0f : 7.0f;
+    if ( compact ) {
+        style.body_font_size = 14.0f;
+        style.secondary_font_size = 11.0f;
+        style.title_font_size = 24.0f;
+        style.badge_font_size = 9.0f;
+        style.row_gap = 6.0f;
+        style.section_gap = 8.0f;
+        style.padding_x = 8.0f;
+        style.padding_y = 6.0f;
+    }
     style.lane_gap = lane_gap;
-    style.corner_radius = 12.0f;
+    // Split-deck lane colors intentionally differ from apply_title_menu_theme defaults
     style.panel_fill_color = theme.secondary_panel_fill;
     style.row_fill_color = theme.primary_panel_fill;
-    style.row_focus_fill_color = theme.focused_row_fill;
     style.row_border_color = theme.primary_panel_border;
     style.row_focus_border_color = theme.secondary_panel_border;
     style.section_text_color = theme.title_text;
-    style.secondary_text_color = theme.muted_text;
-    style.prompt_fill_color = theme.action_fill;
-    style.prompt_text_color = theme.action_text;
     return style;
 }
 
@@ -435,7 +428,7 @@ inline void vxui_demo_shared_emit_stat_bar( vxui_ctx* ctx, const vxui_demo_split
     value = std::clamp( value, 0.0f, 1.0f );
     const std::string row_id = std::string( id ) + ".row";
     const std::string fill_id = std::string( id ) + ".fill";
-    CLAY( vxui_demo_split_deck_hashed_id( vxui_id( row_id.c_str() ) ), {
+    VXUI_HASH( ctx, vxui_id( row_id.c_str() ), {
         .layout = {
             .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
             .childGap = 8,
@@ -447,14 +440,14 @@ inline void vxui_demo_shared_emit_stat_bar( vxui_ctx* ctx, const vxui_demo_split
             .font_size = 18.0f,
             .color = theme.muted_text,
         } );
-        CLAY( vxui_demo_split_deck_hashed_id( vxui_id( id ) ), {
+        VXUI_HASH( ctx, vxui_id( id ), {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIXED( 12 ) },
             },
             .backgroundColor = vxui_demo_clay_color( theme.stat_track ),
             .cornerRadius = CLAY_CORNER_RADIUS( 6 ),
         } ) {
-            CLAY( vxui_demo_split_deck_hashed_id( vxui_id( fill_id.c_str() ) ), {
+            VXUI_HASH( ctx, vxui_id( fill_id.c_str() ), {
                 .layout = {
                     .sizing = { CLAY_SIZING_FIXED( value * 220.0f ), CLAY_SIZING_GROW( 0 ) },
                 },
@@ -512,19 +505,12 @@ inline void vxui_demo_render_sortie_screen_shared( vxui_ctx* ctx, const vxui_dem
     form_style.row_gap = compact_footer ? 1.0f : 2.0f;
     form_style.section_gap = compact_footer ? 3.0f : compact_menu ? 5.0f : 8.0f;
     form_style.padding_y = compact_footer ? 3.0f : compact_menu ? 6.0f : 8.0f;
-    vxui_menu_surface_cfg surface_cfg = {
+    vxui_menu_surface_cfg surface_cfg = vxui_menu_surface_cfg_default(
         layout.surface.surface_width,
         layout.surface_max_height,
-        ( float ) VXUI_DEMO_LAYOUT_OUTER_PADDING,
-        ( float ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_X,
-        ( float ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_Y,
-        ( float ) VXUI_DEMO_LAYOUT_SECTION_GAP,
-        18.0f,
-        1.0f,
         theme.app_background_base,
         theme.primary_panel_fill,
-        theme.primary_panel_border,
-    };
+        theme.primary_panel_border );
     if ( cfg.background_scanline ) {
         vxui_demo_shared_emit_surface_scanline( ctx, "sortie" );
     }
@@ -673,19 +659,12 @@ inline void vxui_demo_render_loadout_screen_shared( vxui_ctx* ctx, const vxui_de
     form_style.row_gap = compact_footer ? 1.0f : 2.0f;
     form_style.section_gap = compact_footer ? 4.0f : form_style.section_gap;
     form_style.padding_y = compact_footer ? 4.0f : form_style.padding_y;
-    vxui_menu_surface_cfg surface_cfg = {
+    vxui_menu_surface_cfg surface_cfg = vxui_menu_surface_cfg_default(
         layout.surface.surface_width,
         layout.surface_max_height,
-        ( float ) VXUI_DEMO_LAYOUT_OUTER_PADDING,
-        ( float ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_X,
-        ( float ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_Y,
-        ( float ) VXUI_DEMO_LAYOUT_SECTION_GAP,
-        18.0f,
-        1.0f,
         theme.app_background_base,
         theme.primary_panel_fill,
-        theme.primary_panel_border,
-    };
+        theme.primary_panel_border );
     if ( cfg.background_scanline ) {
         vxui_demo_shared_emit_surface_scanline( ctx, "loadout" );
     }
@@ -789,19 +768,12 @@ inline void vxui_demo_render_archives_screen_shared( vxui_ctx* ctx, const vxui_d
     form_style.section_gap = compact_footer ? 4.0f : form_style.section_gap;
     form_style.padding_y = compact_footer ? 4.0f : form_style.padding_y;
 
-    vxui_menu_surface_cfg surface_cfg = {
+    vxui_menu_surface_cfg surface_cfg = vxui_menu_surface_cfg_default(
         layout.surface.surface_width,
         layout.surface_max_height,
-        ( float ) VXUI_DEMO_LAYOUT_OUTER_PADDING,
-        ( float ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_X,
-        ( float ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_Y,
-        ( float ) VXUI_DEMO_LAYOUT_SECTION_GAP,
-        18.0f,
-        1.0f,
         theme.app_background_base,
         theme.primary_panel_fill,
-        theme.primary_panel_border,
-    };
+        theme.primary_panel_border );
     if ( cfg.background_scanline ) {
         vxui_demo_shared_emit_surface_scanline( ctx, "archives" );
     }
@@ -900,19 +872,12 @@ inline void vxui_demo_render_records_screen_shared( vxui_ctx* ctx, const vxui_de
     form_style.section_gap = compact_footer ? 4.0f : form_style.section_gap;
     form_style.padding_y = compact_footer ? 4.0f : form_style.padding_y;
 
-    vxui_menu_surface_cfg surface_cfg = {
+    vxui_menu_surface_cfg surface_cfg = vxui_menu_surface_cfg_default(
         layout.surface.surface_width,
         layout.surface_max_height,
-        ( float ) VXUI_DEMO_LAYOUT_OUTER_PADDING,
-        ( float ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_X,
-        ( float ) VXUI_DEMO_LAYOUT_SURFACE_PADDING_Y,
-        ( float ) VXUI_DEMO_LAYOUT_SECTION_GAP,
-        18.0f,
-        1.0f,
         theme.app_background_base,
         theme.primary_panel_fill,
-        theme.primary_panel_border,
-    };
+        theme.primary_panel_border );
     if ( cfg.background_scanline ) {
         vxui_demo_shared_emit_surface_scanline( ctx, "records" );
     }

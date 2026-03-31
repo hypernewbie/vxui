@@ -740,12 +740,24 @@ void VXUI_PROMPT( vxui_ctx* ctx, const char* action_name );
 uint32_t vxui_id( const char* label );
 uint32_t vxui_idi( const char* label, int index );
 bool vxui_find_anim_bounds( const vxui_ctx* ctx, uint32_t id, vxui_rect* out );
+static inline Clay_ElementId vxui__clay_id_from_hash( uint32_t id )
+{
+    Clay_ElementId ret = {};
+    ret.id = id;
+    return ret;
+}
 
 #define VXUI( ctx, id_str, ... ) \
     for ( uint32_t _vxui_prev_decl_id = ( ctx )->current_decl_id, _vxui_once = ( ( ctx )->current_decl_id = vxui_id( id_str ), 1u ); \
           _vxui_once; \
           ( ctx )->current_decl_id = _vxui_prev_decl_id, _vxui_once = 0u ) \
         CLAY( CLAY_ID( id_str ), vxui__rtl_decl( ( ctx ), ( Clay_ElementDeclaration ) __VA_ARGS__ ) )
+
+#define VXUI_HASH( ctx, id_hash, ... ) \
+    for ( uint32_t _vxui_hash = ( id_hash ), _vxui_prev_decl_id = ( ctx )->current_decl_id, _vxui_once = ( ( ctx )->current_decl_id = _vxui_hash, 1u ); \
+          _vxui_once; \
+          ( ctx )->current_decl_id = _vxui_prev_decl_id, _vxui_once = 0u ) \
+        CLAY( vxui__clay_id_from_hash( _vxui_hash ), vxui__rtl_decl( ( ctx ), ( Clay_ElementDeclaration ) __VA_ARGS__ ) )
 
 #define VXUI_LIST_BEGIN( ctx, id, ... ) \
     for ( bool _vxui_list_once = ( vxui_list_begin( ( ctx ), ( id ), __VA_ARGS__ ), true ); _vxui_list_once; _vxui_list_once = ( vxui_list_end( ( ctx ) ), false ) )
@@ -998,13 +1010,6 @@ static Clay_String vxui__clay_string_from_cstr( const char* text )
     ret.isStaticallyAllocated = false;
     ret.length = text ? ( int32_t ) std::strlen( text ) : 0;
     ret.chars = text ? text : "";
-    return ret;
-}
-
-static Clay_ElementId vxui__clay_id_from_hash( uint32_t id )
-{
-    Clay_ElementId ret = {};
-    ret.id = id;
     return ret;
 }
 

@@ -239,6 +239,10 @@ typedef struct vxui_demo_renderer
     GLuint fontcache_shader_blit_atlas;
     GLuint fontcache_shader_draw_text;
     GLuint vao;
+    GLuint text_vbo;
+    GLuint text_ibo;
+    size_t text_vbo_capacity;
+    size_t text_ibo_capacity;
     GLuint fontcache_fbo[ 2 ];
     GLuint fontcache_fbo_texture[ 2 ];
     std::vector< GLuint > cpu_atlas_textures;
@@ -402,8 +406,9 @@ static bool vxui_demo_load_fonts( vxui_demo_renderer* renderer );
 static void vxui_demo_render_draw_list( vxui_demo_renderer* renderer, const vxui_draw_list* list );
 static void vxui_demo_draw_primitive( vxui_demo_renderer* renderer, vxui_rect bounds, vxui_color color, float radius, float border_width );
 static void vxui_demo_draw_placeholder_image( vxui_demo_renderer* renderer, vxui_rect bounds );
-static void vxui_demo_render_text_cmd( vxui_demo_renderer* renderer, const vxui_draw_cmd_text* text, const vxui_rect* clip_rect );
+static void vxui_demo_render_text_cmd( vxui_demo_renderer* renderer, const vxui_draw_cmd_text* text );
 static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, const vxui_rect* clip_rect );
+static void vxui_demo_ensure_fontcache_upload_buffers( vxui_demo_renderer* renderer, size_t vertex_bytes, size_t index_bytes );
 static void vxui_demo_setup_fontcache_fbo( vxui_demo_renderer* renderer );
 static void vxui_demo_flip_fontcache_upload( ve_fontcache_drawlist* drawlist, ve_fontcache_draw& dcall );
 static void vxui_demo_clear_backend_test_surfaces( vxui_demo_renderer* renderer, bool clear_cpu_atlas_pages );
@@ -414,7 +419,6 @@ static void vxui_demo_shutdown_shot_capture_fbo( vxui_demo_renderer* renderer );
 static bool vxui_demo_readback_r8_texture( GLuint texture, int x, int y, int w, int h, uint8_t* out_pixels );
 static bool vxui_demo_capture_rgba_texture_png( GLuint texture, int width, int height, const std::filesystem::path& path, char* error, size_t error_size );
 static bool vxui_demo_write_png_rgba( const std::filesystem::path& path, int width, int height, const uint8_t* pixels, char* error, size_t error_size );
-static bool vxui_demo_capture_backbuffer_png( const std::filesystem::path& path, int width, int height, char* error, size_t error_size );
 static uint32_t vxui_demo_focus_id_for_screen( vxui_demo_screen_kind screen_kind, const char* focus_name );
 static bool vxui_demo_apply_shot_request( vxui_demo_app* app, vxui_ctx* ctx, const vxui_demo_shot_request& request, char* error, size_t error_size );
 static void vxui_demo_present_draw_list( vxui_demo_renderer* renderer, vxui_ctx* ctx, const vxui_draw_list* list );
@@ -1163,7 +1167,7 @@ static void vxui_demo_emit_save_slot_row( vxui_ctx* ctx, const char* id, const c
     ctx->current_decl_id = action_id;
 
     const bool focused = ctx->focused_id == action_id;
-    CLAY( vxui__clay_id_from_hash( action_id ), {
+    VXUI_HASH( ctx, action_id, {
         .layout = {
             .sizing = { CLAY_SIZING_FIXED( width ), CLAY_SIZING_FIXED( height ) },
             .padding = { 14, 14, 8, 8 },
@@ -1188,7 +1192,7 @@ static void vxui_demo_emit_action_button( vxui_ctx* ctx, const char* id, const c
     ctx->current_decl_id = action_id;
     const bool focused = ctx->focused_id == action_id;
 
-    CLAY( vxui__clay_id_from_hash( action_id ), {
+    VXUI_HASH( ctx, action_id, {
         .layout = {
             .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIXED( control_height ) },
             .padding = { ( uint16_t ) VXUI_DEMO_BUTTON_PADDING_X, ( uint16_t ) VXUI_DEMO_BUTTON_PADDING_X, ( uint16_t ) VXUI_DEMO_BUTTON_PADDING_Y, ( uint16_t ) VXUI_DEMO_BUTTON_PADDING_Y },
@@ -2786,6 +2790,8 @@ void main( void )
 
     glGenVertexArrays( 1, &renderer->vao );
     glBindVertexArray( renderer->vao );
+    glGenBuffers( 1, &renderer->text_vbo );
+    glGenBuffers( 1, &renderer->text_ibo );
     vxui_demo_setup_fontcache_fbo( renderer );
     glEnable( GL_BLEND );
     glBlendEquation( GL_FUNC_ADD );
@@ -2814,6 +2820,8 @@ static void vxui_demo_shutdown_renderer( vxui_demo_renderer* renderer )
     if ( renderer->fontcache_shader_render_glyph ) glDeleteProgram( renderer->fontcache_shader_render_glyph );
     if ( renderer->fontcache_shader_blit_atlas ) glDeleteProgram( renderer->fontcache_shader_blit_atlas );
     if ( renderer->fontcache_shader_draw_text ) glDeleteProgram( renderer->fontcache_shader_draw_text );
+    if ( renderer->text_vbo ) glDeleteBuffers( 1, &renderer->text_vbo );
+    if ( renderer->text_ibo ) glDeleteBuffers( 1, &renderer->text_ibo );
     if ( renderer->vao ) glDeleteVertexArrays( 1, &renderer->vao );
     if ( renderer->fontcache_fbo[ 0 ] || renderer->fontcache_fbo[ 1 ] ) glDeleteFramebuffers( 2, renderer->fontcache_fbo );
     if ( renderer->fontcache_fbo_texture[ 0 ] || renderer->fontcache_fbo_texture[ 1 ] ) glDeleteTextures( 2, renderer->fontcache_fbo_texture );
@@ -2884,6 +2892,33 @@ static void vxui_demo_draw_placeholder_image( vxui_demo_renderer* renderer, vxui
     vxui_demo_draw_primitive( renderer, bounds, ( vxui_color ) { 255, 128, 200, 255 }, 6.0f, 2.0f );
 }
 
+static void vxui_demo_ensure_fontcache_upload_buffers( vxui_demo_renderer* renderer, size_t vertex_bytes, size_t index_bytes )
+{
+    if ( !renderer ) {
+        return;
+    }
+
+    auto grow_capacity = []( size_t current, size_t required ) {
+        size_t capacity = current ? current : 4096u;
+        while ( capacity < required ) {
+            capacity *= 2u;
+        }
+        return capacity;
+    };
+
+    if ( vertex_bytes > renderer->text_vbo_capacity ) {
+        renderer->text_vbo_capacity = grow_capacity( renderer->text_vbo_capacity, vertex_bytes );
+        glBindBuffer( GL_ARRAY_BUFFER, renderer->text_vbo );
+        glBufferData( GL_ARRAY_BUFFER, ( GLsizeiptr ) renderer->text_vbo_capacity, nullptr, GL_DYNAMIC_DRAW );
+    }
+
+    if ( index_bytes > renderer->text_ibo_capacity ) {
+        renderer->text_ibo_capacity = grow_capacity( renderer->text_ibo_capacity, index_bytes );
+        glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, renderer->text_ibo );
+        glBufferData( GL_ELEMENT_ARRAY_BUFFER, ( GLsizeiptr ) renderer->text_ibo_capacity, nullptr, GL_DYNAMIC_DRAW );
+    }
+}
+
 static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, const vxui_rect* clip_rect )
 {
     ve_fontcache_drawlist* drawlist = ve_fontcache_get_drawlist( &renderer->cache );
@@ -2894,16 +2929,15 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
 
     ve_fontcache_optimise_drawlist( &renderer->cache );
 
-    GLuint vbo = 0;
-    GLuint ibo = 0;
+    const size_t vertex_bytes = drawlist->vertices.size() * sizeof( ve_fontcache_vertex );
+    const size_t index_bytes = drawlist->indices.size() * sizeof( uint32_t );
     if ( !drawlist->vertices.empty() && !drawlist->indices.empty() ) {
-        glGenBuffers( 1, &vbo );
-        glGenBuffers( 1, &ibo );
+        vxui_demo_ensure_fontcache_upload_buffers( renderer, vertex_bytes, index_bytes );
         glBindVertexArray( renderer->vao );
-        glBindBuffer( GL_ARRAY_BUFFER, vbo );
-        glBufferData( GL_ARRAY_BUFFER, drawlist->vertices.size() * sizeof( ve_fontcache_vertex ), drawlist->vertices.data(), GL_DYNAMIC_DRAW );
-        glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, ibo );
-        glBufferData( GL_ELEMENT_ARRAY_BUFFER, drawlist->indices.size() * sizeof( uint32_t ), drawlist->indices.data(), GL_DYNAMIC_DRAW );
+        glBindBuffer( GL_ARRAY_BUFFER, renderer->text_vbo );
+        glBufferSubData( GL_ARRAY_BUFFER, 0, ( GLsizeiptr ) vertex_bytes, drawlist->vertices.data() );
+        glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, renderer->text_ibo );
+        glBufferSubData( GL_ELEMENT_ARRAY_BUFFER, 0, ( GLsizeiptr ) index_bytes, drawlist->indices.data() );
     }
     glEnableVertexAttribArray( 0 );
     glEnableVertexAttribArray( 1 );
@@ -3032,15 +3066,23 @@ static void vxui_demo_render_fontcache_drawlist( vxui_demo_renderer* renderer, c
     }
 
     end_pass_group();
-    if ( vbo != 0 ) {
-        glDeleteBuffers( 1, &vbo );
-        glDeleteBuffers( 1, &ibo );
+    const GLuint target_fbo = renderer->backend_test_mode ? renderer->backend_target_fbo : ( renderer->shot_capture_mode ? renderer->shot_capture_fbo : 0u );
+    glBindFramebuffer( GL_FRAMEBUFFER, target_fbo );
+    glViewport( 0, 0, renderer->window_size.width, renderer->window_size.height );
+    if ( clip_rect && clip_rect->w > 0.0f && clip_rect->h > 0.0f ) {
+        GLint x = ( GLint ) std::lround( clip_rect->x );
+        GLint y = ( GLint ) std::lround( ( float ) renderer->window_size.height - clip_rect->y - clip_rect->h );
+        GLsizei w = ( GLsizei ) std::lround( clip_rect->w );
+        GLsizei h = ( GLsizei ) std::lround( clip_rect->h );
+        glEnable( GL_SCISSOR_TEST );
+        glScissor( x, y, w < 0 ? 0 : w, h < 0 ? 0 : h );
+    } else {
+        glDisable( GL_SCISSOR_TEST );
     }
-    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
     ve_fontcache_flush_drawlist( &renderer->cache );
 }
 
-static void vxui_demo_render_text_cmd( vxui_demo_renderer* renderer, const vxui_draw_cmd_text* text, const vxui_rect* clip_rect )
+static void vxui_demo_render_text_cmd( vxui_demo_renderer* renderer, const vxui_draw_cmd_text* text )
 {
     if ( !renderer || !text || !text->text ) {
         return;
@@ -3068,8 +3110,6 @@ static void vxui_demo_render_text_cmd( vxui_demo_renderer* renderer, const vxui_
     char event_label[ 64 ];
     std::snprintf( event_label, sizeof( event_label ), "Submit Text Cmd: font=%u len=%zu", text->font_id, std::strlen( text->text ) );
     vxui_demo_gl_debug_event( renderer, event_label );
-
-    vxui_demo_render_fontcache_drawlist( renderer, clip_rect );
 }
 
 static void vxui_demo_render_draw_list( vxui_demo_renderer* renderer, const vxui_draw_list* list )
@@ -3095,37 +3135,75 @@ static void vxui_demo_render_draw_list( vxui_demo_renderer* renderer, const vxui
         glEnable( GL_SCISSOR_TEST );
         glScissor( x, y, w < 0 ? 0 : w, h < 0 ? 0 : h );
     };
+    auto clip_matches = []( const vxui_rect* lhs, const vxui_rect* rhs ) {
+        if ( lhs == nullptr || rhs == nullptr ) {
+            return lhs == rhs;
+        }
+        return lhs->x == rhs->x && lhs->y == rhs->y && lhs->w == rhs->w && lhs->h == rhs->h;
+    };
+    bool text_batch_pending = false;
+    vxui_rect text_batch_clip = {};
+    const vxui_rect* text_batch_clip_ptr = nullptr;
+    auto flush_pending_text = [&]() {
+        if ( !text_batch_pending ) {
+            return;
+        }
+        vxui_demo_render_fontcache_drawlist( renderer, text_batch_clip_ptr );
+        text_batch_pending = false;
+        text_batch_clip_ptr = nullptr;
+    };
 
     ve_fontcache_flush_drawlist( &renderer->cache );
     for ( int i = 0; i < list->length; ++i ) {
         const vxui_cmd* cmd = &list->commands[ i ];
         switch ( cmd->type ) {
             case VXUI_CMD_RECT:
+                flush_pending_text();
                 vxui_demo_draw_primitive( renderer, cmd->rect.bounds, cmd->rect.color, 0.0f, 0.0f );
                 break;
 
             case VXUI_CMD_RECT_ROUNDED:
+                flush_pending_text();
                 vxui_demo_draw_primitive( renderer, cmd->rect_rounded.bounds, cmd->rect_rounded.color, cmd->rect_rounded.radius, 0.0f );
                 break;
 
             case VXUI_CMD_BORDER:
+                flush_pending_text();
                 vxui_demo_draw_primitive( renderer, cmd->border.bounds, cmd->border.color, cmd->border.radius, cmd->border.width );
                 break;
 
             case VXUI_CMD_IMAGE:
+                flush_pending_text();
                 vxui_demo_draw_placeholder_image( renderer, cmd->image.bounds );
                 break;
 
-            case VXUI_CMD_TEXT:
-                vxui_demo_render_text_cmd( renderer, &cmd->text, clip_stack.empty() ? nullptr : &clip_stack.back() );
+            case VXUI_CMD_TEXT: {
+                const vxui_rect* current_clip = clip_stack.empty() ? nullptr : &clip_stack.back();
+                if ( current_clip && ( current_clip->w <= 0.0f || current_clip->h <= 0.0f ) ) {
+                    current_clip = nullptr;
+                }
+                if ( text_batch_pending && !clip_matches( text_batch_clip_ptr, current_clip ) ) {
+                    flush_pending_text();
+                }
+                if ( current_clip ) {
+                    text_batch_clip = *current_clip;
+                    text_batch_clip_ptr = &text_batch_clip;
+                } else {
+                    text_batch_clip_ptr = nullptr;
+                }
+                vxui_demo_render_text_cmd( renderer, &cmd->text );
+                text_batch_pending = true;
                 break;
+            }
 
             case VXUI_CMD_CLIP_PUSH:
+                flush_pending_text();
                 clip_stack.push_back( cmd->clip.rect );
                 apply_clip( &clip_stack.back() );
                 break;
 
             case VXUI_CMD_CLIP_POP:
+                flush_pending_text();
                 if ( !clip_stack.empty() ) {
                     clip_stack.pop_back();
                 }
@@ -3134,6 +3212,7 @@ static void vxui_demo_render_draw_list( vxui_demo_renderer* renderer, const vxui
         }
     }
 
+    flush_pending_text();
     glDisable( GL_SCISSOR_TEST );
 }
 
@@ -3160,28 +3239,10 @@ static void vxui_demo_present_draw_list( vxui_demo_renderer* renderer, vxui_ctx*
     vxui_demo_gl_debug_begin( renderer, "VXUI Draw List" );
     vxui_demo_render_draw_list( renderer, list );
     vxui_demo_gl_debug_end( renderer );
-    if ( renderer->shot_capture_mode && renderer->shot_capture_fbo ) {
-        GLint previous_read_framebuffer = 0;
-        GLint previous_draw_framebuffer = 0;
-        glGetIntegerv( GL_READ_FRAMEBUFFER_BINDING, &previous_read_framebuffer );
-        glGetIntegerv( GL_DRAW_FRAMEBUFFER_BINDING, &previous_draw_framebuffer );
-        glBindFramebuffer( GL_READ_FRAMEBUFFER, renderer->shot_capture_fbo );
-        glReadBuffer( GL_COLOR_ATTACHMENT0 );
-        glBindFramebuffer( GL_DRAW_FRAMEBUFFER, 0 );
-        glBlitFramebuffer(
-            0, 0,
-            static_cast< GLint >( renderer->window_size.width ), static_cast< GLint >( renderer->window_size.height ),
-            0, 0,
-            static_cast< GLint >( renderer->window_size.width ), static_cast< GLint >( renderer->window_size.height ),
-            GL_COLOR_BUFFER_BIT,
-            GL_NEAREST );
-        glBindFramebuffer( GL_READ_FRAMEBUFFER, static_cast< GLuint >( previous_read_framebuffer ) );
-        glBindFramebuffer( GL_DRAW_FRAMEBUFFER, static_cast< GLuint >( previous_draw_framebuffer ) );
-    }
     if ( ctx ) {
         vxui_flush_text( ctx );
     }
-    vxui_demo_gl_debug_event( renderer, "Present" );
+    vxui_demo_gl_debug_event( renderer, renderer->shot_capture_mode ? "Shot Ready" : "Present" );
 }
 
 static bool vxui_demo_write_png_rgba( const std::filesystem::path& path, int width, int height, const uint8_t* pixels, char* error, size_t error_size )
@@ -3310,42 +3371,6 @@ cleanup:
     return ok;
 }
 
-static bool vxui_demo_capture_backbuffer_png( const std::filesystem::path& path, int width, int height, char* error, size_t error_size )
-{
-    if ( width <= 0 || height <= 0 ) {
-        std::snprintf( error, error_size, "%s", "invalid capture dimensions" );
-        return false;
-    }
-
-    std::vector< uint8_t > pixels( ( size_t ) width * ( size_t ) height * 4u );
-    glPixelStorei( GL_PACK_ALIGNMENT, 1 );
-    auto try_read = [&]( GLenum buffer ) -> bool
-    {
-        while ( glGetError() != GL_NO_ERROR ) {
-        }
-        glReadBuffer( buffer );
-        if ( glGetError() != GL_NO_ERROR ) {
-            return false;
-        }
-        glReadPixels( 0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, pixels.data() );
-        return glGetError() == GL_NO_ERROR;
-    };
-    if ( !try_read( GL_BACK ) && !try_read( GL_FRONT ) ) {
-        std::snprintf( error, error_size, "%s", "glReadPixels failed for both back and front buffers" );
-        return false;
-    }
-
-    const size_t row_stride = ( size_t ) width * 4u;
-    std::vector< uint8_t > flipped( pixels.size() );
-    for ( int y = 0; y < height; ++y ) {
-        const uint8_t* src = pixels.data() + ( size_t ) ( height - 1 - y ) * row_stride;
-        uint8_t* dst = flipped.data() + ( size_t ) y * row_stride;
-        std::memcpy( dst, src, row_stride );
-    }
-
-    return vxui_demo_write_png_rgba( path, width, height, flipped.data(), error, error_size );
-}
-
 static bool vxui_demo_capture_rgba_texture_png( GLuint texture, int width, int height, const std::filesystem::path& path, char* error, size_t error_size )
 {
     if ( texture == 0 || width <= 0 || height <= 0 ) {
@@ -3460,7 +3485,7 @@ int main( int argc, char** argv )
      cfg.resolution.width = shot_request.enabled ? ( unsigned int ) shot_request.width : ( vefc_backend_test_mode ? 1920u : 1280u );
      cfg.resolution.height = shot_request.enabled ? ( unsigned int ) shot_request.height : ( vefc_backend_test_mode ? 1080u : 720u );
      cfg.SetProfile( TinyWindow::profile_t::core );
-     cfg.startHidden = vefc_backend_test_mode;
+     cfg.startHidden = vefc_backend_test_mode || shot_request.enabled;
 
      std::unique_ptr< TinyWindow::windowManager > manager( new TinyWindow::windowManager() );
      std::unique_ptr< TinyWindow::tWindow > window( manager->AddWindow( cfg ) );
@@ -3797,16 +3822,21 @@ int main( int argc, char** argv )
         vxui_demo_debug_validate_demo_layout( &ctx, &list );
 #endif
         vxui_demo_present_draw_list( &renderer, &ctx, &list );
-        window->SwapDrawBuffers();
-        // Shot capture reads back immediately after the single presented frame.
-        glFinish();
-
         char capture_error[ 256 ] = {};
         const bool captured =
-            renderer.shot_capture_mode && renderer.shot_capture_texture
-            ? vxui_demo_capture_rgba_texture_png( renderer.shot_capture_texture, ( int ) renderer.window_size.width, ( int ) renderer.window_size.height, std::filesystem::path( shot_request.out_path ), capture_error, sizeof( capture_error ) )
-            : vxui_demo_capture_backbuffer_png( std::filesystem::path( shot_request.out_path ), ( int ) renderer.window_size.width, ( int ) renderer.window_size.height, capture_error, sizeof( capture_error ) );
+            renderer.shot_capture_mode &&
+            renderer.shot_capture_texture &&
+            vxui_demo_capture_rgba_texture_png(
+                renderer.shot_capture_texture,
+                ( int ) renderer.window_size.width,
+                ( int ) renderer.window_size.height,
+                std::filesystem::path( shot_request.out_path ),
+                capture_error,
+                sizeof( capture_error ) );
         if ( !captured ) {
+            if ( capture_error[ 0 ] == '\0' ) {
+                std::snprintf( capture_error, sizeof( capture_error ), "%s", "shot capture texture was not available" );
+            }
             std::fprintf( stderr, "Failed to capture screenshot: %s\n", capture_error );
             Clay_SetCurrentContext( nullptr );
             if ( !app.watched_seq_path.empty() ) {
@@ -3818,11 +3848,10 @@ int main( int argc, char** argv )
             return 1;
         }
 
+        // Shot mode success: skip explicit GL teardown. Per-object glDelete*
+        // calls are unnecessary work for a disposable one-shot process — the
+        // driver reclaims all context resources when the GL context is destroyed.
         Clay_SetCurrentContext( nullptr );
-        if ( !app.watched_seq_path.empty() ) {
-            std::remove( app.watched_seq_path.c_str() );
-        }
-        vxui_demo_shutdown_renderer( &renderer );
         manager->ShutDown();
         window.reset( nullptr );
         return 0;
@@ -4458,7 +4487,7 @@ static void vxui_demo_emit_stat_bar( vxui_ctx* ctx, const char* id, const char* 
     value = std::clamp( value, 0.0f, 1.0f );
     const std::string row_id = std::string( id ) + ".row";
     const std::string fill_id = std::string( id ) + ".fill";
-    CLAY( vxui__clay_id_from_hash( vxui_id( row_id.c_str() ) ), {
+    VXUI_HASH( ctx, vxui_id( row_id.c_str() ), {
         .layout = {
             .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
             .childGap = 8,
@@ -4470,14 +4499,14 @@ static void vxui_demo_emit_stat_bar( vxui_ctx* ctx, const char* id, const char* 
             .font_size = 18.0f,
             .color = theme.muted_text,
         } );
-        CLAY( vxui__clay_id_from_hash( vxui_id( id ) ), {
+        VXUI_HASH( ctx, vxui_id( id ), {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIXED( 12 ) },
             },
             .backgroundColor = vxui_demo_clay_color( theme.stat_track ),
             .cornerRadius = CLAY_CORNER_RADIUS( 6 ),
         } ) {
-            CLAY( vxui__clay_id_from_hash( vxui_id( fill_id.c_str() ) ), {
+            VXUI_HASH( ctx, vxui_id( fill_id.c_str() ), {
                 .layout = {
                     .sizing = { CLAY_SIZING_FIXED( value * 220.0f ), CLAY_SIZING_GROW( 0 ) },
                 },
@@ -4486,24 +4515,6 @@ static void vxui_demo_emit_stat_bar( vxui_ctx* ctx, const char* id, const char* 
             } ) {}
         }
     }
-}
-
-static vxui_menu_surface_cfg vxui_demo_make_surface_cfg( float surface_width, float surface_max_height )
-{
-    const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
-    return ( vxui_menu_surface_cfg ) {
-        surface_width,
-        surface_max_height,
-        ( float ) VXUI_DEMO_OUTER_PADDING,
-        ( float ) VXUI_DEMO_SURFACE_PADDING_X,
-        ( float ) VXUI_DEMO_SURFACE_PADDING_Y,
-        ( float ) VXUI_DEMO_SCREEN_GAP,
-        18.0f,
-        1.0f,
-        theme.app_background_base,
-        theme.primary_panel_fill,
-        theme.primary_panel_border,
-    };
 }
 
 static void vxui_demo_emit_surface_scanline( vxui_ctx* ctx, const char* root_id )
@@ -4524,7 +4535,12 @@ static void vxui_demo_render_boot_screen( vxui_demo_app* app, vxui_ctx* ctx )
     if ( background_scanline ) {
         vxui_demo_emit_surface_scanline( ctx, "boot" );
     }
-    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, surface_max_height );
+    vxui_menu_surface_cfg surface_cfg = vxui_menu_surface_cfg_default(
+        surface_metrics.surface_width,
+        surface_max_height,
+        theme.app_background_base,
+        theme.primary_panel_fill,
+        theme.primary_panel_border );
     vxui_menu_surface_begin( ctx, "boot", "boot.surface", &surface_cfg );
     {
         const std::string screen_count_text = std::to_string( ctx ? ctx->screen_count : 0 );
@@ -4599,7 +4615,12 @@ static void vxui_demo_render_title_screen( vxui_demo_app* app, vxui_ctx* ctx, co
     if ( background_scanline ) {
         vxui_demo_emit_surface_scanline( ctx, "title" );
     }
-    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, surface_max_height );
+    vxui_menu_surface_cfg surface_cfg = vxui_menu_surface_cfg_default(
+        surface_metrics.surface_width,
+        surface_max_height,
+        theme.app_background_base,
+        theme.primary_panel_fill,
+        theme.primary_panel_border );
     vxui_menu_surface_begin( ctx, "title", "title.surface", &surface_cfg );
     {
         const std::string screen_count_text = std::to_string( ctx ? ctx->screen_count : 0 );
@@ -4695,6 +4716,7 @@ static void vxui_demo_render_title_screen( vxui_demo_app* app, vxui_ctx* ctx, co
 
 static void vxui_demo_render_main_menu_screen( vxui_demo_app* app, vxui_ctx* ctx )
 {
+    const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
     const bool rtl = ctx->rtl;
     const bool background_scanline = app ? app->scanline_index != 0 : true;
     const float viewport_width = std::max( 0.0f, ( float ) ctx->cfg.screen_width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
@@ -4720,7 +4742,12 @@ static void vxui_demo_render_main_menu_screen( vxui_demo_app* app, vxui_ctx* ctx
     if ( background_scanline ) {
         vxui_demo_emit_surface_scanline( ctx, "main_menu" );
     }
-    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( layout.surface.surface_width, layout.surface_max_height );
+    vxui_menu_surface_cfg surface_cfg = vxui_menu_surface_cfg_default(
+        layout.surface.surface_width,
+        layout.surface_max_height,
+        theme.app_background_base,
+        theme.primary_panel_fill,
+        theme.primary_panel_border );
     vxui_menu_surface_begin( ctx, "main_menu", "main.surface", &surface_cfg );
     {
         const vxui_demo_main_menu_preview* preview = vxui_demo_current_main_menu_preview( app );
@@ -4851,6 +4878,7 @@ static void vxui_demo_render_archives_screen( vxui_demo_app* app, vxui_ctx* ctx 
 
 static void vxui_demo_render_settings_screen( vxui_demo_app* app, vxui_ctx* ctx, const vxui_demo_renderer* renderer )
 {
+    const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
     const bool rtl = ctx->rtl;
     const bool background_scanline = app ? app->scanline_index != 0 : true;
     ( void ) renderer;
@@ -4880,7 +4908,12 @@ static void vxui_demo_render_settings_screen( vxui_demo_app* app, vxui_ctx* ctx,
     if ( background_scanline ) {
         vxui_demo_emit_surface_scanline( ctx, "settings" );
     }
-    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, layout.surface_max_height );
+    vxui_menu_surface_cfg surface_cfg = vxui_menu_surface_cfg_default(
+        surface_metrics.surface_width,
+        layout.surface_max_height,
+        theme.app_background_base,
+        theme.primary_panel_fill,
+        theme.primary_panel_border );
     vxui_menu_surface_begin( ctx, "settings", "settings.surface", &surface_cfg );
     {
         const std::string settings_screen_count = std::to_string( ctx ? ctx->screen_count : 0 );
@@ -5000,7 +5033,12 @@ static void vxui_demo_render_credits_screen( vxui_demo_app* app, vxui_ctx* ctx, 
     if ( background_scanline ) {
         vxui_demo_emit_surface_scanline( ctx, "credits" );
     }
-    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, surface_max_height );
+    vxui_menu_surface_cfg surface_cfg = vxui_menu_surface_cfg_default(
+        surface_metrics.surface_width,
+        surface_max_height,
+        theme.app_background_base,
+        theme.primary_panel_fill,
+        theme.primary_panel_border );
     vxui_menu_surface_begin( ctx, "credits", "credits.surface", &surface_cfg );
     {
         const std::string screen_count_text = std::to_string( ctx ? ctx->screen_count : 0 );
@@ -5138,7 +5176,12 @@ static void vxui_demo_render_launch_stub_screen( vxui_demo_app* app, vxui_ctx* c
     if ( background_scanline ) {
         vxui_demo_emit_surface_scanline( ctx, "launch_stub" );
     }
-    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, surface_max_height );
+    vxui_menu_surface_cfg surface_cfg = vxui_menu_surface_cfg_default(
+        surface_metrics.surface_width,
+        surface_max_height,
+        theme.app_background_base,
+        theme.primary_panel_fill,
+        theme.primary_panel_border );
     vxui_menu_surface_begin( ctx, "launch_stub", "launch_stub.surface", &surface_cfg );
     {
         const std::string screen_count_text = std::to_string( ctx ? ctx->screen_count : 0 );
@@ -5213,7 +5256,12 @@ static void vxui_demo_render_results_stub_screen( vxui_demo_app* app, vxui_ctx* 
     if ( background_scanline ) {
         vxui_demo_emit_surface_scanline( ctx, "results_stub" );
     }
-    vxui_menu_surface_cfg surface_cfg = vxui_demo_make_surface_cfg( surface_metrics.surface_width, surface_max_height );
+    vxui_menu_surface_cfg surface_cfg = vxui_menu_surface_cfg_default(
+        surface_metrics.surface_width,
+        surface_max_height,
+        theme.app_background_base,
+        theme.primary_panel_fill,
+        theme.primary_panel_border );
     vxui_menu_surface_begin( ctx, "results_stub", "results_stub.surface", &surface_cfg );
     {
         const std::string screen_count_text = std::to_string( ctx ? ctx->screen_count : 0 );

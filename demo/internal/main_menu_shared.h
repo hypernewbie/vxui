@@ -227,19 +227,11 @@ inline vxui_demo_controls_block_copy vxui_demo_controls_block_copy_for_locale( c
 
 inline vxui_menu_style vxui_demo_make_title_deck_menu_style( uint32_t body_font_id, uint32_t title_font_id )
 {
-    vxui_menu_style style = vxui_menu_style_br_title();
+    vxui_menu_style style = vxui_menu_style_title_menu();
     style.option_wrap_by_default = true;
     style.body_font_id = body_font_id;
     style.title_font_id = title_font_id;
     style.badge_font_id = body_font_id;
-    style.body_font_size = 18.0f;
-    style.title_font_size = 24.0f;
-    style.badge_font_size = 9.0f;
-    style.row_height = 30.0f;
-    style.row_gap = 1.0f;
-    style.section_gap = 8.0f;
-    style.padding_x = 16.0f;
-    style.padding_y = 8.0f;
     vxui_demo_apply_title_menu_theme( style );
     return style;
 }
@@ -287,14 +279,13 @@ inline void vxui_demo_emit_main_menu_shell(
     const int compact_help_line_count = tight_preview_width ? std::min( help_line_count, 2 ) : ( compact_help ? std::min( help_line_count, 3 ) : help_line_count );
 
     vxui_menu_style shell_style = vxui_demo_make_title_deck_menu_style( visuals.body_font_id, visuals.title_font_id );
-    shell_style.title_font_id = visuals.title_font_id;
-    shell_style.body_font_id = visuals.body_font_id;
-    shell_style.badge_font_id = visuals.body_font_id;
-    shell_style.row_gap = compact_vertical ? 6.0f : 8.0f;
-    shell_style.section_gap = compact_vertical ? 8.0f : 10.0f;
     shell_style.lane_gap = layout.deck_gap;
-    shell_style.padding_x = compact_vertical ? 10.0f : 12.0f;
-    shell_style.padding_y = compact_vertical ? 6.0f : 8.0f;
+    if ( compact_vertical ) {
+        shell_style.row_gap = 6.0f;
+        shell_style.section_gap = 8.0f;
+        shell_style.padding_x = 10.0f;
+        shell_style.padding_y = 6.0f;
+    }
 
     vxui_menu_prompt_item prompt_items[] = {
         { "action.confirm", copy.confirm_label, false, "main.prompt.confirm" },

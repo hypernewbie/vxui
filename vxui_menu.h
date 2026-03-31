@@ -273,6 +273,13 @@ typedef struct vxui_menu_surface_cfg
     vxui_color surface_border_color;
 } vxui_menu_surface_cfg;
 
+vxui_menu_surface_cfg vxui_menu_surface_cfg_default(
+    float surface_width,
+    float surface_max_height,
+    vxui_color background_fill_color,
+    vxui_color surface_fill_color,
+    vxui_color surface_border_color );
+
 vxui_menu_style vxui_menu_style_br_title( void );
 vxui_menu_style vxui_menu_style_br_panel( void );
 vxui_menu_style vxui_menu_style_form( void );
@@ -305,6 +312,7 @@ void vxui_menu_tertiary_lane_end( vxui_ctx* ctx );
 void vxui_menu_preview( vxui_ctx* ctx, const char* id, const vxui_menu_preview_cfg* cfg );
 void vxui_menu_help_legend( vxui_ctx* ctx, const char* id, const vxui_menu_help_cfg* cfg );
 void vxui_menu_footer( vxui_ctx* ctx, const char* id, const vxui_menu_footer_cfg* cfg );
+bool vxui_menu_screen_is_compact( vxui_ctx* ctx );
 
 #ifdef VXUI_MENU_IMPL
 
@@ -477,6 +485,28 @@ static vxui_menu_surface_cfg vxui_menu__sanitize_surface_cfg( vxui_menu_surface_
         cfg.border_width = 0.0f;
     }
     return cfg;
+}
+
+vxui_menu_surface_cfg vxui_menu_surface_cfg_default(
+    float surface_width,
+    float surface_max_height,
+    vxui_color background_fill_color,
+    vxui_color surface_fill_color,
+    vxui_color surface_border_color )
+{
+    return ( vxui_menu_surface_cfg ) {
+        surface_width,
+        surface_max_height,
+        16.0f,
+        24.0f,
+        18.0f,
+        14.0f,
+        18.0f,
+        1.0f,
+        background_fill_color,
+        surface_fill_color,
+        surface_border_color,
+    };
 }
 
 static vxui_menu_style vxui_menu__sanitize_style( vxui_menu_style style )
@@ -1227,10 +1257,14 @@ vxui_menu_style vxui_menu_style_compact( void )
 vxui_menu_style vxui_menu_style_title_menu( void )
 {
     vxui_menu_style style = vxui_menu_style_br_title();
-    style.row_gap = 10.0f;
-    style.section_gap = 18.0f;
-    style.padding_x = 16.0f;
-    style.padding_y = 10.0f;
+    style.body_font_size = 18.0f;
+    style.title_font_size = 24.0f;
+    style.badge_font_size = 9.0f;
+    style.row_height = 30.0f;
+    style.row_gap = 8.0f;
+    style.section_gap = 10.0f;
+    style.padding_x = 12.0f;
+    style.padding_y = 8.0f;
     style.panel_fill_color = { 14, 18, 28, 196 };
     style.row_fill_color = { 20, 26, 38, 172 };
     style.row_focus_fill_color = { 38, 54, 78, 228 };
@@ -1240,10 +1274,13 @@ vxui_menu_style vxui_menu_style_title_menu( void )
 vxui_menu_style vxui_menu_style_split_deck( void )
 {
     vxui_menu_style style = vxui_menu_style_br_panel();
+    style.body_font_size = 16.0f;
+    style.secondary_font_size = 13.0f;
+    style.badge_font_size = 10.0f;
     style.row_gap = 8.0f;
-    style.section_gap = 14.0f;
-    style.padding_x = 14.0f;
-    style.padding_y = 8.0f;
+    style.section_gap = 10.0f;
+    style.padding_x = 10.0f;
+    style.padding_y = 7.0f;
     style.panel_fill_color = { 12, 18, 28, 208 };
     return style;
 }
@@ -2356,6 +2393,12 @@ void vxui_menu_footer( vxui_ctx* ctx, const char* id, const vxui_menu_footer_cfg
     }
 
     Clay__CloseElement();
+}
+
+bool vxui_menu_screen_is_compact( vxui_ctx* ctx )
+{
+    vxui_menu__screen_scope* scope = vxui_menu__current_screen_scope();
+    return scope && scope->ctx == ctx && scope->compact;
 }
 
 #endif

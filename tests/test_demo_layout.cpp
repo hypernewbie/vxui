@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -271,6 +272,15 @@ static bool demo_layout_find_anim_bounds( const vxui_ctx* ctx, uint32_t id, vxui
         return true;
     }
     return false;
+}
+
+static std::string demo_layout_read_source_file( const char* relative_path )
+{
+    std::ifstream input( std::string( VXUI_SOURCE_DIR ) + "/" + ( relative_path ? relative_path : "" ), std::ios::binary );
+    if ( !input ) {
+        return "";
+    }
+    return std::string( std::istreambuf_iterator< char >( input ), std::istreambuf_iterator< char >() );
 }
 
 static bool demo_layout_find_text_owner_bounds( const demo_layout_fixture* fixture, const char* text, vxui_rect* out )
@@ -1417,6 +1427,20 @@ UTEST_F_TEARDOWN( demo_layout_fixture )
     vxui_shutdown( &utest_fixture->ctx );
     vxui_test_fontcache_destroy( utest_fixture->fontcache );
     std::free( utest_fixture->memory );
+}
+
+UTEST( demo_layout_architecture, authored_demo_files_do_not_use_direct_clay )
+{
+    const char* files[] = {
+        "main.cpp",
+        "demo/internal/main_menu_shared.h",
+        "demo/internal/split_deck_shared.h",
+    };
+    for ( const char* path : files ) {
+        const std::string source = demo_layout_read_source_file( path );
+        ASSERT_TRUE( !source.empty() );
+        EXPECT_TRUE( source.find( "CLAY(" ) == std::string::npos );
+    }
 }
 
 UTEST_F( demo_layout_fixture, main_menu_real_content_matches_production_copy_and_breaks_old_contract )
