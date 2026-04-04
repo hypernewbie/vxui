@@ -1,6 +1,7 @@
 build/
 build-*/
 build_release/
+shots/
 .vs/
 out/
 tmp/
