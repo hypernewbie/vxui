@@ -362,6 +362,7 @@ inline void vxui_demo_emit_main_menu_command_row(
         badge_text = theme.badge_text;
         badge_border = vxui_demo_panel_border( { 146, 64, 14, 120 }, 1 );
     }
+    const float chevron_font_size = font_size >= 15.0f ? 12.0f : 11.0f;
     const char* resolved_label = vxui__resolve_text( ctx, label_key );
 
     VXUI_HASH( ctx, row_id, {
@@ -383,7 +384,7 @@ inline void vxui_demo_emit_main_menu_command_row(
             },
         } ) {
             if ( focused ) {
-                vxui_label_cfg chevron_style = vxui_demo_text_style( label_font_id, font_size * 0.82f, theme.section_text );
+                vxui_label_cfg chevron_style = vxui_demo_text_style( label_font_id, chevron_font_size, theme.section_text );
                 chevron_style.letter_spacing = 1;
                 VXUI_LABEL( ctx, ">", chevron_style );
             }
@@ -432,16 +433,19 @@ inline void vxui_demo_emit_main_menu_controls_block(
     float min_height )
 {
     const char* title = copy.title;
+    ( void ) title_font_size;
+    ( void ) line_font_size;
     if ( title && std::strcmp( title, "Controls" ) == 0 ) {
         title = "INPUT TELEMETRY";
     }
     const bool desktop_telemetry = min_height >= 168.0f;
-    const float telemetry_title_size = desktop_telemetry ? title_font_size + 1.0f : title_font_size;
-    const float telemetry_label_size = desktop_telemetry ? 10.0f : line_font_size * 0.76f;
-    const float telemetry_value_size = desktop_telemetry ? 11.0f : line_font_size * 0.78f;
-    const float telemetry_accent_value_size = desktop_telemetry ? 12.0f : line_font_size * 0.82f;
-    const Clay_Padding telemetry_row_padding = desktop_telemetry ? Clay_Padding{ 1, 0, 2, 4 } : Clay_Padding{ 0, 0, 0, 3 };
-    const Clay_Padding telemetry_chip_padding = desktop_telemetry ? Clay_Padding{ 5, 5, 3, 3 } : Clay_Padding{ 4, 4, 2, 2 };
+    const float telemetry_title_size = desktop_telemetry ? 18.0f : 12.0f;
+    const float telemetry_label_size = desktop_telemetry ? 11.0f : 8.0f;
+    const float telemetry_value_size = desktop_telemetry ? 12.0f : 9.0f;
+    const float telemetry_accent_value_size = desktop_telemetry ? 13.0f : 10.0f;
+    const float telemetry_ghost_size = desktop_telemetry ? 56.0f : min_height >= 132.0f ? 36.0f : 22.0f;
+    const Clay_Padding telemetry_row_padding = desktop_telemetry ? Clay_Padding{ 2, 0, 3, 6 } : Clay_Padding{ 1, 0, 2, 4 };
+    const Clay_Padding telemetry_chip_padding = desktop_telemetry ? Clay_Padding{ 6, 6, 3, 3 } : Clay_Padding{ 4, 4, 2, 2 };
     const vxui_color panel_fill = { 1, 4, 10, 236 };
     const vxui_color panel_border = { 32, 42, 58, 178 };
     const vxui_color row_divider = { 36, 46, 58, ( uint8_t ) ( desktop_telemetry ? 96 : 144 ) };
@@ -473,13 +477,13 @@ inline void vxui_demo_emit_main_menu_controls_block(
 
     auto emit_item = [&]( const std::string& item_id, const std::string& label, const std::string& value, bool accent_value, bool grow ) {
         VXUI_HASH( ctx, vxui_id( item_id.c_str() ), {
-            .layout = {
-                .sizing = { grow ? CLAY_SIZING_GROW( 0 ) : CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
-                .padding = telemetry_row_padding,
-                .childGap = desktop_telemetry ? uint16_t{ 10 } : uint16_t{ 8 },
-                .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-                .layoutDirection = CLAY_LEFT_TO_RIGHT,
-            },
+                    .layout = {
+                        .sizing = { grow ? CLAY_SIZING_GROW( 0 ) : CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+                        .padding = telemetry_row_padding,
+                        .childGap = desktop_telemetry ? uint16_t{ 12 } : uint16_t{ 8 },
+                        .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+                        .layoutDirection = CLAY_LEFT_TO_RIGHT,
+                    },
             .border = {
                 .color = vxui_demo_clay_color( row_divider ),
                 .width = { 0, 0, 0, 1, 0 },
@@ -519,7 +523,7 @@ inline void vxui_demo_emit_main_menu_controls_block(
         .layout = {
             .sizing = { CLAY_SIZING_GROW( 0 ), min_height > 0.0f ? CLAY_SIZING_FIT( min_height ) : CLAY_SIZING_FIT( 0 ) },
             .padding = { padding, padding, padding, padding },
-            .childGap = row_gap,
+            .childGap = desktop_telemetry ? uint16_t( row_gap + 1 ) : row_gap,
             .layoutDirection = CLAY_TOP_TO_BOTTOM,
         },
         .backgroundColor = vxui_demo_clay_color( panel_fill ),
@@ -546,7 +550,7 @@ inline void vxui_demo_emit_main_menu_controls_block(
                 },
             } ) {}
 
-            vxui_label_cfg ghost_style = vxui_demo_text_style( title_font_id, telemetry_title_size * ( desktop_telemetry ? 3.2f : min_height >= 132.0f ? 3.0f : 1.8f ), ghost_text );
+            vxui_label_cfg ghost_style = vxui_demo_text_style( title_font_id, telemetry_ghost_size, ghost_text );
             ghost_style.letter_spacing = 0;
             VXUI_LABEL( ctx, "LAUNCH", ghost_style );
         }
@@ -586,7 +590,7 @@ inline void vxui_demo_emit_main_menu_controls_block(
                 VXUI_HASH( ctx, vxui_id( row_id.c_str() ), {
                     .layout = {
                         .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
-                        .childGap = desktop_telemetry ? uint16_t{ 16 } : uint16_t{ 12 },
+                        .childGap = desktop_telemetry ? uint16_t{ 18 } : uint16_t{ 12 },
                         .layoutDirection = CLAY_LEFT_TO_RIGHT,
                     },
                 } ) {

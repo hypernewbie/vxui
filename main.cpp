@@ -379,7 +379,7 @@ static const char* vxui_demo_footer_prompt_key( int prompt_table_index );
 static const char* vxui_demo_screen_name_key( const char* screen_name );
 static const char* vxui_demo_footer_top_name( const vxui_demo_app* app, const vxui_ctx* ctx );
 static bool vxui_demo_locale_matches( const char* locale, const char* prefix );
-static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_renderer* renderer, uint32_t requested_font_id, float requested_font_size, const char* locale );
+static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_renderer* renderer, uint32_t requested_font_id, float requested_font_size, const char* locale, bool strict_main_menu_no_scale );
 static void vxui_demo_font_resolver( vxui_ctx* ctx, uint32_t requested_font_id, float requested_font_size, const char* locale, void* userdata, vxui_resolved_font* out );
 static float vxui_demo_control_height( const vxui_demo_renderer* renderer, const char* locale );
 static bool vxui_demo_get_anim_bounds( const vxui_ctx* ctx, uint32_t id, vxui_rect* out );
@@ -1105,24 +1105,9 @@ static bool vxui_demo_font_is_abstract_request( uint32_t requested_font_id )
     return requested_font_id >= VXUI_DEMO_FONT_ROLE_BODY || requested_font_id < VXUI_DEMO_FONT_FACE_COUNT;
 }
 
-static bool vxui_demo_is_main_menu_micro_size( float requested_font_size )
+static bool vxui_demo_is_main_menu_no_scale_screen( const vxui_ctx* ctx )
 {
-    static const float kMainMenuMicroSizes[] = { 8.0f, 9.0f, 10.0f, 11.0f, 13.0f };
-    for ( float size : kMainMenuMicroSizes ) {
-        if ( std::fabs( requested_font_size - size ) < 0.01f ) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool vxui_demo_should_snap_main_menu_text( uint32_t requested_font_id, ve_font_id face_id, float requested_font_size )
-{
-    const bool mono_request =
-        requested_font_id == VXUI_DEMO_FONT_MAIN_MENU_MONO ||
-        requested_font_id == VXUI_DEMO_FONT_ROLE_CODE ||
-        face_id == VXUI_DEMO_FONT_MAIN_MENU_MONO;
-    return mono_request && vxui_demo_is_main_menu_micro_size( requested_font_size );
+    return ctx && vxui_demo_screen_kind_from_name( vxui_demo_top_screen_name( ctx ) ) == VXUI_DEMO_SCREEN_MAIN_MENU;
 }
 
 static float vxui_demo_loaded_font_size( const vxui_demo_renderer* renderer, ve_font_id font_id, float fallback )
@@ -1168,12 +1153,17 @@ static void vxui_demo_debug_report_font_scale(
     ve_font_id resolved_font_id,
     float requested_font_size,
     float raster_size,
-    float render_scale )
+    float render_scale,
+    bool strict_no_scale )
 {
     if ( !renderer || requested_font_size <= 0.0f || raster_size <= 0.0f ) {
         return;
     }
-    if ( render_scale >= 0.87f && render_scale <= 1.15f ) {
+    if ( strict_no_scale ) {
+        if ( std::fabs( raster_size - requested_font_size ) <= 0.01f ) {
+            return;
+        }
+    } else if ( render_scale >= 0.87f && render_scale <= 1.15f ) {
         return;
     }
 
@@ -1192,18 +1182,28 @@ static void vxui_demo_debug_report_font_scale(
     }
     seen_keys.push_back( key );
 
-    std::fprintf(
-        stderr,
-        "vxui text scale: requested_font=%u requested_size=%.2f resolved_font=%d raster_size=%.2f render_scale=%.3f\n",
-        requested_font_id,
-        requested_font_size,
-        ( int ) resolved_font_id,
-        raster_size,
-        render_scale );
+    if ( strict_no_scale ) {
+        std::fprintf(
+            stderr,
+            "vxui main_menu no-scale mismatch: requested_font=%u requested_size=%.2f resolved_font=%d raster_size=%.2f\n",
+            requested_font_id,
+            requested_font_size,
+            ( int ) resolved_font_id,
+            raster_size );
+    } else {
+        std::fprintf(
+            stderr,
+            "vxui text scale: requested_font=%u requested_size=%.2f resolved_font=%d raster_size=%.2f render_scale=%.3f\n",
+            requested_font_id,
+            requested_font_size,
+            ( int ) resolved_font_id,
+            raster_size,
+            render_scale );
+    }
 }
 #endif
 
-static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_renderer* renderer, uint32_t requested_font_id, float requested_font_size, const char* locale )
+static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_renderer* renderer, uint32_t requested_font_id, float requested_font_size, const char* locale, bool strict_main_menu_no_scale )
 {
     auto locale_body_face = [&]( void ) -> ve_font_id
     {
@@ -1255,7 +1255,6 @@ static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_re
     }
 
     const bool abstract_request = vxui_demo_font_is_abstract_request( requested_font_id );
-    const bool snap_main_menu_text = vxui_demo_should_snap_main_menu_text( requested_font_id, face_id, requested_font_size );
     ve_font_id resolved_font_id = face_id;
     float render_scale = 1.0f;
     if ( renderer && abstract_request ) {
@@ -1263,7 +1262,7 @@ static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_re
     }
 
     const float raster_size = vxui_demo_loaded_font_size( renderer, resolved_font_id, requested_font_size );
-    if ( snap_main_menu_text && raster_size > 0.0f ) {
+    if ( strict_main_menu_no_scale && raster_size > 0.0f ) {
         render_scale = 1.0f;
     } else if ( raster_size > 0.0f && requested_font_size > 0.0f ) {
         render_scale = requested_font_size / raster_size;
@@ -1272,7 +1271,7 @@ static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_re
     const float line_height = vxui_demo_font_line_height( renderer, resolved_font_id, requested_font_size ) * render_scale;
 
 #ifdef VXUI_DEBUG
-    vxui_demo_debug_report_font_scale( renderer, requested_font_id, resolved_font_id, requested_font_size, raster_size, render_scale );
+    vxui_demo_debug_report_font_scale( renderer, requested_font_id, resolved_font_id, requested_font_size, raster_size, render_scale, strict_main_menu_no_scale );
 #endif
 
     return { resolved_font_id, line_height, render_scale };
@@ -1280,13 +1279,13 @@ static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_re
 
 static void vxui_demo_font_resolver( vxui_ctx* ctx, uint32_t requested_font_id, float requested_font_size, const char* locale, void* userdata, vxui_resolved_font* out )
 {
-    ( void ) ctx;
     if ( !out ) {
         return;
     }
 
     const vxui_demo_renderer* renderer = ( const vxui_demo_renderer* ) userdata;
-    vxui_demo_font_metrics metrics = vxui_demo_resolve_font_metrics( renderer, requested_font_id, requested_font_size, locale );
+    const bool strict_main_menu_no_scale = vxui_demo_is_main_menu_no_scale_screen( ctx );
+    vxui_demo_font_metrics metrics = vxui_demo_resolve_font_metrics( renderer, requested_font_id, requested_font_size, locale, strict_main_menu_no_scale );
     out->font_id = metrics.font_id >= 0 ? ( uint32_t ) metrics.font_id : requested_font_id;
     out->line_height = metrics.line_height;
     out->render_scale = metrics.render_scale;
@@ -1294,7 +1293,7 @@ static void vxui_demo_font_resolver( vxui_ctx* ctx, uint32_t requested_font_id, 
 
 static float vxui_demo_control_height( const vxui_demo_renderer* renderer, const char* locale )
 {
-    vxui_demo_font_metrics metrics = vxui_demo_resolve_font_metrics( renderer, VXUI_DEMO_FONT_ROLE_BODY, ( float ) VXUI_DEMO_BODY_SIZE, locale );
+    vxui_demo_font_metrics metrics = vxui_demo_resolve_font_metrics( renderer, VXUI_DEMO_FONT_ROLE_BODY, ( float ) VXUI_DEMO_BODY_SIZE, locale, false );
     return std::max( 32.0f, metrics.line_height + VXUI_DEMO_BUTTON_PADDING_Y * 2.0f );
 }
 
