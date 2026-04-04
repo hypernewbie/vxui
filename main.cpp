@@ -2,6 +2,7 @@
 #include <array>
 #include <cassert>
 #include <chrono>
+#include <cstdarg>
 #include <cmath>
 #include <cfloat>
 #include <cstdio>
@@ -1583,6 +1584,318 @@ static bool vxui_demo_write_file( const char* path, const char* text )
     return ok;
 }
 
+static bool vxui_demo_layout_dump_requested( const vxui_demo_shot_request& request )
+{
+    return request.dump_layout_stdout || !request.dump_layout_path.empty();
+}
+
+static void vxui_demo_json_appendf( std::string* out, const char* fmt, ... )
+{
+    if ( !out || !fmt ) {
+        return;
+    }
+    va_list args;
+    va_start( args, fmt );
+    va_list copy;
+    va_copy( copy, args );
+    int needed = std::vsnprintf( nullptr, 0, fmt, copy );
+    va_end( copy );
+    if ( needed <= 0 ) {
+        va_end( args );
+        return;
+    }
+    const size_t start = out->size();
+    out->resize( start + ( size_t ) needed + 1u );
+    std::vsnprintf( out->data() + start, ( size_t ) needed + 1u, fmt, args );
+    out->resize( start + ( size_t ) needed );
+    va_end( args );
+}
+
+static void vxui_demo_json_append_escaped( std::string* out, const char* text )
+{
+    if ( !out ) {
+        return;
+    }
+    out->push_back( '"' );
+    const unsigned char* it = reinterpret_cast< const unsigned char* >( text ? text : "" );
+    while ( *it ) {
+        switch ( *it ) {
+            case '\\': out->append( "\\\\" ); break;
+            case '"': out->append( "\\\"" ); break;
+            case '\n': out->append( "\\n" ); break;
+            case '\r': out->append( "\\r" ); break;
+            case '\t': out->append( "\\t" ); break;
+            default:
+                if ( *it < 0x20u ) {
+                    vxui_demo_json_appendf( out, "\\u%04x", ( unsigned int ) *it );
+                } else {
+                    out->push_back( ( char ) *it );
+                }
+                break;
+        }
+        ++it;
+    }
+    out->push_back( '"' );
+}
+
+static const char* vxui_demo_decl_kind_name( int kind )
+{
+    switch ( ( vxui_decl_kind ) kind ) {
+        case VXUI_DECL_LABEL: return "label";
+        case VXUI_DECL_VALUE: return "value";
+        case VXUI_DECL_ACTION: return "action";
+        case VXUI_DECL_OPTION: return "option";
+        case VXUI_DECL_SLIDER: return "slider";
+        case VXUI_DECL_LIST: return "list";
+        case VXUI_DECL_LIST_ITEM: return "list_item";
+        case VXUI_DECL_PROMPT: return "prompt";
+        default: return "unknown";
+    }
+}
+
+static const char* vxui_demo_cmd_type_name( vxui_cmd_type type )
+{
+    switch ( type ) {
+        case VXUI_CMD_RECT: return "rect";
+        case VXUI_CMD_RECT_ROUNDED: return "rect_rounded";
+        case VXUI_CMD_BORDER: return "border";
+        case VXUI_CMD_IMAGE: return "image";
+        case VXUI_CMD_TEXT: return "text";
+        case VXUI_CMD_CLIP_PUSH: return "clip_push";
+        case VXUI_CMD_CLIP_POP: return "clip_pop";
+        default: return "unknown";
+    }
+}
+
+static vxui_demo_main_menu_debug_metrics vxui_demo_collect_current_main_menu_debug_metrics( const vxui_demo_app* app, const vxui_ctx* ctx )
+{
+    const float viewport_width = std::max( 0.0f, ( float ) ctx->cfg.screen_width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
+    const float viewport_height = std::max( 0.0f, ( float ) ctx->cfg.screen_height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
+    const float layout_surface_max_height =
+        app && app->shot_layout_surface_max_height_override > 0.0f
+        ? std::min( viewport_height, app->shot_layout_surface_max_height_override )
+        : viewport_height;
+    return vxui_demo_collect_main_menu_debug_metrics( viewport_width, viewport_height, layout_surface_max_height, ctx ? ctx->locale : nullptr );
+}
+
+#ifdef VXUI_DEBUG
+struct vxui_demo_layout_dump_frame_state
+{
+    std::string* out = nullptr;
+    uint32_t screen_id = 0u;
+    bool first = true;
+};
+
+static bool vxui_demo_layout_dump_frame_item( const vxui_debug_frame_item* item, void* userdata )
+{
+    vxui_demo_layout_dump_frame_state* state = ( vxui_demo_layout_dump_frame_state* ) userdata;
+    if ( !item || !state || !state->out ) {
+        return false;
+    }
+    if ( state->screen_id != 0u && item->screen_id != 0u && item->screen_id != state->screen_id ) {
+        return true;
+    }
+    if ( !state->first ) {
+        state->out->append( ",\n" );
+    }
+    state->first = false;
+    state->out->append( "    {" );
+    vxui_demo_json_appendf( state->out, "\"decl_id\":%u,\"owner_id\":%u,\"screen_id\":%u,", item->decl_id, item->owner_id, item->screen_id );
+    state->out->append( "\"decl_kind\":" );
+    vxui_demo_json_append_escaped( state->out, vxui_demo_decl_kind_name( item->decl_kind ) );
+    state->out->append( ",\"cmd_type\":" );
+    vxui_demo_json_append_escaped( state->out, vxui_demo_cmd_type_name( item->cmd_type ) );
+    vxui_demo_json_appendf(
+        state->out,
+        ",\"bounds\":{\"x\":%.2f,\"y\":%.2f,\"w\":%.2f,\"h\":%.2f}",
+        item->bounds.x,
+        item->bounds.y,
+        item->bounds.w,
+        item->bounds.h );
+    if ( item->cmd_type == VXUI_CMD_TEXT ) {
+        state->out->append( ",\"text\":" );
+        vxui_demo_json_append_escaped( state->out, item->text ? item->text : "" );
+        vxui_demo_json_appendf(
+            state->out,
+            ",\"font_id\":%u,\"font_size\":%.2f,\"render_scale\":%.4f",
+            item->font_id,
+            item->font_size,
+            item->render_scale );
+    }
+    state->out->push_back( '}' );
+    return true;
+}
+#endif
+
+static bool vxui_demo_write_layout_dump_json(
+    const vxui_demo_shot_request& request,
+    const vxui_demo_app* app,
+    const vxui_ctx* ctx,
+    const vxui_draw_list* list,
+    char* error,
+    size_t error_size )
+{
+    if ( !ctx || !list ) {
+        std::snprintf( error, error_size, "%s", "layout dump requires a rendered frame" );
+        return false;
+    }
+
+    const char* screen_name = vxui_demo_top_screen_name( ctx );
+    const uint32_t screen_id = screen_name ? vxui_id( screen_name ) : 0u;
+    std::string json;
+    json.reserve( 32 * 1024 );
+    json.append( "{\n  \"request\":{" );
+    vxui_demo_json_appendf(
+        &json,
+        "\"shot_mode\":%s,\"width\":%d,\"height\":%d,\"dump_layout_stdout\":%s",
+        request.enabled ? "true" : "false",
+        ctx->cfg.screen_width,
+        ctx->cfg.screen_height,
+        request.dump_layout_stdout ? "true" : "false" );
+    if ( request.screen_name ) {
+        json.append( ",\"requested_screen\":" );
+        vxui_demo_json_append_escaped( &json, request.screen_name );
+    }
+    if ( !request.out_path.empty() ) {
+        json.append( ",\"shot_out\":" );
+        vxui_demo_json_append_escaped( &json, request.out_path.c_str() );
+    }
+    if ( !request.dump_layout_path.empty() ) {
+        json.append( ",\"dump_layout_path\":" );
+        vxui_demo_json_append_escaped( &json, request.dump_layout_path.c_str() );
+    }
+    json.append( "},\n  \"screen\":{" );
+    json.append( "\"name\":" );
+    vxui_demo_json_append_escaped( &json, screen_name ? screen_name : "" );
+    vxui_demo_json_appendf( &json, ",\"name_id\":%u", screen_id );
+    json.append( "},\n  \"semantic_metrics\":" );
+
+    if ( screen_name && std::strcmp( screen_name, "main_menu" ) == 0 ) {
+        const vxui_demo_main_menu_debug_metrics metrics = vxui_demo_collect_current_main_menu_debug_metrics( app, ctx );
+        json.append( "{\"kind\":\"main_menu\"" );
+        vxui_demo_json_appendf(
+            &json,
+            ",\"viewport_width\":%.2f,\"viewport_height\":%.2f,\"surface_width\":%.2f,\"content_width\":%.2f,\"surface_max_height\":%.2f",
+            metrics.viewport_width,
+            metrics.viewport_height,
+            metrics.surface_width,
+            metrics.content_width,
+            metrics.surface_max_height );
+        vxui_demo_json_appendf(
+            &json,
+            ",\"command_panel_width\":%.2f,\"preview_panel_width\":%.2f,\"deck_gap\":%.2f,\"deck_height\":%.2f,\"footer_reserve\":%.2f",
+            metrics.command_panel_width,
+            metrics.preview_panel_width,
+            metrics.deck_gap,
+            metrics.deck_height,
+            metrics.footer_reserve );
+        vxui_demo_json_appendf(
+            &json,
+            ",\"command_menu_viewport_height\":%.2f,\"preview_panel_padding\":%.2f,\"preview_viewport_height\":%.2f,\"preview_header_min_height\":%.2f,\"preview_header_gap\":%.2f",
+            metrics.command_menu_viewport_height,
+            metrics.preview_panel_padding,
+            metrics.preview_viewport_height,
+            metrics.preview_header_min_height,
+            metrics.preview_header_gap );
+        vxui_demo_json_appendf(
+            &json,
+            ",\"preview_body_viewport_height\":%.2f,\"preview_viewport_bottom_guard\":%.2f,\"preview_void_height\":%.2f,\"compact_vertical\":%s,\"tight_preview_width\":%s",
+            metrics.preview_body_viewport_height,
+            metrics.preview_viewport_bottom_guard,
+            metrics.preview_void_height,
+            metrics.compact_vertical ? "true" : "false",
+            metrics.tight_preview_width ? "true" : "false" );
+        vxui_demo_json_appendf(
+            &json,
+            ",\"controls\":{\"padding\":%u,\"row_gap\":%u,\"title_font_size\":%.2f,\"line_font_size\":%.2f,\"line_gap_min\":%.2f,\"min_height\":%.2f,\"compact_copy\":%s,\"visible_line_count\":%u}",
+            ( unsigned int ) metrics.controls.padding,
+            ( unsigned int ) metrics.controls.row_gap,
+            metrics.controls.title_font_size,
+            metrics.controls.line_font_size,
+            metrics.controls.line_gap_min,
+            metrics.controls.min_height,
+            metrics.controls.compact_copy ? "true" : "false",
+            ( unsigned int ) metrics.controls.visible_line_count );
+        vxui_demo_json_appendf(
+            &json,
+            ",\"type_scale\":{\"hero_uplink_size\":%.2f,\"hero_title_size\":%.2f,\"hero_banner_size\":%.2f,\"hero_clock_size\":%.2f,\"hero_sync_size\":%.2f,\"command_label_size\":%.2f,\"command_badge_size\":%.2f,\"command_row_height\":%.2f,\"command_row_gap\":%u,\"command_panel_gap\":%u,\"preview_eyebrow_size\":%.2f,\"preview_title_size\":%.2f,\"preview_badge_size\":%.2f,\"preview_bloom_size\":%.2f,\"preview_subtitle_size\":%.2f,\"preview_body_size\":%.2f,\"preview_warning_size\":%.2f,\"preview_stat_heading_size\":%.2f,\"preview_stat_title_size\":%.2f,\"preview_stat_label_size\":%.2f,\"preview_stat_value_size\":%.2f,\"footer_key_size\":%.2f,\"footer_action_size\":%.2f,\"footer_meta_size\":%.2f}",
+            metrics.type_scale.hero_uplink_size,
+            metrics.type_scale.hero_title_size,
+            metrics.type_scale.hero_banner_size,
+            metrics.type_scale.hero_clock_size,
+            metrics.type_scale.hero_sync_size,
+            metrics.type_scale.command_label_size,
+            metrics.type_scale.command_badge_size,
+            metrics.type_scale.command_row_height,
+            ( unsigned int ) metrics.type_scale.command_row_gap,
+            ( unsigned int ) metrics.type_scale.command_panel_gap,
+            metrics.type_scale.preview_eyebrow_size,
+            metrics.type_scale.preview_title_size,
+            metrics.type_scale.preview_badge_size,
+            metrics.type_scale.preview_bloom_size,
+            metrics.type_scale.preview_subtitle_size,
+            metrics.type_scale.preview_body_size,
+            metrics.type_scale.preview_warning_size,
+            metrics.type_scale.preview_stat_heading_size,
+            metrics.type_scale.preview_stat_title_size,
+            metrics.type_scale.preview_stat_label_size,
+            metrics.type_scale.preview_stat_value_size,
+            metrics.type_scale.footer_key_size,
+            metrics.type_scale.footer_action_size,
+            metrics.type_scale.footer_meta_size );
+        json.push_back( '}' );
+    } else {
+        json.append( "null" );
+    }
+
+#ifdef VXUI_DEBUG
+    json.append( ",\n  \"frame_items_debug_available\":true,\n  \"frame_items\":[\n" );
+    vxui_demo_layout_dump_frame_state frame_state = { &json, screen_id, true };
+    vxui_debug_enumerate_frame_items( ctx, list, vxui_demo_layout_dump_frame_item, &frame_state );
+    json.append( "\n  ],\n  \"layout_issues_debug_available\":true,\n  \"layout_issues\":[\n" );
+    bool first_issue = true;
+    for ( int i = 0; i < vxui_debug_layout_issue_count( ctx ); ++i ) {
+        const vxui_layout_issue* issue = vxui_debug_layout_issue_at( ctx, i );
+        if ( !issue ) {
+            continue;
+        }
+        if ( !first_issue ) {
+            json.append( ",\n" );
+        }
+        first_issue = false;
+        json.append( "    {\"kind\":" );
+        vxui_demo_json_append_escaped( &json, vxui_layout_issue_kind_name( issue->kind ) );
+        vxui_demo_json_appendf(
+            &json,
+            ",\"subject_id\":%u,\"bounds\":{\"x\":%.2f,\"y\":%.2f,\"w\":%.2f,\"h\":%.2f},\"related_bounds\":{\"x\":%.2f,\"y\":%.2f,\"w\":%.2f,\"h\":%.2f},\"message\":",
+            issue->subject_id,
+            issue->bounds.x,
+            issue->bounds.y,
+            issue->bounds.w,
+            issue->bounds.h,
+            issue->related_bounds.x,
+            issue->related_bounds.y,
+            issue->related_bounds.w,
+            issue->related_bounds.h );
+        vxui_demo_json_append_escaped( &json, issue->message );
+        json.push_back( '}' );
+    }
+    json.append( "\n  ]\n}\n" );
+#else
+    json.append( ",\n  \"frame_items_debug_available\":false,\n  \"frame_items\":[],\n  \"layout_issues_debug_available\":false,\n  \"layout_issues\":[]\n}\n" );
+#endif
+
+    if ( request.dump_layout_stdout ) {
+        std::fwrite( json.data(), 1, json.size(), stdout );
+        std::fflush( stdout );
+    }
+    if ( !request.dump_layout_path.empty() && !vxui_demo_write_file( request.dump_layout_path.c_str(), json.c_str() ) ) {
+        std::snprintf( error, error_size, "failed to write layout dump to %s", request.dump_layout_path.c_str() );
+        return false;
+    }
+    return true;
+}
+
 static std::string vxui_demo_make_temp_path( const char* filename )
 {
     std::filesystem::path temp = std::filesystem::temp_directory_path() / "vxui-demo";
@@ -3046,7 +3359,7 @@ static bool vxui_demo_load_fonts( vxui_demo_renderer* renderer )
     };
     const std::filesystem::path source_dir = std::filesystem::path( VXUI_SOURCE_DIR );
     static const float dense_bucket_sizes[] = { 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f, 18.0f, 20.0f, 22.0f, 24.0f, 26.0f, 28.0f, 32.0f, 36.0f };
-    static const float display_bucket_sizes[] = { 10.0f, 12.0f, 14.0f, 16.0f, 18.0f, 20.0f, 22.0f, 24.0f, 28.0f, 32.0f, 36.0f, 40.0f, 44.0f, 48.0f, 56.0f, 64.0f, 72.0f };
+    static const float display_bucket_sizes[] = { 10.0f, 12.0f, 14.0f, 16.0f, 18.0f, 20.0f, 22.0f, 24.0f, 28.0f, 32.0f, 36.0f, 38.0f, 40.0f, 42.0f, 44.0f, 45.0f, 48.0f, 56.0f, 64.0f, 72.0f };
     const font_load fonts[] = {
         { "vefc/demo/fonts/OpenSans-Regular.ttf", VXUI_DEMO_FONT_UI, ( float ) VXUI_DEMO_BODY_SIZE, VXUI_DEMO_FONT_BUCKET_DENSE },
         { "demo/fonts/Rajdhani-SemiBold.ttf", VXUI_DEMO_FONT_TITLE, ( float ) VXUI_DEMO_TITLE_SIZE, VXUI_DEMO_FONT_BUCKET_DISPLAY },
@@ -4122,6 +4435,18 @@ int main( int argc, char** argv )
             window.reset( nullptr );
             return 1;
         }
+        if ( vxui_demo_layout_dump_requested( shot_request ) &&
+             !vxui_demo_write_layout_dump_json( shot_request, &app, &ctx, &list, error, sizeof( error ) ) ) {
+            std::fprintf( stderr, "Failed to write layout dump: %s\n", error );
+            Clay_SetCurrentContext( nullptr );
+            if ( !app.watched_seq_path.empty() ) {
+                std::remove( app.watched_seq_path.c_str() );
+            }
+            vxui_demo_shutdown_renderer( &renderer );
+            manager->ShutDown();
+            window.reset( nullptr );
+            return 1;
+        }
 
         // Shot mode success: skip explicit GL teardown. Per-object glDelete*
         // calls are unnecessary work for a disposable one-shot process — the
@@ -4138,6 +4463,7 @@ int main( int argc, char** argv )
     const std::chrono::steady_clock::duration kInteractiveFrameBudget =
         std::chrono::duration_cast< std::chrono::steady_clock::duration >( std::chrono::duration< double >( 1.0 / 60.0 ) );
     bool first_interactive_frame = true;
+    bool layout_dump_pending = vxui_demo_layout_dump_requested( shot_request );
     while ( !window->shouldClose ) {
         const std::chrono::steady_clock::time_point frame_start = std::chrono::steady_clock::now();
         manager->PollForEvents();
@@ -4420,6 +4746,13 @@ int main( int argc, char** argv )
             }
         }
 #endif
+        if ( layout_dump_pending ) {
+            char dump_error[ 256 ] = {};
+            if ( !vxui_demo_write_layout_dump_json( shot_request, &app, &ctx, &list, dump_error, sizeof( dump_error ) ) ) {
+                std::fprintf( stderr, "Failed to write layout dump: %s\n", dump_error );
+            }
+            layout_dump_pending = false;
+        }
 
         vxui_demo_present_draw_list( &renderer, &ctx, &list );
 #ifdef VXUI_DEBUG

@@ -175,6 +175,24 @@ UTEST( demo_shot_cli, no_scanline_changes_shot_config )
     EXPECT_STREQ( shot.focus_id.c_str(), "start" );
 }
 
+UTEST( demo_shot_cli, layout_dump_flags_parse_without_shot_mode )
+{
+    const char* argv[] = {
+        "vxui_demo",
+        "--dump-layout=layout.json",
+        "--dump-layout-stdout",
+    };
+
+    bool backend_test_mode = false;
+    vxui_demo_shot_request shot = {};
+    char error[ 256 ] = {};
+
+    ASSERT_TRUE( vxui_demo_parse_cli( ( int ) ( sizeof( argv ) / sizeof( argv[ 0 ] ) ), const_cast< char** >( argv ), &backend_test_mode, &shot, error, sizeof( error ) ) );
+    EXPECT_FALSE( shot.enabled );
+    EXPECT_STREQ( shot.dump_layout_path.c_str(), "layout.json" );
+    EXPECT_TRUE( shot.dump_layout_stdout );
+}
+
 UTEST( demo_shot_cli, supported_shot_screens_cover_demo_targets )
 {
     EXPECT_TRUE( vxui_demo_shot_screen_supported( "boot" ) );

@@ -482,6 +482,22 @@ typedef struct vxui_layout_issue
 } vxui_layout_issue;
 
 #ifdef VXUI_DEBUG
+typedef struct vxui_debug_frame_item
+{
+    uint32_t decl_id;
+    uint32_t owner_id;
+    uint32_t screen_id;
+    int decl_kind;
+    vxui_cmd_type cmd_type;
+    vxui_rect bounds;
+    const char* text;
+    uint32_t font_id;
+    float font_size;
+    float render_scale;
+} vxui_debug_frame_item;
+
+typedef bool ( *vxui_debug_frame_item_fn )( const vxui_debug_frame_item* item, void* userdata );
+
 typedef struct vxui_debug_seq_editor
 {
     bool open;
@@ -709,6 +725,8 @@ bool vxui_watch_seq_file( vxui_ctx* ctx, const char* path, const char* name );
 bool vxui_poll_seq_hot_reload( vxui_ctx* ctx, uint64_t now_ms, char* error, size_t error_size );
 void vxui_debug_capture_preview( vxui_ctx* ctx, const vxui_draw_list* src );
 void vxui_debug_generate_seq_outputs( vxui_ctx* ctx );
+const vxui_decl* vxui_debug_find_decl( const vxui_ctx* ctx, uint32_t id );
+void vxui_debug_enumerate_frame_items( const vxui_ctx* ctx, const vxui_draw_list* list, vxui_debug_frame_item_fn fn, void* userdata );
 #endif
 
 /* Debug-only layout diagnostics. Requires VXUI_DEBUG. */
@@ -4171,6 +4189,93 @@ void vxui_set_debug_log_layout_issues( vxui_ctx* ctx, bool enabled )
         return;
     }
     ctx->layout_issues_log_to_stderr = enabled;
+}
+
+const vxui_decl* vxui_debug_find_decl( const vxui_ctx* ctx, uint32_t id )
+{
+    if ( !ctx || id == 0u ) {
+        return nullptr;
+    }
+    for ( int i = 0; i < ctx->decl_count; ++i ) {
+        const vxui_decl* decl = &ctx->decls[ i ];
+        if ( decl->id == id ) {
+            return decl;
+        }
+    }
+    return nullptr;
+}
+
+void vxui_debug_enumerate_frame_items( const vxui_ctx* ctx, const vxui_draw_list* list, vxui_debug_frame_item_fn fn, void* userdata )
+{
+    if ( !ctx || !list || !fn ) {
+        return;
+    }
+
+    const int count = list->length < ctx->command_count ? list->length : ctx->command_count;
+    for ( int i = 0; i < count; ++i ) {
+        const vxui_cmd* cmd = &list->commands[ i ];
+        vxui_debug_frame_item item = {};
+        item.decl_id = ctx->command_ids ? ctx->command_ids[ i ] : 0u;
+        item.owner_id = ctx->command_owner_ids ? ctx->command_owner_ids[ i ] : 0u;
+        item.screen_id = ctx->command_screen_ids ? ctx->command_screen_ids[ i ] : 0u;
+        item.decl_kind = -1;
+        item.cmd_type = cmd->type;
+        item.text = nullptr;
+        item.font_id = 0u;
+        item.font_size = 0.0f;
+        item.render_scale = 1.0f;
+
+        const uint32_t decl_lookup_id = item.owner_id != 0u ? item.owner_id : item.decl_id;
+        if ( const vxui_decl* decl = vxui_debug_find_decl( ctx, decl_lookup_id ) ) {
+            item.decl_kind = ( int ) decl->kind;
+        }
+
+        switch ( cmd->type ) {
+            case VXUI_CMD_RECT:
+                item.bounds = cmd->rect.bounds;
+                break;
+            case VXUI_CMD_RECT_ROUNDED:
+                item.bounds = cmd->rect_rounded.bounds;
+                break;
+            case VXUI_CMD_BORDER:
+                item.bounds = cmd->border.bounds;
+                break;
+            case VXUI_CMD_IMAGE:
+                item.bounds = cmd->image.bounds;
+                break;
+            case VXUI_CMD_CLIP_PUSH:
+            case VXUI_CMD_CLIP_POP:
+                item.bounds = cmd->clip.rect;
+                break;
+            case VXUI_CMD_TEXT: {
+                item.text = cmd->text.text;
+                item.font_id = cmd->text.font_id;
+                item.font_size = cmd->text.size;
+                item.render_scale = cmd->text.render_scale;
+                item.bounds.x = cmd->text.pos.x;
+                item.bounds.y = cmd->text.pos.y;
+                if ( ctx->fontcache && cmd->text.text ) {
+                    const char8_t* begin = reinterpret_cast< const char8_t* >( cmd->text.text );
+                    std::u8string temp( begin, begin + std::strlen( cmd->text.text ) );
+                    ve_fontcache_vec2 measured = ve_fontcache_measure_text(
+                        ctx->fontcache,
+                        ( ve_font_id ) cmd->text.font_id,
+                        temp,
+                        cmd->text.render_scale,
+                        cmd->text.render_scale,
+                        true );
+                    item.bounds.w = measured.x;
+                }
+                vxui_resolved_font resolved = vxui__resolve_font( const_cast< vxui_ctx* >( ctx ), cmd->text.font_id, cmd->text.size );
+                item.bounds.h = resolved.line_height > 0.0f ? resolved.line_height : cmd->text.size;
+                break;
+            }
+        }
+
+        if ( !fn( &item, userdata ) ) {
+            break;
+        }
+    }
 }
 
 const char* vxui_layout_issue_kind_name( vxui_layout_issue_kind kind )

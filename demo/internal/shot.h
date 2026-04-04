@@ -18,6 +18,8 @@ struct vxui_demo_shot_request
     std::string focus_id;
     bool compact_override = false;
     bool disable_scanline = false;
+    std::string dump_layout_path;
+    bool dump_layout_stdout = false;
 };
 
 inline bool vxui_demo_shot_screen_supported( const char* screen_name )
@@ -121,6 +123,10 @@ inline bool vxui_demo_parse_cli(
             request.disable_scanline = true;
             continue;
         }
+        if ( std::strcmp( arg, "--dump-layout-stdout" ) == 0 ) {
+            request.dump_layout_stdout = true;
+            continue;
+        }
         if ( std::strncmp( arg, "--screen=", 9 ) == 0 ) {
             request.screen_name = arg + 9;
             continue;
@@ -163,6 +169,14 @@ inline bool vxui_demo_parse_cli(
             request.focus_id = arg + 8;
             if ( request.focus_id.empty() ) {
                 vxui_demo_shot_set_error( error, error_size, "invalid --focus value" );
+                return false;
+            }
+            continue;
+        }
+        if ( std::strncmp( arg, "--dump-layout=", 14 ) == 0 ) {
+            request.dump_layout_path = arg + 14;
+            if ( request.dump_layout_path.empty() ) {
+                vxui_demo_shot_set_error( error, error_size, "invalid --dump-layout value" );
                 return false;
             }
             continue;
