@@ -313,6 +313,14 @@ inline vxui_menu_style vxui_demo_shared_split_deck_shell_style(
     style.body_font_id = visuals.body_font_id;
     style.title_font_id = visuals.title_font_id;
     style.badge_font_id = visuals.body_font_id;
+    style.body_font_size = 15.0f;
+    style.secondary_font_size = 11.0f;
+    style.title_font_size = 28.0f;
+    style.badge_font_size = 10.0f;
+    style.row_gap = 6.0f;
+    style.section_gap = 12.0f;
+    style.padding_x = 12.0f;
+    style.padding_y = 10.0f;
     if ( compact ) {
         style.body_font_size = 14.0f;
         style.secondary_font_size = 11.0f;
@@ -409,12 +417,12 @@ inline vxui_menu_style vxui_demo_shared_menu_style_form_deck( const vxui_demo_sp
     style.title_font_id = visuals.section_font_id;
     style.badge_font_id = visuals.body_font_id;
     style.label_lane_width = label_lane_width;
-    style.body_font_size = 14.0f;
+    style.body_font_size = 15.0f;
     style.secondary_font_size = 11.0f;
-    style.title_font_size = 11.0f;
-    style.row_height = 30.0f;
+    style.title_font_size = 12.0f;
+    style.row_height = 32.0f;
     style.row_gap = 4.0f;
-    style.section_gap = 10.0f;
+    style.section_gap = 12.0f;
     style.padding_x = 14.0f;
     style.padding_y = 10.0f;
     vxui_demo_apply_form_menu_theme( style );

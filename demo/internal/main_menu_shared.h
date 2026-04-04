@@ -1052,7 +1052,7 @@ inline void vxui_demo_emit_main_menu_shell(
 
                 VXUI( ctx, "main.preview.body_spacer", {
                     .layout = {
-                        .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIXED( preview_void_height ) },
+                        .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( preview_void_height ) },
                     },
                 } ) {}
 
