@@ -56,6 +56,7 @@ endif()
 if(VXUI_BUILD_DEMO)
     add_executable(vxui_demo
         main.cpp
+        demo/windows/vxui_demo_manifest.rc
         vefc/demo/include/glad/glad.c
     )
     target_include_directories(vxui_demo PRIVATE
@@ -70,6 +71,9 @@ if(VXUI_BUILD_DEMO)
         VE_FONTCACHE_HARFBUZZ
         $<$<CONFIG:Debug>:VXUI_DEBUG>
     )
+    if(MSVC)
+        target_link_options(vxui_demo PRIVATE "/MANIFEST:NO")
+    endif()
 endif()
 
 if(VXUI_BUILD_DEMO AND VXUI_BUILD_TESTS)

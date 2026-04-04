@@ -120,9 +120,11 @@ struct vxui_demo_main_menu_layout_spec
     float command_panel_width;
     float preview_panel_width;
     float deck_gap;
+    float deck_height;
     float footer_reserve;
     float command_menu_viewport_height;
     float preview_panel_padding;
+    float preview_viewport_height;
     float preview_header_min_height;
     float preview_header_gap;
     float preview_body_viewport_height;
@@ -321,9 +323,17 @@ inline vxui_demo_surface_contract vxui_demo_get_surface_contract( vxui_demo_surf
                 0.78f,
             };
 
+        case VXUI_DEMO_SURFACE_MAIN_MENU:
+            return {
+                720.0f,
+                800.0f,
+                860.0f,
+                720.0f,
+                0.64f,
+            };
+
         case VXUI_DEMO_SURFACE_BOOT:
         case VXUI_DEMO_SURFACE_TITLE:
-        case VXUI_DEMO_SURFACE_MAIN_MENU:
         case VXUI_DEMO_SURFACE_LAUNCH_STUB:
         case VXUI_DEMO_SURFACE_RESULTS_STUB:
         default:
@@ -364,14 +374,14 @@ inline vxui_demo_main_menu_contract vxui_demo_get_main_menu_contract( void )
     return {
         8.0f,
         8.0f,
-        0.34f,
-        244.0f,
-        264.0f,
-        340.0f,
-        18.0f,
-        250.0f,
-        260.0f,
+        0.325f,
+        248.0f,
+        256.0f,
+        320.0f,
         16.0f,
+        188.0f,
+        260.0f,
+        10.0f,
         10.0f,
         84.0f,
         132.0f,
@@ -440,18 +450,18 @@ inline vxui_demo_controls_block_contract vxui_demo_get_controls_block_contract( 
             12.0f,
             9.4f,
             2.0f,
-            28.0f,
+            104.0f,
             true,
             1,
         };
     }
     return {
-        8,
+        10,
         6,
         15.0f,
         10.8f,
         3.0f,
-        0.0f,
+        132.0f,
         false,
         1,
     };
@@ -553,9 +563,11 @@ inline vxui_demo_main_menu_layout_spec vxui_demo_resolve_main_menu_layout(
         : surface_max_height <= 650.0f ? 244.0f
         : std::max( 192.0f, surface_max_height * 0.35f );
     const float footer_reserve = std::min( contract.footer_reserve, footer_reserve_target );
-    const float hero_reserve = surface_max_height <= 620.0f ? 68.0f : surface_max_height <= 720.0f ? 76.0f : 92.0f;
-    const float usable_deck_height = std::max( 0.0f, surface_max_height - footer_reserve - hero_reserve );
+    const float hero_reserve = surface_max_height <= 620.0f ? 68.0f : surface_max_height <= 720.0f ? 56.0f : 92.0f;
+    const float deck_height_floor = surface_max_height <= 650.0f ? 280.0f : 420.0f;
+    const float deck_height = std::max( deck_height_floor, surface_max_height - footer_reserve - hero_reserve );
     const float preview_panel_padding = tight_width ? 10.0f : contract.preview_panel_padding;
+    const float preview_panel_gap = surface_max_height <= 650.0f ? 8.0f : 12.0f;
     const float preview_header_min_height =
         std::clamp( preview_panel_width * 0.18f, tight_width ? 78.0f : contract.preview_header_min_height, 136.0f );
     const float preview_header_gap = tight_width ? 8.0f : contract.preview_header_gap;
@@ -563,12 +575,13 @@ inline vxui_demo_main_menu_layout_spec vxui_demo_resolve_main_menu_layout(
     const float controls_owner_width = std::max( 0.0f, preview_panel_width - preview_panel_padding * 2.0f );
     const vxui_demo_controls_block_contract controls_contract =
         vxui_demo_get_controls_block_contract( surface_max_height <= 620.0f ? 620.0f : surface_max_height, controls_owner_width );
-    const float help_reserve = controls_contract.min_height > 0.0f ? controls_contract.min_height + VXUI_DEMO_LAYOUT_ROW_GAP : 0.0f;
+    const float help_reserve = controls_contract.min_height > 0.0f ? controls_contract.min_height + preview_panel_gap : 0.0f;
+    const float preview_viewport_height = std::max(
+        contract.preview_viewport_min_height,
+        deck_height - preview_panel_padding * 2.0f - help_reserve );
     const float preview_body_viewport_height = std::max(
         contract.preview_viewport_min_height,
-        usable_deck_height - preview_header_min_height - preview_header_gap - preview_viewport_bottom_guard
-            - help_reserve
-            - preview_panel_padding * 2.0f );
+        preview_viewport_height - preview_header_min_height - preview_header_gap );
 
     return {
         surface,
@@ -576,9 +589,11 @@ inline vxui_demo_main_menu_layout_spec vxui_demo_resolve_main_menu_layout(
         command_panel_width,
         preview_panel_width,
         deck_gap,
+        deck_height,
         footer_reserve,
-        std::max( contract.command_menu_viewport_min_height, usable_deck_height - 8.0f ),
+        std::max( contract.command_menu_viewport_min_height, deck_height ),
         preview_panel_padding,
+        preview_viewport_height,
         preview_header_min_height,
         preview_header_gap,
         preview_body_viewport_height,

@@ -1,7 +1,9 @@
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cfloat>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -10,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #ifndef NOMINMAX
@@ -21,7 +24,7 @@
 #include "demo/internal/shot.h"
 #include "demo/internal/layout_contract.h"
 #include <glad/glad.h>
-#include "TinyWindow.h"
+#include "demo/internal/TinyWindow.h"
 
 #ifdef near
 #undef near
@@ -133,6 +136,13 @@ struct vxui_demo_font_metrics
     ve_font_id font_id;
     float line_height;
     float render_scale;
+};
+
+struct vxui_demo_loaded_font_info
+{
+    ve_font_id family_id = -1;
+    float size_px = 0.0f;
+    float line_height = 0.0f;
 };
 
 enum vxui_demo_button
@@ -254,9 +264,10 @@ typedef struct vxui_demo_renderer
     TinyWindow::vec2_t< unsigned int > snap_configured_window_size {};
     bool snap_configured = false;
     ve_fontcache cache;
-    std::array< std::vector< uint8_t >, VXUI_DEMO_FONT_FACE_COUNT > demo_fonts;
-    std::array< float, VXUI_DEMO_FONT_FACE_COUNT > demo_line_heights {};
-    std::array< float, VXUI_DEMO_FONT_FACE_COUNT > demo_font_base_sizes {};
+    std::vector< std::vector< uint8_t > > demo_font_buffers;
+    std::array< std::vector< ve_font_id >, VXUI_DEMO_FONT_FACE_COUNT > demo_font_bucket_ids {};
+    std::vector< vxui_demo_loaded_font_info > demo_loaded_fonts;
+    std::vector< uint64_t > demo_font_scale_warning_keys;
     std::vector< std::vector< uint8_t > > backend_test_dynamic_font_buffers;
     ve_font_id backend_test_primary_font = -1;
     ve_font_id backend_test_secondary_font = -1;
@@ -400,7 +411,12 @@ static void vxui_demo_gl_debug_label( vxui_demo_renderer* renderer, GLenum ident
 static void vxui_demo_gl_debug_begin( vxui_demo_renderer* renderer, const char* label );
 static void vxui_demo_gl_debug_end( vxui_demo_renderer* renderer );
 static void vxui_demo_gl_debug_event( vxui_demo_renderer* renderer, const char* label );
+static void vxui_demo_enable_dpi_awareness();
 static void vxui_demo_set_window_size( vxui_demo_renderer* renderer, TinyWindow::vec2_t< unsigned int > window_size );
+static TinyWindow::vec2_t< unsigned int > vxui_demo_query_client_pixel_size( HWND window_handle, TinyWindow::vec2_t< unsigned int > fallback_size );
+#ifdef VXUI_DEBUG
+static void vxui_demo_debug_log_window_metrics( const TinyWindow::tWindow* window, HWND window_handle, const vxui_demo_renderer* renderer );
+#endif
 static void vxui_demo_configure_snap_if_needed( vxui_demo_renderer* renderer, bool force );
 static bool vxui_demo_cache_shader_uniforms( vxui_demo_renderer* renderer );
 static bool vxui_demo_init_renderer( vxui_demo_renderer* renderer );
@@ -1071,8 +1087,8 @@ static float vxui_demo_font_line_height( const vxui_demo_renderer* renderer, ve_
     }
 
     size_t index = ( size_t ) font_id;
-    if ( index < renderer->demo_line_heights.size() && renderer->demo_line_heights[ index ] > 0.0f ) {
-        return renderer->demo_line_heights[ index ];
+    if ( index < renderer->demo_loaded_fonts.size() && renderer->demo_loaded_fonts[ index ].line_height > 0.0f ) {
+        return renderer->demo_loaded_fonts[ index ].line_height;
     }
 
     const ve_fontcache_entry& entry = renderer->cache.entry[ index ];
@@ -1082,6 +1098,109 @@ static float vxui_demo_font_line_height( const vxui_demo_renderer* renderer, ve_
     stbtt_GetFontVMetrics( &entry.info, &ascent, &descent, &line_gap );
     return ( float ) ( ascent - descent + line_gap ) * entry.size_scale;
 }
+
+static bool vxui_demo_font_is_abstract_request( uint32_t requested_font_id )
+{
+    return requested_font_id >= VXUI_DEMO_FONT_ROLE_BODY || requested_font_id < VXUI_DEMO_FONT_FACE_COUNT;
+}
+
+static bool vxui_demo_is_main_menu_micro_size( float requested_font_size )
+{
+    static const float kMainMenuMicroSizes[] = { 8.0f, 9.0f, 10.0f, 11.0f, 13.0f };
+    for ( float size : kMainMenuMicroSizes ) {
+        if ( std::fabs( requested_font_size - size ) < 0.01f ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool vxui_demo_should_snap_main_menu_text( uint32_t requested_font_id, ve_font_id face_id, float requested_font_size )
+{
+    const bool mono_request =
+        requested_font_id == VXUI_DEMO_FONT_MAIN_MENU_MONO ||
+        requested_font_id == VXUI_DEMO_FONT_ROLE_CODE ||
+        face_id == VXUI_DEMO_FONT_MAIN_MENU_MONO;
+    return mono_request && vxui_demo_is_main_menu_micro_size( requested_font_size );
+}
+
+static float vxui_demo_loaded_font_size( const vxui_demo_renderer* renderer, ve_font_id font_id, float fallback )
+{
+    if ( !renderer || font_id < 0 ) {
+        return fallback;
+    }
+    const size_t index = ( size_t ) font_id;
+    if ( index < renderer->demo_loaded_fonts.size() && renderer->demo_loaded_fonts[ index ].size_px > 0.0f ) {
+        return renderer->demo_loaded_fonts[ index ].size_px;
+    }
+    return fallback;
+}
+
+static ve_font_id vxui_demo_pick_font_bucket( const vxui_demo_renderer* renderer, ve_font_id family_id, float requested_font_size )
+{
+    if ( !renderer || family_id < 0 || family_id >= VXUI_DEMO_FONT_FACE_COUNT ) {
+        return family_id;
+    }
+
+    const std::vector< ve_font_id >& bucket_ids = renderer->demo_font_bucket_ids[ family_id ];
+    if ( bucket_ids.empty() ) {
+        return family_id;
+    }
+
+    ve_font_id best_id = bucket_ids.front();
+    float best_delta = FLT_MAX;
+    for ( ve_font_id bucket_id : bucket_ids ) {
+        const float bucket_size = vxui_demo_loaded_font_size( renderer, bucket_id, requested_font_size );
+        const float delta = std::fabs( bucket_size - requested_font_size );
+        if ( delta < best_delta ) {
+            best_delta = delta;
+            best_id = bucket_id;
+        }
+    }
+    return best_id;
+}
+
+#ifdef VXUI_DEBUG
+static void vxui_demo_debug_report_font_scale(
+    const vxui_demo_renderer* renderer,
+    uint32_t requested_font_id,
+    ve_font_id resolved_font_id,
+    float requested_font_size,
+    float raster_size,
+    float render_scale )
+{
+    if ( !renderer || requested_font_size <= 0.0f || raster_size <= 0.0f ) {
+        return;
+    }
+    if ( render_scale >= 0.87f && render_scale <= 1.15f ) {
+        return;
+    }
+
+    const uint16_t request_size_q = ( uint16_t ) std::lround( requested_font_size * 8.0f );
+    const uint16_t raster_size_q = ( uint16_t ) std::lround( raster_size * 8.0f );
+    const uint64_t key =
+        ( ( uint64_t ) requested_font_id << 48 ) |
+        ( ( uint64_t ) ( uint16_t ) resolved_font_id << 32 ) |
+        ( ( uint64_t ) request_size_q << 16 ) |
+        ( uint64_t ) raster_size_q;
+
+    vxui_demo_renderer* mutable_renderer = const_cast< vxui_demo_renderer* >( renderer );
+    std::vector< uint64_t >& seen_keys = mutable_renderer->demo_font_scale_warning_keys;
+    if ( std::find( seen_keys.begin(), seen_keys.end(), key ) != seen_keys.end() ) {
+        return;
+    }
+    seen_keys.push_back( key );
+
+    std::fprintf(
+        stderr,
+        "vxui text scale: requested_font=%u requested_size=%.2f resolved_font=%d raster_size=%.2f render_scale=%.3f\n",
+        requested_font_id,
+        requested_font_size,
+        ( int ) resolved_font_id,
+        raster_size,
+        render_scale );
+}
+#endif
 
 static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_renderer* renderer, uint32_t requested_font_id, float requested_font_size, const char* locale )
 {
@@ -1134,21 +1253,28 @@ static vxui_demo_font_metrics vxui_demo_resolve_font_metrics( const vxui_demo_re
             break;
     }
 
-    float line_height = requested_font_size;
+    const bool abstract_request = vxui_demo_font_is_abstract_request( requested_font_id );
+    const bool snap_main_menu_text = vxui_demo_should_snap_main_menu_text( requested_font_id, face_id, requested_font_size );
+    ve_font_id resolved_font_id = face_id;
     float render_scale = 1.0f;
-    if ( renderer ) {
-        const size_t index = ( size_t ) face_id;
-        float base_size = requested_font_size;
-        if ( index < renderer->demo_font_base_sizes.size() && renderer->demo_font_base_sizes[ index ] > 0.0f ) {
-            base_size = renderer->demo_font_base_sizes[ index ];
-        }
-        if ( base_size > 0.0f && requested_font_size > 0.0f ) {
-            render_scale = requested_font_size / base_size;
-        }
-        line_height = vxui_demo_font_line_height( renderer, face_id, requested_font_size ) * render_scale;
+    if ( renderer && abstract_request ) {
+        resolved_font_id = vxui_demo_pick_font_bucket( renderer, face_id, requested_font_size );
     }
 
-    return { face_id, line_height, render_scale };
+    const float raster_size = vxui_demo_loaded_font_size( renderer, resolved_font_id, requested_font_size );
+    if ( snap_main_menu_text && raster_size > 0.0f ) {
+        render_scale = 1.0f;
+    } else if ( raster_size > 0.0f && requested_font_size > 0.0f ) {
+        render_scale = requested_font_size / raster_size;
+    }
+
+    const float line_height = vxui_demo_font_line_height( renderer, resolved_font_id, requested_font_size ) * render_scale;
+
+#ifdef VXUI_DEBUG
+    vxui_demo_debug_report_font_scale( renderer, requested_font_id, resolved_font_id, requested_font_size, raster_size, render_scale );
+#endif
+
+    return { resolved_font_id, line_height, render_scale };
 }
 
 static void vxui_demo_font_resolver( vxui_ctx* ctx, uint32_t requested_font_id, float requested_font_size, const char* locale, void* userdata, vxui_resolved_font* out )
@@ -2525,6 +2651,117 @@ void vxui_demo_gl_debug_event( vxui_demo_renderer* renderer, const char* label )
     }
 }
 
+static void vxui_demo_enable_dpi_awareness()
+{
+    using vxui_demo_set_process_dpi_awareness_context_fn = BOOL ( WINAPI* )( HANDLE );
+    using vxui_demo_set_process_dpi_awareness_fn = HRESULT ( WINAPI* )( int );
+    using vxui_demo_set_process_dpi_aware_fn = BOOL ( WINAPI* )();
+
+    static constexpr LONG_PTR kPerMonitorAwareV2 = -4;
+    static constexpr int kProcessPerMonitorDpiAware = 2;
+
+    HMODULE user32 = GetModuleHandleW( L"user32.dll" );
+    if ( !user32 ) {
+        user32 = LoadLibraryW( L"user32.dll" );
+    }
+
+    if ( user32 ) {
+        const auto set_dpi_awareness_context =
+            reinterpret_cast< vxui_demo_set_process_dpi_awareness_context_fn >( GetProcAddress( user32, "SetProcessDpiAwarenessContext" ) );
+        if ( set_dpi_awareness_context ) {
+            SetLastError( ERROR_SUCCESS );
+            if ( set_dpi_awareness_context( reinterpret_cast< HANDLE >( kPerMonitorAwareV2 ) ) ) {
+                return;
+            }
+            if ( GetLastError() == ERROR_ACCESS_DENIED ) {
+                return;
+            }
+        }
+    }
+
+    HMODULE shcore = LoadLibraryW( L"shcore.dll" );
+    if ( shcore ) {
+        const auto set_dpi_awareness =
+            reinterpret_cast< vxui_demo_set_process_dpi_awareness_fn >( GetProcAddress( shcore, "SetProcessDpiAwareness" ) );
+        if ( set_dpi_awareness ) {
+            const HRESULT hr = set_dpi_awareness( kProcessPerMonitorDpiAware );
+            if ( SUCCEEDED( hr ) || hr == E_ACCESSDENIED ) {
+                return;
+            }
+        }
+    }
+
+    if ( user32 ) {
+        const auto set_dpi_aware =
+            reinterpret_cast< vxui_demo_set_process_dpi_aware_fn >( GetProcAddress( user32, "SetProcessDPIAware" ) );
+        if ( set_dpi_aware ) {
+            SetLastError( ERROR_SUCCESS );
+            if ( set_dpi_aware() ) {
+                return;
+            }
+            if ( GetLastError() == ERROR_ACCESS_DENIED ) {
+                return;
+            }
+        }
+    }
+
+#ifdef VXUI_DEBUG
+    std::fprintf( stderr, "vxui demo dpi: failed to enable process DPI awareness\n" );
+#endif
+}
+
+static TinyWindow::vec2_t< unsigned int > vxui_demo_query_client_pixel_size( HWND window_handle, TinyWindow::vec2_t< unsigned int > fallback_size )
+{
+    RECT client_rect = {};
+    if ( window_handle && GetClientRect( window_handle, &client_rect ) ) {
+        const int width = client_rect.right - client_rect.left;
+        const int height = client_rect.bottom - client_rect.top;
+        if ( width > 0 && height > 0 ) {
+            return TinyWindow::vec2_t< unsigned int > {
+                static_cast< unsigned int >( width ),
+                static_cast< unsigned int >( height ),
+            };
+        }
+    }
+
+    return fallback_size;
+}
+
+#ifdef VXUI_DEBUG
+static void vxui_demo_debug_log_window_metrics( const TinyWindow::tWindow* window, HWND window_handle, const vxui_demo_renderer* renderer )
+{
+    if ( !renderer ) {
+        return;
+    }
+
+    RECT outer_rect = {};
+    RECT client_rect = {};
+    const bool have_outer_rect = window_handle && GetWindowRect( window_handle, &outer_rect );
+    const bool have_client_rect = window_handle && GetClientRect( window_handle, &client_rect );
+    const unsigned int outer_width = have_outer_rect ? static_cast< unsigned int >( outer_rect.right - outer_rect.left ) : 0u;
+    const unsigned int outer_height = have_outer_rect ? static_cast< unsigned int >( outer_rect.bottom - outer_rect.top ) : 0u;
+    const unsigned int client_width = have_client_rect ? static_cast< unsigned int >( client_rect.right - client_rect.left ) : 0u;
+    const unsigned int client_height = have_client_rect ? static_cast< unsigned int >( client_rect.bottom - client_rect.top ) : 0u;
+
+    GLint viewport[ 4 ] = {};
+    glGetIntegerv( GL_VIEWPORT, viewport );
+
+    std::fprintf(
+        stderr,
+        "vxui demo dpi: requested=%ux%u outer=%ux%u client=%ux%u renderer=%ux%u viewport=%dx%d\n",
+        window ? window->settings.resolution.width : 0u,
+        window ? window->settings.resolution.height : 0u,
+        outer_width,
+        outer_height,
+        client_width,
+        client_height,
+        renderer->window_size.width,
+        renderer->window_size.height,
+        viewport[ 2 ],
+        viewport[ 3 ] );
+}
+#endif
+
 static void vxui_demo_set_window_size( vxui_demo_renderer* renderer, TinyWindow::vec2_t< unsigned int > window_size )
 {
     if ( !renderer ) {
@@ -2794,38 +3031,108 @@ static void vxui_demo_shutdown_renderer( vxui_demo_renderer* renderer )
 
 static bool vxui_demo_load_fonts( vxui_demo_renderer* renderer )
 {
+    enum vxui_demo_font_bucket_profile
+    {
+        VXUI_DEMO_FONT_BUCKET_DENSE,
+        VXUI_DEMO_FONT_BUCKET_DISPLAY,
+    };
+
     struct font_load
     {
         const char* relative_path;
         vxui_demo_font_id font_id;
         float size_px;
+        vxui_demo_font_bucket_profile bucket_profile;
     };
     const std::filesystem::path source_dir = std::filesystem::path( VXUI_SOURCE_DIR );
+    static const float dense_bucket_sizes[] = { 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f, 18.0f, 20.0f, 22.0f, 24.0f, 26.0f, 28.0f, 32.0f, 36.0f };
+    static const float display_bucket_sizes[] = { 10.0f, 12.0f, 14.0f, 16.0f, 18.0f, 20.0f, 22.0f, 24.0f, 28.0f, 32.0f, 36.0f, 40.0f, 44.0f, 48.0f, 56.0f, 64.0f, 72.0f };
     const font_load fonts[] = {
-        { "vefc/demo/fonts/OpenSans-Regular.ttf", VXUI_DEMO_FONT_UI, ( float ) VXUI_DEMO_BODY_SIZE },
-        { "demo/fonts/Rajdhani-SemiBold.ttf", VXUI_DEMO_FONT_TITLE, ( float ) VXUI_DEMO_TITLE_SIZE },
-        { "vefc/demo/fonts/NovaMono-Regular.ttf", VXUI_DEMO_FONT_DEBUG, ( float ) VXUI_DEMO_CODE_SIZE },
-        { "demo/fonts/SpaceGrotesk-Variable.ttf", VXUI_DEMO_FONT_MAIN_MENU_BODY, ( float ) VXUI_DEMO_BODY_SIZE },
-        { "demo/fonts/RobotoMono-Variable.ttf", VXUI_DEMO_FONT_MAIN_MENU_MONO, ( float ) VXUI_DEMO_CODE_SIZE },
-        { "vefc/demo/fonts/NotoSansJP-Regular.otf", VXUI_DEMO_FONT_JAPANESE, ( float ) VXUI_DEMO_BODY_SIZE },
-        { "vefc/demo/fonts/Tajawal-Regular.ttf", VXUI_DEMO_FONT_ARABIC, ( float ) VXUI_DEMO_BODY_SIZE },
-        { "vefc/demo/fonts/Bitter-Regular.ttf", VXUI_DEMO_FONT_SECTION_TITLE, ( float ) VXUI_DEMO_SECTION_SIZE },
-        { "vefc/demo/fonts/NotoSansJP-Regular.otf", VXUI_DEMO_FONT_JAPANESE_TITLE, ( float ) VXUI_DEMO_TITLE_SIZE },
-        { "vefc/demo/fonts/NotoSansJP-Regular.otf", VXUI_DEMO_FONT_JAPANESE_SECTION, ( float ) VXUI_DEMO_SECTION_SIZE },
-        { "vefc/demo/fonts/Tajawal-Regular.ttf", VXUI_DEMO_FONT_ARABIC_TITLE, ( float ) VXUI_DEMO_TITLE_SIZE },
-        { "vefc/demo/fonts/Tajawal-Regular.ttf", VXUI_DEMO_FONT_ARABIC_SECTION, ( float ) VXUI_DEMO_SECTION_SIZE },
+        { "vefc/demo/fonts/OpenSans-Regular.ttf", VXUI_DEMO_FONT_UI, ( float ) VXUI_DEMO_BODY_SIZE, VXUI_DEMO_FONT_BUCKET_DENSE },
+        { "demo/fonts/Rajdhani-SemiBold.ttf", VXUI_DEMO_FONT_TITLE, ( float ) VXUI_DEMO_TITLE_SIZE, VXUI_DEMO_FONT_BUCKET_DISPLAY },
+        { "vefc/demo/fonts/NovaMono-Regular.ttf", VXUI_DEMO_FONT_DEBUG, ( float ) VXUI_DEMO_CODE_SIZE, VXUI_DEMO_FONT_BUCKET_DENSE },
+        { "demo/fonts/SpaceGrotesk-Variable.ttf", VXUI_DEMO_FONT_MAIN_MENU_BODY, ( float ) VXUI_DEMO_BODY_SIZE, VXUI_DEMO_FONT_BUCKET_DENSE },
+        { "demo/fonts/RobotoMono-Variable.ttf", VXUI_DEMO_FONT_MAIN_MENU_MONO, ( float ) VXUI_DEMO_CODE_SIZE, VXUI_DEMO_FONT_BUCKET_DENSE },
+        { "vefc/demo/fonts/NotoSansJP-Regular.otf", VXUI_DEMO_FONT_JAPANESE, ( float ) VXUI_DEMO_BODY_SIZE, VXUI_DEMO_FONT_BUCKET_DENSE },
+        { "vefc/demo/fonts/Tajawal-Regular.ttf", VXUI_DEMO_FONT_ARABIC, ( float ) VXUI_DEMO_BODY_SIZE, VXUI_DEMO_FONT_BUCKET_DENSE },
+        { "vefc/demo/fonts/Bitter-Regular.ttf", VXUI_DEMO_FONT_SECTION_TITLE, ( float ) VXUI_DEMO_SECTION_SIZE, VXUI_DEMO_FONT_BUCKET_DISPLAY },
+        { "vefc/demo/fonts/NotoSansJP-Regular.otf", VXUI_DEMO_FONT_JAPANESE_TITLE, ( float ) VXUI_DEMO_TITLE_SIZE, VXUI_DEMO_FONT_BUCKET_DISPLAY },
+        { "vefc/demo/fonts/NotoSansJP-Regular.otf", VXUI_DEMO_FONT_JAPANESE_SECTION, ( float ) VXUI_DEMO_SECTION_SIZE, VXUI_DEMO_FONT_BUCKET_DISPLAY },
+        { "vefc/demo/fonts/Tajawal-Regular.ttf", VXUI_DEMO_FONT_ARABIC_TITLE, ( float ) VXUI_DEMO_TITLE_SIZE, VXUI_DEMO_FONT_BUCKET_DISPLAY },
+        { "vefc/demo/fonts/Tajawal-Regular.ttf", VXUI_DEMO_FONT_ARABIC_SECTION, ( float ) VXUI_DEMO_SECTION_SIZE, VXUI_DEMO_FONT_BUCKET_DISPLAY },
+    };
+
+    renderer->demo_font_buffers.clear();
+    renderer->demo_loaded_fonts.clear();
+    renderer->demo_font_scale_warning_keys.clear();
+    for ( std::vector< ve_font_id >& bucket_ids : renderer->demo_font_bucket_ids ) {
+        bucket_ids.clear();
+    }
+
+    auto register_loaded_font = [&]( ve_font_id id, ve_font_id family_id, float size_px ) -> void {
+        if ( id < 0 ) {
+            return;
+        }
+        const size_t index = ( size_t ) id;
+        if ( renderer->demo_loaded_fonts.size() <= index ) {
+            renderer->demo_loaded_fonts.resize( index + 1 );
+        }
+        renderer->demo_loaded_fonts[ index ].family_id = family_id;
+        renderer->demo_loaded_fonts[ index ].size_px = size_px;
+        renderer->demo_loaded_fonts[ index ].line_height = vxui_demo_font_line_height( renderer, id, size_px );
+        if ( family_id >= 0 && family_id < VXUI_DEMO_FONT_FACE_COUNT ) {
+            renderer->demo_font_bucket_ids[ family_id ].push_back( id );
+        }
+    };
+
+    auto load_font_bucket = [&]( const font_load& font, float size_px, ve_font_id expected_id ) -> bool {
+        const std::filesystem::path full_path = source_dir / font.relative_path;
+        renderer->demo_font_buffers.emplace_back();
+        std::vector< uint8_t >& buffer = renderer->demo_font_buffers.back();
+        const ve_font_id id = ve_fontcache_loadfile( &renderer->cache, full_path.string().c_str(), buffer, size_px );
+        if ( id < 0 ) {
+            std::fprintf( stderr, "Failed to load demo font '%s' at %.2fpx.\n", full_path.string().c_str(), size_px );
+            return false;
+        }
+        if ( expected_id >= 0 && id != expected_id ) {
+            std::fprintf( stderr, "Failed to load demo font '%s' with the expected id %d (got %lld).\n", full_path.string().c_str(), expected_id, ( long long ) id );
+            return false;
+        }
+        register_loaded_font( id, ( ve_font_id ) font.font_id, size_px );
+        return true;
+    };
+
+    auto bucket_sizes_for_font = [&]( const font_load& font ) -> std::pair< const float*, size_t > {
+        if ( font.bucket_profile == VXUI_DEMO_FONT_BUCKET_DISPLAY ) {
+            return { display_bucket_sizes, sizeof( display_bucket_sizes ) / sizeof( display_bucket_sizes[ 0 ] ) };
+        }
+        return { dense_bucket_sizes, sizeof( dense_bucket_sizes ) / sizeof( dense_bucket_sizes[ 0 ] ) };
     };
 
     for ( const font_load& font : fonts ) {
-        const std::filesystem::path full_path = source_dir / font.relative_path;
-        std::vector< uint8_t >& buffer = renderer->demo_fonts[ font.font_id ];
-        ve_font_id id = ve_fontcache_loadfile( &renderer->cache, full_path.string().c_str(), buffer, font.size_px );
-        if ( id != font.font_id ) {
-            std::fprintf( stderr, "Failed to load demo font '%s' with the expected id %d (got %lld).\n", full_path.string().c_str(), font.font_id, ( long long ) id );
+        if ( !load_font_bucket( font, font.size_px, ( ve_font_id ) font.font_id ) ) {
             return false;
         }
-        renderer->demo_font_base_sizes[ font.font_id ] = font.size_px;
-        renderer->demo_line_heights[ font.font_id ] = vxui_demo_font_line_height( renderer, id, font.size_px );
+    }
+
+    for ( const font_load& font : fonts ) {
+        const auto [ bucket_sizes, bucket_count ] = bucket_sizes_for_font( font );
+        for ( size_t i = 0; i < bucket_count; ++i ) {
+            const float bucket_size = bucket_sizes[ i ];
+            if ( std::fabs( bucket_size - font.size_px ) < 0.01f ) {
+                continue;
+            }
+            if ( !load_font_bucket( font, bucket_size, -1 ) ) {
+                return false;
+            }
+        }
+        std::vector< ve_font_id >& bucket_ids = renderer->demo_font_bucket_ids[ font.font_id ];
+        std::sort(
+            bucket_ids.begin(),
+            bucket_ids.end(),
+            [&]( ve_font_id lhs, ve_font_id rhs ) {
+                return vxui_demo_loaded_font_size( renderer, lhs, 0.0f ) < vxui_demo_loaded_font_size( renderer, rhs, 0.0f );
+            } );
     }
     return true;
 }
@@ -3451,6 +3758,8 @@ int main( int argc, char** argv )
      cfg.SetProfile( TinyWindow::profile_t::core );
      cfg.startHidden = vefc_backend_test_mode || shot_request.enabled;
 
+     vxui_demo_enable_dpi_awareness();
+
      std::unique_ptr< TinyWindow::windowManager > manager( new TinyWindow::windowManager() );
      std::unique_ptr< TinyWindow::tWindow > window( manager->AddWindow( cfg ) );
      if ( !window ) {
@@ -3491,7 +3800,9 @@ int main( int argc, char** argv )
      }
 
     vxui_demo_renderer renderer = {};
-    renderer.window_size = window->settings.resolution;
+    renderer.window_size = shot_request.enabled
+        ? cfg.resolution
+        : vxui_demo_query_client_pixel_size( winHandle, cfg.resolution );
     if ( !vxui_demo_init_renderer( &renderer ) ) {
          std::fprintf( stderr, "Failed to initialize the VXUI demo renderer.\n" );
          vxui_demo_shutdown_renderer( &renderer );
@@ -3685,6 +3996,7 @@ int main( int argc, char** argv )
     vxui_demo_apply_locale_index( &ctx, &app, VXUI_DEMO_LOCALE_ENGLISH );
     vxui_demo_apply_prompt_table_index( &ctx, &app, 0 );
 
+    char error[ 256 ] = {};
     if ( !shot_request.enabled && !vxui_demo_write_file(
              app.watched_seq_path.c_str(),
              "[sequence.main_menu_enter]\n"
@@ -3701,7 +4013,6 @@ int main( int argc, char** argv )
         return 1;
     }
 
-    char error[ 256 ] = {};
     if ( !shot_request.enabled && !vxui_load_seq_toml( &ctx, app.watched_seq_path.c_str(), VXUI_DEMO_DEFAULT_WATCHED_SEQUENCE_NAME, error, sizeof( error ) ) ) {
         std::fprintf( stderr, "Failed to load %s: %s\n", app.watched_seq_path.c_str(), error );
         std::remove( app.watched_seq_path.c_str() );
@@ -3826,10 +4137,16 @@ int main( int argc, char** argv )
     std::chrono::steady_clock::time_point previous = std::chrono::steady_clock::now();
     const std::chrono::steady_clock::duration kInteractiveFrameBudget =
         std::chrono::duration_cast< std::chrono::steady_clock::duration >( std::chrono::duration< double >( 1.0 / 60.0 ) );
+    bool first_interactive_frame = true;
     while ( !window->shouldClose ) {
         const std::chrono::steady_clock::time_point frame_start = std::chrono::steady_clock::now();
         manager->PollForEvents();
-        vxui_demo_set_window_size( &renderer, window->settings.resolution );
+        const TinyWindow::vec2_t< unsigned int > runtime_window_size =
+            shot_request.enabled ? cfg.resolution : vxui_demo_query_client_pixel_size( winHandle, renderer.window_size );
+        const bool window_size_changed_this_frame =
+            renderer.window_size.width != runtime_window_size.width ||
+            renderer.window_size.height != runtime_window_size.height;
+        vxui_demo_set_window_size( &renderer, runtime_window_size );
         ctx.cfg.screen_width = ( int ) renderer.window_size.width;
         ctx.cfg.screen_height = ( int ) renderer.window_size.height;
 
@@ -4105,6 +4422,12 @@ int main( int argc, char** argv )
 #endif
 
         vxui_demo_present_draw_list( &renderer, &ctx, &list );
+#ifdef VXUI_DEBUG
+        if ( first_interactive_frame || window_size_changed_this_frame ) {
+            vxui_demo_debug_log_window_metrics( window.get(), winHandle, &renderer );
+        }
+#endif
+        first_interactive_frame = false;
         if ( app.request_quit ) {
             window->shouldClose = true;
         }
@@ -4716,7 +5039,7 @@ static void vxui_demo_render_main_menu_screen( vxui_demo_app* app, vxui_ctx* ctx
                 VXUI( ctx, "main.command_menu", {
                     .layout = {
                         .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIXED( viewport_height ) },
-                        .padding = { 2, 0, 0, 4 },
+                        .padding = { 0, 0, 0, 2 },
                         .childGap = command_panel_gap,
                         .layoutDirection = CLAY_TOP_TO_BOTTOM,
                     },
