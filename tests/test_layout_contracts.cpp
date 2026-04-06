@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../demo/internal/theme.h"
+#include "../demo/internal/demo_layout.h"
 #include "../third_party/utest.h"
 #include "../vxui.h"
 #include "test_layout_helpers.h"

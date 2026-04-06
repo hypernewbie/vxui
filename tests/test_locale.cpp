@@ -3,7 +3,7 @@
 #include <cstring>
 #include <string>
 
-#include "../demo/internal/layout_contract.h"
+#include "../demo/internal/demo_layout.h"
 #include "../third_party/utest.h"
 #include "../vxui.h"
 #include "../vxui_menu.h"
@@ -1267,7 +1267,7 @@ UTEST_F( locale_fixture, rtl_text_stays_within_screen_bounds )
 UTEST_F( locale_fixture, settings_surface_is_desktop_scale )
 {
     const char* locales[] = { "en", "ja-JP", "ar" };
-    const vxui_demo_surface_contract contract = vxui_demo_get_surface_contract( VXUI_DEMO_SURFACE_SETTINGS );
+    const float desktop_min_surface_width = vxui_demo_surface_desktop_min_width( VXUI_DEMO_SURFACE_SETTINGS );
     for ( const char* locale : locales ) {
         vxui__locale_render_settings_desktop( utest_fixture, locale );
 
@@ -1290,7 +1290,7 @@ UTEST_F( locale_fixture, settings_surface_is_desktop_scale )
 
         EXPECT_NEAR( root.w, ( float ) utest_fixture->ctx.cfg.screen_width, 1.0f );
         EXPECT_NEAR( root.h, ( float ) utest_fixture->ctx.cfg.screen_height, 1.0f );
-        EXPECT_GT( surface.w, contract.desktop_min_surface_width );
+        EXPECT_GT( surface.w, desktop_min_surface_width );
         EXPECT_LT( header.y, body_scroll.y );
         EXPECT_NEAR( body_viewport.y, body_scroll.y, 1.0f );
         EXPECT_NEAR( body_viewport.h, body_scroll.h, 1.0f );
@@ -1608,7 +1608,7 @@ UTEST_F( locale_fixture, form_controls_share_alignment )
 UTEST_F( locale_fixture, main_menu_surface_is_desktop_scale )
 {
     const char* locales[] = { "en", "ja-JP", "ar" };
-    const vxui_demo_surface_contract contract = vxui_demo_get_surface_contract( VXUI_DEMO_SURFACE_MAIN_MENU );
+    const float desktop_min_surface_width = vxui_demo_surface_desktop_min_width( VXUI_DEMO_SURFACE_MAIN_MENU );
     for ( const char* locale : locales ) {
         vxui__locale_render_main_menu_desktop( utest_fixture, locale );
 
@@ -1625,7 +1625,7 @@ UTEST_F( locale_fixture, main_menu_surface_is_desktop_scale )
 
         EXPECT_NEAR( root.w, ( float ) utest_fixture->ctx.cfg.screen_width, 1.0f );
         EXPECT_NEAR( root.h, ( float ) utest_fixture->ctx.cfg.screen_height, 1.0f );
-        EXPECT_GT( surface.w, contract.desktop_min_surface_width );
+        EXPECT_GT( surface.w, desktop_min_surface_width );
         EXPECT_LT( hero.y, meta.y );
         EXPECT_LT( meta.y, help.y );
         EXPECT_GE( hero.w, surface.w * 0.70f );
@@ -2114,7 +2114,7 @@ UTEST_F( locale_fixture, command_deck_sequence_contract_declares_representative_
 UTEST_F( locale_fixture, command_deck_title_surface_uses_desktop_hero_spacing )
 {
     const char* locales[] = { "en", "ja-JP", "ar" };
-    const vxui_demo_surface_contract contract = vxui_demo_get_surface_contract( VXUI_DEMO_SURFACE_TITLE );
+    const float desktop_min_surface_width = vxui_demo_surface_desktop_min_width( VXUI_DEMO_SURFACE_TITLE );
     for ( const char* locale : locales ) {
         vxui__locale_render_command_deck_title( utest_fixture, locale );
 
@@ -2125,7 +2125,7 @@ UTEST_F( locale_fixture, command_deck_title_surface_uses_desktop_hero_spacing )
         ASSERT_TRUE( vxui__locale_find_element_bounds( "title.hero", &hero ) );
         ASSERT_TRUE( vxui__locale_find_element_bounds( "title.action_band", &action_band ) );
 
-        EXPECT_GE( surface.w, contract.desktop_min_surface_width );
+        EXPECT_GE( surface.w, desktop_min_surface_width );
         EXPECT_LT( hero.y + hero.h, action_band.y );
         EXPECT_LE( action_band.y + action_band.h, surface.y + surface.h + 1.0f );
     }
@@ -2134,7 +2134,7 @@ UTEST_F( locale_fixture, command_deck_title_surface_uses_desktop_hero_spacing )
 UTEST_F( locale_fixture, command_deck_main_menu_uses_split_desktop_surface )
 {
     const char* locales[] = { "en", "ja-JP", "ar" };
-    const vxui_demo_surface_contract contract = vxui_demo_get_surface_contract( VXUI_DEMO_SURFACE_MAIN_MENU );
+    const float desktop_min_surface_width = vxui_demo_surface_desktop_min_width( VXUI_DEMO_SURFACE_MAIN_MENU );
     for ( const char* locale : locales ) {
         vxui__locale_render_command_deck_main_menu( utest_fixture, locale );
 
@@ -2151,7 +2151,7 @@ UTEST_F( locale_fixture, command_deck_main_menu_uses_split_desktop_surface )
         ASSERT_TRUE( vxui__locale_find_element_bounds( "main.preview_panel", &preview_panel ) );
         ASSERT_TRUE( vxui__locale_find_element_bounds( "main.footer", &footer ) );
 
-        EXPECT_GE( surface.w, contract.desktop_min_surface_width );
+        EXPECT_GE( surface.w, desktop_min_surface_width );
         EXPECT_GE( command_panel.w, 280.0f );
         EXPECT_GE( preview_panel.w, command_panel.w * 0.80f );
         EXPECT_LT( hero.y + hero.h, deck.y );
@@ -2162,7 +2162,7 @@ UTEST_F( locale_fixture, command_deck_main_menu_uses_split_desktop_surface )
 UTEST_F( locale_fixture, command_deck_settings_menu_keeps_single_scroll_owner_and_pinned_footer )
 {
     const char* locales[] = { "en", "ja-JP", "ar" };
-    const vxui_demo_surface_contract contract = vxui_demo_get_surface_contract( VXUI_DEMO_SURFACE_SETTINGS );
+    const float desktop_min_surface_width = vxui_demo_surface_desktop_min_width( VXUI_DEMO_SURFACE_SETTINGS );
     for ( const char* locale : locales ) {
         vxui__locale_render_command_deck_settings_menu( utest_fixture, locale );
 
@@ -2177,8 +2177,8 @@ UTEST_F( locale_fixture, command_deck_settings_menu_keeps_single_scroll_owner_an
         ASSERT_TRUE( vxui__locale_find_menu_scope_bounds( "settings.body_menu", 1, &menu_viewport ) );
         ASSERT_TRUE( vxui__locale_find_menu_scope_bounds( "settings.body_menu", 2, &menu_content ) );
 
-        EXPECT_GE( surface.w, contract.desktop_min_surface_width );
-        EXPECT_GE( menu_viewport.w, surface.w * 0.60f );
+        EXPECT_GE( surface.w, desktop_min_surface_width );
+        EXPECT_GE( menu_viewport.w, surface.w * VXUI_DEMO_SETTINGS_MENU_VIEWPORT_MIN_WIDTH_FRACTION );
         EXPECT_GT( menu_content.h, menu_viewport.h );
         EXPECT_GE( menu_viewport.y, body_panel.y - 1.0f );
         EXPECT_LE( menu_viewport.y + menu_viewport.h, body_panel.y + body_panel.h + 1.0f );
@@ -2190,7 +2190,7 @@ UTEST_F( locale_fixture, command_deck_settings_menu_keeps_single_scroll_owner_an
 UTEST_F( locale_fixture, command_deck_sortie_surface_uses_three_lane_split )
 {
     const char* locales[] = { "en", "ja-JP", "ar" };
-    const vxui_demo_surface_contract contract = vxui_demo_get_surface_contract( VXUI_DEMO_SURFACE_SORTIE );
+    const float desktop_min_surface_width = vxui_demo_surface_desktop_min_width( VXUI_DEMO_SURFACE_SORTIE );
     for ( const char* locale : locales ) {
         vxui__locale_render_command_deck_sortie( utest_fixture, locale );
 
@@ -2207,7 +2207,7 @@ UTEST_F( locale_fixture, command_deck_sortie_surface_uses_three_lane_split )
         ASSERT_TRUE( vxui__locale_find_element_bounds( "sortie.detail", &detail ) );
         ASSERT_TRUE( vxui__locale_find_element_bounds( "sortie.footer", &footer ) );
 
-        EXPECT_GE( surface.w, contract.desktop_min_surface_width );
+        EXPECT_GE( surface.w, desktop_min_surface_width );
         EXPECT_GE( menu_panel.w, 300.0f );
         EXPECT_GE( briefing.w, 320.0f );
         EXPECT_GE( detail.w, 220.0f );

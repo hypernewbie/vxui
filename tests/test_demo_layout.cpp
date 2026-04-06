@@ -7,9 +7,9 @@
 #include <string>
 #include <vector>
 
-#include "../demo/internal/layout_contract.h"
+#include "../demo/internal/demo_layout.h"
 #include "../demo/internal/main_menu_shared.h"
-#include "../demo/internal/split_deck_shared.h"
+#include "../demo/internal/demo_screens.h"
 #include "../demo/internal/layout_validation.h"
 #include "../third_party/utest.h"
 #include "../vxui.h"
@@ -1367,8 +1367,9 @@ static vxui_demo_controls_block_copy demo_layout_controls_copy_for_screen_size( 
 {
     const float surface_max_height = std::max( 0.0f, ( float ) screen_height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
     const float help_owner_width = demo_layout_main_menu_help_owner_width( screen_width, screen_height, locale );
-    const vxui_demo_controls_block_contract contract = vxui_demo_get_controls_block_contract( surface_max_height, help_owner_width );
-    return vxui_demo_controls_block_copy_for_locale( locale, contract.compact_copy );
+    const bool compact_copy = surface_max_height <= 650.0f
+        || ( help_owner_width > 0.0f && help_owner_width <= 520.0f );
+    return vxui_demo_controls_block_copy_for_locale( locale, compact_copy );
 }
 
 static int demo_layout_main_menu_visible_help_line_count( const char* locale, int screen_width, int screen_height )
@@ -1430,12 +1431,12 @@ UTEST( demo_layout_architecture, authored_demo_files_do_not_use_direct_clay )
     //   - #ifdef VXUI_DEBUG overlay in main.cpp (debug infrastructure)
     //   - Clay_SetCurrentContext() calls in main.cpp (context lifecycle)
     //   - Clay_GetElementData() in debug probes (debug infrastructure)
-    //   - theme.h helpers (vxui_demo_clay_color, vxui_demo_panel_border) — only called from debug overlay
+    //   - demo_layout.h helpers (vxui_demo_clay_color, vxui_demo_panel_border) — only called from debug overlay
     //   - test harnesses (test files may use Clay for structure probing)
     const char* files[] = {
         "main.cpp",
         "demo/internal/main_menu_shared.h",
-        "demo/internal/split_deck_shared.h",
+        "demo/internal/demo_screens.h",
     };
     for ( const char* path : files ) {
         const std::string source = demo_layout_read_source_file( path );
@@ -1692,12 +1693,16 @@ UTEST_F( demo_layout_fixture, main_menu_command_and_preview_panels_never_overlap
     for ( const auto& size : widths ) {
         const demo_layout_case test_case = { "main_menu", "en", size[ 0 ], size[ 1 ], 0, DEMO_TEXT_PACK_NORMAL, DEMO_FOCUS_FIRST, 0, 0 };
         ( void ) demo_layout_render_case( utest_fixture, test_case );
+        const float viewport_width = std::max( 0.0f, ( float ) test_case.width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
+        const float viewport_height = std::max( 0.0f, ( float ) test_case.height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
+        const vxui_demo_main_menu_layout_spec layout =
+            vxui_demo_resolve_main_menu_layout( viewport_width, viewport_height, test_case.locale );
 
         vxui_rect command_panel = {};
         vxui_rect preview_panel = {};
         ASSERT_TRUE( demo_layout_find_element_bounds( "main.command_panel", &command_panel ) );
         ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview_panel", &preview_panel ) );
-        EXPECT_TRUE( vxui_demo_horizontal_split_order( command_panel, preview_panel, vxui_demo_get_main_menu_contract().deck_gap * 0.5f, false ) );
+        EXPECT_TRUE( vxui_demo_horizontal_split_order( command_panel, preview_panel, layout.deck_gap * 0.5f, false ) );
     }
 }
 
@@ -1711,7 +1716,8 @@ UTEST_F( demo_layout_fixture, split_deck_screens_preserve_lane_minimums_for_all_
             ( void ) demo_layout_render_case( utest_fixture, test_case );
 
             const vxui_demo_surface_kind kind = vxui_demo_surface_kind_from_screen_id( screen );
-            const vxui_demo_split_deck_contract contract = vxui_demo_get_split_deck_contract( kind );
+            const float primary_min_width = kind == VXUI_DEMO_SURFACE_SORTIE ? 352.0f : 300.0f;
+            const float secondary_min_width = 280.0f;
             const char* menu_panel_id = std::strcmp( screen, "sortie" ) == 0 ? "sortie.menu_panel"
                 : std::strcmp( screen, "loadout" ) == 0                    ? "loadout.menu_panel"
                 : std::strcmp( screen, "archives" ) == 0                   ? "archives.menu_panel"
@@ -1724,8 +1730,8 @@ UTEST_F( demo_layout_fixture, split_deck_screens_preserve_lane_minimums_for_all_
             vxui_rect detail = {};
             ASSERT_TRUE( demo_layout_find_element_bounds( menu_panel_id, &menu_panel ) );
             ASSERT_TRUE( demo_layout_find_element_bounds( detail_id, &detail ) );
-            EXPECT_GE( menu_panel.w, contract.primary_min_width );
-            EXPECT_GE( detail.w, contract.secondary_min_width );
+            EXPECT_GE( menu_panel.w, primary_min_width );
+            EXPECT_GE( detail.w, secondary_min_width );
         }
     }
 }
@@ -1918,9 +1924,13 @@ UTEST_F( demo_layout_fixture, arabic_matrix_preserves_rtl_lane_order_and_contain
         if ( std::strcmp( screen, "main_menu" ) == 0 ) {
             vxui_rect command = {};
             vxui_rect preview = {};
+            const float viewport_width = std::max( 0.0f, ( float ) test_case.width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
+            const float viewport_height = std::max( 0.0f, ( float ) test_case.height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f );
+            const vxui_demo_main_menu_layout_spec layout =
+                vxui_demo_resolve_main_menu_layout( viewport_width, viewport_height, test_case.locale );
             ASSERT_TRUE( demo_layout_find_element_bounds( "main.command_panel", &command ) );
             ASSERT_TRUE( demo_layout_find_element_bounds( "main.preview_panel", &preview ) );
-            EXPECT_TRUE( vxui_demo_horizontal_split_order( command, preview, vxui_demo_get_main_menu_contract().deck_gap, false ) );
+            EXPECT_TRUE( vxui_demo_horizontal_split_order( command, preview, layout.deck_gap, false ) );
         } else if ( std::strcmp( screen, "settings" ) == 0 ) {
             vxui_rect body_panel = {};
             vxui_rect menu_viewport = {};

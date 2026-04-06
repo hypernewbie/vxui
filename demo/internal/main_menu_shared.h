@@ -5,8 +5,7 @@
 #include <cstring>
 #include <string>
 
-#include "layout_contract.h"
-#include "theme.h"
+#include "demo_layout.h"
 #include "vxui.h"
 #include "vxui_menu.h"
 
@@ -30,6 +29,9 @@ struct vxui_demo_controls_block_copy
 {
     const char* title;
     const char* lines[ 5 ];
+    const char* labels[ 5 ];
+    const char* values[ 5 ];
+    bool accent_values[ 5 ];
 };
 
 struct vxui_demo_main_menu_visuals
@@ -76,27 +78,9 @@ inline std::string vxui_demo_controls_block_line_id( const char* id, int index )
     return std::string( id ) + ".line." + std::to_string( index );
 }
 
-inline bool vxui_demo_shared_locale_matches( const char* locale, const char* prefix )
-{
-    if ( !locale || !prefix ) {
-        return false;
-    }
-    size_t prefix_length = std::strlen( prefix );
-    if ( std::strncmp( locale, prefix, prefix_length ) != 0 ) {
-        return false;
-    }
-    return locale[ prefix_length ] == '\0' || locale[ prefix_length ] == '-' || locale[ prefix_length ] == '_';
-}
-
 inline const char* vxui_demo_main_menu_preview_label( const char* locale )
 {
-    if ( vxui_demo_shared_locale_matches( locale, "ja" ) ) {
-        return "注目セクター";
-    }
-    if ( vxui_demo_shared_locale_matches( locale, "ar" ) ) {
-        return "القطاع المحدد";
-    }
-    return "Focused Sector";
+    return vxui_demo_locale_text( locale, "Focused Sector", "注目セクター", "القطاع المحدد" );
 }
 
 inline const char* vxui_demo_badge_text( const char* locale, const char* badge_key )
@@ -105,47 +89,23 @@ inline const char* vxui_demo_badge_text( const char* locale, const char* badge_k
         return nullptr;
     }
     if ( std::strcmp( badge_key, "badge.recommended" ) == 0 ) {
-        if ( vxui_demo_shared_locale_matches( locale, "ja" ) ) {
-            return "推奨";
-        }
-        if ( vxui_demo_shared_locale_matches( locale, "ar" ) ) {
-            return "موصى به";
-        }
-        return "REC";
+        return vxui_demo_locale_text( locale, "REC", "推奨", "موصى به" );
     }
     if ( std::strcmp( badge_key, "badge.demo" ) == 0 ) {
-        if ( vxui_demo_shared_locale_matches( locale, "ja" ) ) {
-            return "デモ";
-        }
-        if ( vxui_demo_shared_locale_matches( locale, "ar" ) ) {
-            return "عرض";
-        }
-        return "DEMO";
+        return vxui_demo_locale_text( locale, "DEMO", "デモ", "عرض" );
     }
     if ( std::strcmp( badge_key, "badge.selected" ) == 0 ) {
-        if ( vxui_demo_shared_locale_matches( locale, "ja" ) ) {
-            return "選択中";
-        }
-        if ( vxui_demo_shared_locale_matches( locale, "ar" ) ) {
-            return "محدد";
-        }
-        return "Selected";
+        return vxui_demo_locale_text( locale, "Selected", "選択中", "محدد" );
     }
     if ( std::strcmp( badge_key, "badge.locked" ) == 0 ) {
-        if ( vxui_demo_shared_locale_matches( locale, "ja" ) ) {
-            return "ロック";
-        }
-        if ( vxui_demo_shared_locale_matches( locale, "ar" ) ) {
-            return "مغلق";
-        }
-        return "Locked";
+        return vxui_demo_locale_text( locale, "Locked", "ロック", "مغلق" );
     }
     return badge_key;
 }
 
 inline vxui_demo_controls_block_copy vxui_demo_controls_block_copy_for_locale( const char* locale, bool compact_copy = false )
 {
-    if ( vxui_demo_shared_locale_matches( locale, "ja" ) ) {
+    if ( vxui_demo_locale_prefix_matches( locale, "ja" ) ) {
         if ( compact_copy ) {
             return {
                 "操作",
@@ -156,6 +116,21 @@ inline vxui_demo_controls_block_copy vxui_demo_controls_block_copy_for_locale( c
                     nullptr,
                     nullptr,
                 },
+                {
+                    "移動",
+                    "決定",
+                    "戻る",
+                    nullptr,
+                    nullptr,
+                },
+                {
+                    "矢印",
+                    "Enter",
+                    "Esc",
+                    nullptr,
+                    nullptr,
+                },
+                { false, true, false, false, false },
             };
         }
         return {
@@ -167,9 +142,24 @@ inline vxui_demo_controls_block_copy vxui_demo_controls_block_copy_for_locale( c
                 "設定: 1-5",
                 "戻る: Esc / B",
             },
+            {
+                "移動",
+                "列",
+                "決定",
+                "設定",
+                "戻る",
+            },
+            {
+                "矢印 / D-pad",
+                "[ ]",
+                "Enter / A",
+                "1-5",
+                "Esc / B",
+            },
+            { false, false, true, false, false },
         };
     }
-    if ( vxui_demo_shared_locale_matches( locale, "ar" ) ) {
+    if ( vxui_demo_locale_prefix_matches( locale, "ar" ) ) {
         if ( compact_copy ) {
             return {
                 "التحكم",
@@ -180,6 +170,21 @@ inline vxui_demo_controls_block_copy vxui_demo_controls_block_copy_for_locale( c
                     nullptr,
                     nullptr,
                 },
+                {
+                    "الحركة",
+                    "التأكيد",
+                    "الرجوع",
+                    nullptr,
+                    nullptr,
+                },
+                {
+                    "الأسهم",
+                    "Enter",
+                    "Esc",
+                    nullptr,
+                    nullptr,
+                },
+                { false, true, false, false, false },
             };
         }
         return {
@@ -191,6 +196,21 @@ inline vxui_demo_controls_block_copy vxui_demo_controls_block_copy_for_locale( c
                 "الإعداد: 1-5",
                 "الرجوع: Esc",
             },
+            {
+                "الحركة",
+                "المسارات",
+                "التأكيد",
+                "الإعداد",
+                "الرجوع",
+            },
+            {
+                "الأسهم",
+                "[ ]",
+                "Enter",
+                "1-5",
+                "Esc",
+            },
+            { false, false, true, false, false },
         };
     }
     if ( compact_copy ) {
@@ -203,6 +223,21 @@ inline vxui_demo_controls_block_copy vxui_demo_controls_block_copy_for_locale( c
                 nullptr,
                 nullptr,
             },
+            {
+                "Navigation",
+                "Confirm",
+                "Back/Cancel",
+                nullptr,
+                nullptr,
+            },
+            {
+                "arrows",
+                "Enter",
+                "Esc",
+                nullptr,
+                nullptr,
+            },
+            { false, true, false, false, false },
         };
     }
     return {
@@ -214,6 +249,21 @@ inline vxui_demo_controls_block_copy vxui_demo_controls_block_copy_for_locale( c
             "Setup: 1-5",
             "Back/Cancel: Esc / Backspace / B",
         },
+        {
+            "Navigation",
+            "Lanes",
+            "Confirm",
+            "Setup",
+            "Back/Cancel",
+        },
+        {
+            "arrows / D-pad",
+            "[ ]",
+            "Enter / Space / A",
+            "1-5",
+            "Esc / Backspace / B",
+        },
+        { false, false, true, false, false },
     };
 }
 
@@ -419,22 +469,91 @@ inline void vxui_demo_emit_main_menu_command_row(
     }
 }
 
-inline void vxui_demo_emit_main_menu_controls_block(
+inline constexpr const char* VXUI_DEMO_MAIN_MENU_HELP_ROOT_ID = "main.preview.help_legend";
+inline constexpr const char* VXUI_DEMO_MAIN_MENU_HELP_TITLE_ID = "main.preview.help_legend.title";
+inline constexpr const char* VXUI_DEMO_MAIN_MENU_HELP_LINE_IDS[] = {
+    "main.preview.help_legend.line.0",
+    "main.preview.help_legend.line.1",
+    "main.preview.help_legend.line.2",
+    "main.preview.help_legend.line.3",
+    "main.preview.help_legend.line.4",
+};
+
+inline void vxui_demo_emit_main_menu_controls_item(
     vxui_ctx* ctx,
     const char* id,
+    const char* label,
+    const char* value,
+    bool accent_value,
+    bool desktop_telemetry,
+    uint32_t font_id,
+    float label_size,
+    float value_size,
+    float accent_value_size,
+    Clay_Padding row_padding,
+    Clay_Padding chip_padding,
+    const vxui_demo_command_deck_theme& theme )
+{
+    if ( !id || !value || value[ 0 ] == '\0' ) {
+        return;
+    }
+
+    const vxui_color row_divider = { 36, 46, 58, ( uint8_t ) ( desktop_telemetry ? 96 : 144 ) };
+    const vxui_color chip_fill = { 34, 46, 66, ( uint8_t ) ( desktop_telemetry ? 216 : 188 ) };
+    const vxui_color chip_border = { 70, 84, 108, ( uint8_t ) ( desktop_telemetry ? 132 : 104 ) };
+    const vxui_color label_text = { 126, 136, 152, 255 };
+    const vxui_color accent_chip_fill = { 69, 26, 3, 220 };
+    const vxui_color accent_chip_border = { 168, 78, 20, ( uint8_t ) ( desktop_telemetry ? 136 : 110 ) };
+
+    VXUI_HASH( ctx, vxui_id( id ), {
+        .layout = {
+            .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
+            .padding = row_padding,
+            .childGap = desktop_telemetry ? uint16_t{ 12 } : uint16_t{ 8 },
+            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+            .layoutDirection = CLAY_LEFT_TO_RIGHT,
+        },
+        .border = {
+            .color = vxui_demo_clay_color( row_divider ),
+            .width = { 0, 0, 0, 1, 0 },
+        },
+    } ) {
+        if ( label && label[ 0 ] != '\0' ) {
+            VXUI_LABEL( ctx, label, vxui_demo_text_style( font_id, label_size, label_text ) );
+        }
+
+        VXUI_HASH( ctx, vxui_idi( id, 1 ), {
+            .layout = {
+                .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( 0 ) },
+            },
+        } ) {}
+
+        VXUI_HASH( ctx, vxui_idi( id, 2 ), {
+            .layout = {
+                .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+                .padding = chip_padding,
+                .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER },
+            },
+            .backgroundColor = vxui_demo_clay_color( accent_value ? accent_chip_fill : chip_fill ),
+            .cornerRadius = CLAY_CORNER_RADIUS( 0 ),
+            .border = vxui_demo_panel_border( accent_value ? accent_chip_border : chip_border, 1 ),
+        } ) {
+            VXUI_LABEL( ctx, value, vxui_demo_text_style( font_id, accent_value ? accent_value_size : value_size, accent_value ? theme.badge_text : theme.body_text ) );
+        }
+    }
+}
+
+inline void vxui_demo_emit_main_menu_controls_block(
+    vxui_ctx* ctx,
     const vxui_demo_controls_block_copy& copy,
     uint32_t micro_font_id,
     uint32_t title_font_id,
     const vxui_demo_command_deck_theme& theme,
-    float title_font_size,
-    float line_font_size,
     uint16_t padding,
     uint16_t row_gap,
     float min_height )
 {
     const char* title = copy.title;
-    ( void ) title_font_size;
-    ( void ) line_font_size;
     if ( title && std::strcmp( title, "Controls" ) == 0 ) {
         title = "INPUT TELEMETRY";
     }
@@ -448,78 +567,16 @@ inline void vxui_demo_emit_main_menu_controls_block(
     const Clay_Padding telemetry_chip_padding = desktop_telemetry ? Clay_Padding{ 6, 6, 3, 3 } : Clay_Padding{ 4, 4, 2, 2 };
     const vxui_color panel_fill = { 1, 4, 10, 236 };
     const vxui_color panel_border = { 32, 42, 58, 178 };
-    const vxui_color row_divider = { 36, 46, 58, ( uint8_t ) ( desktop_telemetry ? 96 : 144 ) };
-    const vxui_color chip_fill = { 34, 46, 66, ( uint8_t ) ( desktop_telemetry ? 216 : 188 ) };
-    const vxui_color chip_border = { 70, 84, 108, ( uint8_t ) ( desktop_telemetry ? 132 : 104 ) };
-    const vxui_color label_text = { 126, 136, 152, 255 };
     const vxui_color ghost_text = { 58, 71, 88, ( uint8_t ) ( desktop_telemetry ? 28 : 40 ) };
-    const vxui_color accent_chip_fill = { 69, 26, 3, 220 };
-    const vxui_color accent_chip_border = { 168, 78, 20, ( uint8_t ) ( desktop_telemetry ? 136 : 110 ) };
-
-    auto parse_line = []( const char* line, std::string& label, std::string& value ) {
-        label.clear();
-        value.clear();
-        if ( !line || line[ 0 ] == '\0' ) {
-            return false;
+    int visible_line_count = 0;
+    for ( const char* line : copy.lines ) {
+        if ( line && line[ 0 ] != '\0' ) {
+            visible_line_count += 1;
         }
-        if ( const char* colon = std::strchr( line, ':' ) ) {
-            label.assign( line, ( size_t ) ( colon - line ) );
-            const char* value_start = colon + 1;
-            while ( *value_start == ' ' ) {
-                value_start += 1;
-            }
-            value = value_start;
-        } else {
-            value = line;
-        }
-        return !label.empty() || !value.empty();
-    };
+    }
+    const bool compact_layout = visible_line_count <= 3 || !copy.values[ 3 ] || copy.values[ 3 ][ 0 ] == '\0';
 
-    auto emit_item = [&]( const std::string& item_id, const std::string& label, const std::string& value, bool accent_value, bool grow ) {
-        VXUI_HASH( ctx, vxui_id( item_id.c_str() ), {
-                    .layout = {
-                        .sizing = { grow ? CLAY_SIZING_GROW( 0 ) : CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
-                        .padding = telemetry_row_padding,
-                        .childGap = desktop_telemetry ? uint16_t{ 12 } : uint16_t{ 8 },
-                        .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-                        .layoutDirection = CLAY_LEFT_TO_RIGHT,
-                    },
-            .border = {
-                .color = vxui_demo_clay_color( row_divider ),
-                .width = { 0, 0, 0, 1, 0 },
-            },
-        } ) {
-            if ( !label.empty() ) {
-                VXUI_LABEL( ctx, label.c_str(), vxui_demo_text_style( micro_font_id, telemetry_label_size, label_text ) );
-            }
-
-            VXUI_HASH( ctx, vxui_id( ( item_id + ".spacer" ).c_str() ), {
-                .layout = {
-                    .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( 0 ) },
-                },
-            } ) {}
-
-            if ( !value.empty() ) {
-                VXUI_HASH( ctx, vxui_id( ( item_id + ".value" ).c_str() ), {
-                    .layout = {
-                        .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
-                        .padding = telemetry_chip_padding,
-                        .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER },
-                    },
-                    .backgroundColor = vxui_demo_clay_color( accent_value ? accent_chip_fill : chip_fill ),
-                    .cornerRadius = CLAY_CORNER_RADIUS( 0 ),
-                    .border = vxui_demo_panel_border( accent_value ? accent_chip_border : chip_border, 1 ),
-                } ) {
-                    VXUI_LABEL( ctx, value.c_str(), vxui_demo_text_style( micro_font_id, accent_value ? telemetry_accent_value_size : telemetry_value_size, accent_value ? theme.badge_text : theme.body_text ) );
-                }
-            }
-        }
-    };
-    auto is_confirm_label = []( const std::string& label ) {
-        return label == "Confirm" || label == "決定" || label == "التأكيد";
-    };
-
-    VXUI_HASH( ctx, vxui_id( id ), {
+    VXUI_HASH( ctx, vxui_id( VXUI_DEMO_MAIN_MENU_HELP_ROOT_ID ), {
         .layout = {
             .sizing = { CLAY_SIZING_GROW( 0 ), min_height > 0.0f ? CLAY_SIZING_FIT( min_height ) : CLAY_SIZING_FIT( 0 ) },
             .padding = { padding, padding, padding, padding },
@@ -530,7 +587,7 @@ inline void vxui_demo_emit_main_menu_controls_block(
         .cornerRadius = CLAY_CORNER_RADIUS( 0 ),
         .border = vxui_demo_panel_border( panel_border, 1 ),
     } ) {
-        VXUI_HASH( ctx, vxui_id( ( std::string( id ) + ".header" ).c_str() ), {
+        VXUI_HASH( ctx, vxui_idi( VXUI_DEMO_MAIN_MENU_HELP_ROOT_ID, 1 ), {
             .layout = {
                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
                 .childGap = desktop_telemetry ? uint16_t{ 10 } : uint16_t{ 8 },
@@ -541,10 +598,16 @@ inline void vxui_demo_emit_main_menu_controls_block(
             if ( title && title[ 0 ] != '\0' ) {
                 vxui_label_cfg title_style = vxui_demo_text_style( micro_font_id, telemetry_title_size, theme.section_text );
                 title_style.letter_spacing = 1;
-                VXUI_LABEL( ctx, title, title_style );
+                VXUI_HASH( ctx, vxui_id( VXUI_DEMO_MAIN_MENU_HELP_TITLE_ID ), {
+                    .layout = {
+                        .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+                    },
+                } ) {
+                    VXUI_LABEL( ctx, title, title_style );
+                }
             }
 
-            VXUI_HASH( ctx, vxui_id( ( std::string( id ) + ".header.spacer" ).c_str() ), {
+            VXUI_HASH( ctx, vxui_idi( VXUI_DEMO_MAIN_MENU_HELP_ROOT_ID, 2 ), {
                 .layout = {
                     .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_GROW( 0 ) },
                 },
@@ -555,56 +618,94 @@ inline void vxui_demo_emit_main_menu_controls_block(
             VXUI_LABEL( ctx, "LAUNCH", ghost_style );
         }
 
-        std::string labels[ 5 ];
-        std::string values[ 5 ];
-        bool visible[ 5 ] = {};
-        bool accent[ 5 ] = {};
-        int visible_count = 0;
-        for ( int i = 0; i < 5; ++i ) {
-            visible[ i ] = parse_line( copy.lines[ i ], labels[ i ], values[ i ] );
-            accent[ i ] = visible[ i ] && is_confirm_label( labels[ i ] );
-            visible_count += visible[ i ] ? 1 : 0;
-        }
-
-        const bool compact_layout = visible_count <= 3 || values[ 3 ].empty();
         if ( compact_layout ) {
             for ( int i = 0; i < 5; ++i ) {
-                if ( !visible[ i ] ) {
+                if ( !copy.lines[ i ] || copy.lines[ i ][ 0 ] == '\0' ) {
                     continue;
                 }
-                const std::string compact_row_id = std::string( id ) + ".compact." + std::to_string( i );
-                VXUI_HASH( ctx, vxui_id( compact_row_id.c_str() ), {
+                VXUI_HASH( ctx, vxui_idi( VXUI_DEMO_MAIN_MENU_HELP_ROOT_ID, 10 + i ), {
                     .layout = {
                         .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
                         .layoutDirection = CLAY_LEFT_TO_RIGHT,
                     },
                 } ) {
-                    emit_item( compact_row_id + ".item", labels[ i ], values[ i ], accent[ i ], true );
+                    vxui_demo_emit_main_menu_controls_item(
+                        ctx,
+                        VXUI_DEMO_MAIN_MENU_HELP_LINE_IDS[ i ],
+                        copy.labels[ i ],
+                        copy.values[ i ],
+                        copy.accent_values[ i ],
+                        desktop_telemetry,
+                        micro_font_id,
+                        telemetry_label_size,
+                        telemetry_value_size,
+                        telemetry_accent_value_size,
+                        telemetry_row_padding,
+                        telemetry_chip_padding,
+                        theme );
                 }
             }
         } else {
             for ( int row = 0; row < 2; ++row ) {
                 const int left_index = row * 2;
                 const int right_index = left_index + 1;
-                const std::string row_id = std::string( id ) + ".grid." + std::to_string( row );
-                VXUI_HASH( ctx, vxui_id( row_id.c_str() ), {
+                VXUI_HASH( ctx, vxui_idi( VXUI_DEMO_MAIN_MENU_HELP_ROOT_ID, 20 + row ), {
                     .layout = {
                         .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
                         .childGap = desktop_telemetry ? uint16_t{ 18 } : uint16_t{ 12 },
                         .layoutDirection = CLAY_LEFT_TO_RIGHT,
                     },
                 } ) {
-                    if ( visible[ left_index ] ) {
-                        emit_item( row_id + ".left", labels[ left_index ], values[ left_index ], accent[ left_index ], true );
+                    if ( copy.lines[ left_index ] && copy.lines[ left_index ][ 0 ] != '\0' ) {
+                        vxui_demo_emit_main_menu_controls_item(
+                            ctx,
+                            VXUI_DEMO_MAIN_MENU_HELP_LINE_IDS[ left_index ],
+                            copy.labels[ left_index ],
+                            copy.values[ left_index ],
+                            copy.accent_values[ left_index ],
+                            desktop_telemetry,
+                            micro_font_id,
+                            telemetry_label_size,
+                            telemetry_value_size,
+                            telemetry_accent_value_size,
+                            telemetry_row_padding,
+                            telemetry_chip_padding,
+                            theme );
                     }
-                    if ( visible[ right_index ] ) {
-                        emit_item( row_id + ".right", labels[ right_index ], values[ right_index ], accent[ right_index ], true );
+                    if ( copy.lines[ right_index ] && copy.lines[ right_index ][ 0 ] != '\0' ) {
+                        vxui_demo_emit_main_menu_controls_item(
+                            ctx,
+                            VXUI_DEMO_MAIN_MENU_HELP_LINE_IDS[ right_index ],
+                            copy.labels[ right_index ],
+                            copy.values[ right_index ],
+                            copy.accent_values[ right_index ],
+                            desktop_telemetry,
+                            micro_font_id,
+                            telemetry_label_size,
+                            telemetry_value_size,
+                            telemetry_accent_value_size,
+                            telemetry_row_padding,
+                            telemetry_chip_padding,
+                            theme );
                     }
                 }
             }
 
-            if ( visible[ 4 ] ) {
-                emit_item( std::string( id ) + ".full", labels[ 4 ], values[ 4 ], false, true );
+            if ( copy.lines[ 4 ] && copy.lines[ 4 ][ 0 ] != '\0' ) {
+                vxui_demo_emit_main_menu_controls_item(
+                    ctx,
+                    VXUI_DEMO_MAIN_MENU_HELP_LINE_IDS[ 4 ],
+                    copy.labels[ 4 ],
+                    copy.values[ 4 ],
+                    copy.accent_values[ 4 ],
+                    desktop_telemetry,
+                    micro_font_id,
+                    telemetry_label_size,
+                    telemetry_value_size,
+                    telemetry_accent_value_size,
+                    telemetry_row_padding,
+                    telemetry_chip_padding,
+                    theme );
             }
         }
     }
@@ -615,13 +716,13 @@ inline const char* vxui_demo_main_menu_clock_text( void )
     return "17:48:54.65";
 }
 
-inline void vxui_demo_emit_main_menu_header( vxui_ctx* ctx, const vxui_demo_main_menu_visuals& visuals, const vxui_demo_command_deck_theme& theme, const vxui_demo_main_menu_shell_copy& copy )
+inline void vxui_demo_emit_main_menu_header(
+    vxui_ctx* ctx,
+    const vxui_demo_main_menu_visuals& visuals,
+    const vxui_demo_main_menu_type_scale& scale,
+    const vxui_demo_command_deck_theme& theme,
+    const vxui_demo_main_menu_shell_copy& copy )
 {
-    const vxui_demo_main_menu_type_scale scale = vxui_demo_get_main_menu_type_scale(
-        vxui_demo_resolve_main_menu_layout(
-            std::max( 0.0f, ( float ) ctx->cfg.screen_width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f ),
-            std::max( 0.0f, ( float ) ctx->cfg.screen_height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f ),
-            ctx ? ctx->locale : nullptr ) );
     VXUI( ctx, "main.hero.custom", {
         .layout = {
             .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
@@ -689,13 +790,51 @@ inline void vxui_demo_emit_main_menu_header( vxui_ctx* ctx, const vxui_demo_main
     }
 }
 
-inline void vxui_demo_emit_main_menu_footer( vxui_ctx* ctx, const vxui_demo_main_menu_visuals& visuals, const vxui_demo_command_deck_theme& theme, float command_panel_width, float deck_gap )
+inline void vxui_demo_emit_main_menu_footer_action(
+    vxui_ctx* ctx,
+    const char* id,
+    const char* key_id,
+    const char* key_text,
+    const char* label,
+    uint32_t font_id,
+    float key_font_size,
+    float label_font_size,
+    vxui_color key_color,
+    vxui_color key_fill,
+    vxui_color label_color,
+    const vxui_demo_command_deck_theme& theme )
 {
-    const vxui_demo_main_menu_type_scale scale = vxui_demo_get_main_menu_type_scale(
-        vxui_demo_resolve_main_menu_layout(
-            std::max( 0.0f, ( float ) ctx->cfg.screen_width - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f ),
-            std::max( 0.0f, ( float ) ctx->cfg.screen_height - VXUI_DEMO_LAYOUT_OUTER_PADDING * 2.0f ),
-            ctx ? ctx->locale : nullptr ) );
+    VXUI_HASH( ctx, vxui_id( id ), {
+        .layout = {
+            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+            .childGap = 7,
+            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+            .layoutDirection = CLAY_LEFT_TO_RIGHT,
+        },
+    } ) {
+        VXUI_HASH( ctx, vxui_id( key_id ), {
+            .layout = {
+                .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
+                .padding = { 5, 6, 2, 2 },
+            },
+            .backgroundColor = vxui_demo_clay_color( key_fill ),
+            .cornerRadius = CLAY_CORNER_RADIUS( 0 ),
+            .border = vxui_demo_panel_border( theme.primary_panel_border, 1 ),
+        } ) {
+            VXUI_LABEL( ctx, key_text, vxui_demo_text_style( font_id, key_font_size, key_color ) );
+        }
+        VXUI_LABEL( ctx, label, vxui_demo_text_style( font_id, label_font_size, label_color ) );
+    }
+}
+
+inline void vxui_demo_emit_main_menu_footer(
+    vxui_ctx* ctx,
+    const vxui_demo_main_menu_visuals& visuals,
+    const vxui_demo_main_menu_type_scale& scale,
+    const vxui_demo_command_deck_theme& theme,
+    float command_panel_width,
+    float deck_gap )
+{
     VXUI( ctx, "main.footer.custom", {
         .layout = {
             .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
@@ -728,49 +867,8 @@ inline void vxui_demo_emit_main_menu_footer( vxui_ctx* ctx, const vxui_demo_main
                         .layoutDirection = CLAY_LEFT_TO_RIGHT,
                     },
                 } ) {
-                    VXUI( ctx, "main.footer.deploy", {
-                        .layout = {
-                            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
-                            .childGap = 7,
-                            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-                            .layoutDirection = CLAY_LEFT_TO_RIGHT,
-                        },
-                    } ) {
-                        VXUI( ctx, "main.footer.deploy.key", {
-                            .layout = {
-                                .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
-                                .padding = { 5, 6, 2, 2 },
-                            },
-                            .backgroundColor = vxui_demo_clay_color( theme.action_fill ),
-                            .cornerRadius = CLAY_CORNER_RADIUS( 0 ),
-                            .border = vxui_demo_panel_border( theme.primary_panel_border, 1 ),
-                        } ) {
-                            VXUI_LABEL( ctx, "E", vxui_demo_text_style( visuals.mono_font_id, scale.footer_key_size, theme.section_text ) );
-                        }
-                        VXUI_LABEL( ctx, "DEPLOY", vxui_demo_text_style( visuals.mono_font_id, scale.footer_action_size, theme.body_text ) );
-                    }
-
-                    VXUI( ctx, "main.footer.abort", {
-                        .layout = {
-                            .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
-                            .childGap = 7,
-                            .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
-                            .layoutDirection = CLAY_LEFT_TO_RIGHT,
-                        },
-                    } ) {
-                        VXUI( ctx, "main.footer.abort.key", {
-                            .layout = {
-                                .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
-                                .padding = { 5, 6, 2, 2 },
-                            },
-                            .backgroundColor = vxui_demo_clay_color( theme.utility_fill ),
-                            .cornerRadius = CLAY_CORNER_RADIUS( 0 ),
-                            .border = vxui_demo_panel_border( theme.primary_panel_border, 1 ),
-                        } ) {
-                            VXUI_LABEL( ctx, "Q", vxui_demo_text_style( visuals.mono_font_id, scale.footer_key_size, theme.muted_text ) );
-                        }
-                        VXUI_LABEL( ctx, "ABORT", vxui_demo_text_style( visuals.mono_font_id, scale.footer_action_size, theme.muted_text ) );
-                    }
+                    vxui_demo_emit_main_menu_footer_action( ctx, "main.footer.deploy", "main.footer.deploy.key", "E", "DEPLOY", visuals.mono_font_id, scale.footer_key_size, scale.footer_action_size, theme.section_text, theme.action_fill, theme.body_text, theme );
+                    vxui_demo_emit_main_menu_footer_action( ctx, "main.footer.abort", "main.footer.abort.key", "Q", "ABORT", visuals.mono_font_id, scale.footer_key_size, scale.footer_action_size, theme.muted_text, theme.utility_fill, theme.muted_text, theme );
                 }
             }
 
@@ -787,7 +885,7 @@ inline void vxui_demo_emit_main_menu_footer( vxui_ctx* ctx, const vxui_demo_main
                     .childAlignment = { .x = CLAY_ALIGN_X_RIGHT },
                 },
             } ) {
-                VXUI( ctx, "main.footer.meta", {
+                VXUI( ctx, "main.footer.prompts", {
                     .layout = {
                         .sizing = { CLAY_SIZING_FIT( 0 ), CLAY_SIZING_FIT( 0 ) },
                         .childGap = 7,
@@ -843,8 +941,12 @@ inline void vxui_demo_emit_main_menu_shell(
     const bool compact_help = layout.surface_max_height <= 648.0f || tight_preview_width;
     const vxui_demo_controls_block_copy help_copy = vxui_demo_controls_block_copy_for_locale( locale, compact_help );
     const vxui_demo_command_deck_theme& theme = vxui_demo_command_deck_theme_tokens();
-    const vxui_demo_controls_block_contract controls_contract =
-        vxui_demo_get_controls_block_contract( layout.surface_max_height, std::max( 0.0f, layout.preview_panel_width - layout.preview_panel_padding * 2.0f ) );
+    const float controls_owner_width = std::max( 0.0f, layout.preview_panel_width - layout.preview_panel_padding * 2.0f );
+    const bool compact_controls = layout.surface_max_height <= 650.0f
+        || ( controls_owner_width > 0.0f && controls_owner_width <= 520.0f );
+    const uint16_t controls_padding = compact_controls ? uint16_t{ 5 } : uint16_t{ 11 };
+    const uint16_t controls_row_gap = compact_controls ? uint16_t{ 6 } : uint16_t{ 9 };
+    const float controls_min_height = compact_controls ? 104.0f : 176.0f;
     const vxui_demo_main_menu_type_scale scale = vxui_demo_get_main_menu_type_scale( layout );
     const char* badge_text = vxui_demo_badge_text( locale, preview.badge_key );
 
@@ -866,7 +968,7 @@ inline void vxui_demo_emit_main_menu_shell(
                 .layoutDirection = CLAY_TOP_TO_BOTTOM,
             },
     } ) {
-        vxui_demo_emit_main_menu_header( ctx, visuals, theme, copy );
+        vxui_demo_emit_main_menu_header( ctx, visuals, scale, theme, copy );
 
         VXUI( ctx, "main.deck", {
             .layout = {
@@ -1032,8 +1134,7 @@ inline void vxui_demo_emit_main_menu_shell(
                                             continue;
                                         }
 
-                                        const std::string stat_id = std::string( "main.preview.stats.col." ) + std::to_string( i );
-                                        VXUI_HASH( ctx, vxui_id( stat_id.c_str() ), {
+                                        VXUI_HASH( ctx, vxui_idi( "main.preview.stats.grid", i ), {
                                             .layout = {
                                                 .sizing = { CLAY_SIZING_GROW( 0 ), CLAY_SIZING_FIT( 0 ) },
                                                 .childGap = 4,
@@ -1058,20 +1159,17 @@ inline void vxui_demo_emit_main_menu_shell(
 
                 vxui_demo_emit_main_menu_controls_block(
                     ctx,
-                    "main.preview.controls",
                     help_copy,
                     visuals.mono_font_id,
                     visuals.title_font_id,
                     theme,
-                    controls_contract.title_font_size,
-                    controls_contract.line_font_size,
-                    controls_contract.padding,
-                    controls_contract.row_gap,
-                    controls_contract.min_height );
+                    controls_padding,
+                    controls_row_gap,
+                    controls_min_height );
 
             }
         }
 
-        vxui_demo_emit_main_menu_footer( ctx, visuals, theme, layout.command_panel_width, ( float ) deck_gap );
+        vxui_demo_emit_main_menu_footer( ctx, visuals, scale, theme, layout.command_panel_width, ( float ) deck_gap );
     }
 }

@@ -11,10 +11,10 @@
 
 #include <io.h>
 
-#include "../demo/internal/layout_contract.h"
+#include "../demo/internal/demo_layout.h"
 #include "../demo/internal/layout_validation.h"
 #include "../demo/internal/main_menu_shared.h"
-#include "../demo/internal/split_deck_shared.h"
+#include "../demo/internal/demo_screens.h"
 #include "../third_party/utest.h"
 #include "../vxui.h"
 #include "../vxui_menu.h"
@@ -423,7 +423,7 @@ static vxui_draw_list story_render_main_menu(
 static vxui_draw_list story_render_sortie( author_story_fixture* f, int width, int height, const char* locale, uint32_t focused_id = 0 )
 {
     story_begin( f, width, height, locale, focused_id );
-    vxui_demo_render_sortie_screen_shared( &f->ctx, STORY_SPLIT_DECK_VISUALS,
+    vxui_demo_render_sortie_screen_ops( &f->ctx, STORY_SPLIT_DECK_VISUALS,
         ( vxui_demo_sortie_screen_cfg ) {
             .menu_state = &f->sortie_menu_state,
             .selected_mission_index = &f->selected_mission_index,
@@ -440,7 +440,7 @@ static vxui_draw_list story_render_sortie( author_story_fixture* f, int width, i
 static vxui_draw_list story_render_loadout( author_story_fixture* f, int width, int height, const char* locale )
 {
     story_begin( f, width, height, locale );
-    vxui_demo_render_loadout_screen_shared( &f->ctx, STORY_SPLIT_DECK_VISUALS,
+    vxui_demo_render_loadout_screen_ops( &f->ctx, STORY_SPLIT_DECK_VISUALS,
         ( vxui_demo_loadout_screen_cfg ) {
             .menu_state = &f->loadout_menu_state,
             .selected_ship_index = &f->selected_ship_index,
@@ -457,7 +457,7 @@ static vxui_draw_list story_render_loadout( author_story_fixture* f, int width, 
 static vxui_draw_list story_render_archives( author_story_fixture* f, int width, int height, const char* locale )
 {
     story_begin( f, width, height, locale );
-    vxui_demo_render_archives_screen_shared( &f->ctx, STORY_SPLIT_DECK_VISUALS,
+    vxui_demo_render_archives_screen_ops( &f->ctx, STORY_SPLIT_DECK_VISUALS,
         ( vxui_demo_archives_screen_cfg ) {
             .menu_state = &f->archives_menu_state,
             .archive_category_index = &f->archive_category_index,
@@ -472,7 +472,7 @@ static vxui_draw_list story_render_archives( author_story_fixture* f, int width,
 static vxui_draw_list story_render_records( author_story_fixture* f, int width, int height, const char* locale )
 {
     story_begin( f, width, height, locale );
-    vxui_demo_render_records_screen_shared( &f->ctx, STORY_SPLIT_DECK_VISUALS,
+    vxui_demo_render_records_screen_ops( &f->ctx, STORY_SPLIT_DECK_VISUALS,
         ( vxui_demo_records_screen_cfg ) {
             .menu_state = &f->records_menu_state,
             .records_board_index = &f->records_board_index,
