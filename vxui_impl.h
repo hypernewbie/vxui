@@ -111,6 +111,60 @@ bool vxui_menu_action( vxui_ctx* ctx, const char* label )
     return ( row == current_row ) && ( ctx->input & VXUI_INPUT_CONFIRM );
 }
 
+bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char** options, int count )
+{
+    assert( ctx && ctx->active_menu >= 0 );
+    assert( index && options && count > 0 );
+
+    glm::uvec3& m = ctx->menu_state[ctx->active_menu];
+    const uint32_t& current_row = m.y;
+    uint32_t row = ctx->active_menu_row++;
+    if ( row != current_row ) return false;
+
+    int prev = *index;
+
+    if ( ctx->input & VXUI_INPUT_RIGHT )
+        *index = ( *index + 1 ) % count;
+
+    if ( ctx->input & VXUI_INPUT_LEFT )
+        *index = ( *index - 1 + count ) % count;
+
+    return *index != prev;
+}
+
+bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn, float mx, float step )
+{
+    assert( ctx && ctx->active_menu >= 0 );
+    assert( value && mn < mx && step > 0.0f );
+
+    glm::uvec3& m = ctx->menu_state[ctx->active_menu];
+    const uint32_t& current_row = m.y;
+    uint32_t row = ctx->active_menu_row++;
+    if ( row != current_row ) return false;
+
+    float prev = *value;
+
+    if ( ctx->input & VXUI_INPUT_RIGHT )
+        *value = glm::min( *value + step, mx );
+
+    if ( ctx->input & VXUI_INPUT_LEFT )
+        *value = glm::max( *value - step, mn );
+
+    return *value != prev;
+}
+
+void vxui_menu_section( vxui_ctx* ctx, const char* title )
+{
+    assert( ctx && ctx->active_menu >= 0 );
+    ctx->active_menu_row++;   // takes up a row but is not focusable
+}
+
+void vxui_menu_label( vxui_ctx* ctx, const char* text )
+{
+    assert( ctx && ctx->active_menu >= 0 );
+    ctx->active_menu_row++;   // takes up a row but is not focusable
+}
+
 bool vxui_menu_cancelled( vxui_ctx* ctx )
 {
     assert( ctx );

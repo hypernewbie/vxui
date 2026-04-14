@@ -35,6 +35,18 @@ if(VXUI_BUILD_TESTS)
     add_executable(test_menu tests/test_menu.cpp)
     target_link_libraries(test_menu PRIVATE vxui)
     add_test(NAME test_menu COMMAND test_menu)
+
+    add_executable(test_menu_option tests/test_menu_option.cpp)
+    target_link_libraries(test_menu_option PRIVATE vxui)
+    add_test(NAME test_menu_option COMMAND test_menu_option)
+
+    add_executable(test_menu_slider tests/test_menu_slider.cpp)
+    target_link_libraries(test_menu_slider PRIVATE vxui)
+    add_test(NAME test_menu_slider COMMAND test_menu_slider)
+
+    add_executable(test_menu_noninteractive tests/test_menu_noninteractive.cpp)
+    target_link_libraries(test_menu_noninteractive PRIVATE vxui)
+    add_test(NAME test_menu_noninteractive COMMAND test_menu_noninteractive)
 endif()
 
 if(VXUI_BUILD_DEMO)

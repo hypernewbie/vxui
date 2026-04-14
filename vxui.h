@@ -57,5 +57,9 @@ bool vxui_input_pressed  ( vxui_ctx* ctx, const char* action );
 
 bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true );
 bool vxui_menu_action    ( vxui_ctx* ctx, const char* label );
+bool vxui_menu_option    ( vxui_ctx* ctx, const char* label, int* index, const char** options, int count );
+bool vxui_menu_slider    ( vxui_ctx* ctx, const char* label, float* value, float mn = 0.0f, float mx = 1.0f, float step = 0.1f );
+void vxui_menu_section   ( vxui_ctx* ctx, const char* title );
+void vxui_menu_label     ( vxui_ctx* ctx, const char* text );
 bool vxui_menu_cancelled ( vxui_ctx* ctx );
 void vxui_menu_end       ( vxui_ctx* ctx );
