@@ -9,13 +9,32 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(FetchContent)
 
-option(VXUI_BUILD_DEMO "Build the VXUI demo" ON)
+option(VXUI_BUILD_DEMO  "Build the VXUI demo"  ON)
+option(VXUI_BUILD_TESTS "Build the VXUI tests" ON)
 
 add_library(vxui INTERFACE)
-target_include_directories(vxui INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(vxui INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 
 if(MSVC)
     target_compile_options(vxui INTERFACE /utf-8)
+endif()
+
+if(VXUI_BUILD_TESTS)
+    enable_testing()
+    add_executable(test_util tests/test_util.cpp)
+    target_link_libraries(test_util PRIVATE vxui)
+    add_test(NAME test_util COMMAND test_util)
+
+    add_executable(test_pages tests/test_pages.cpp)
+    target_link_libraries(test_pages PRIVATE vxui)
+    add_test(NAME test_pages COMMAND test_pages)
+
+    add_executable(test_menu tests/test_menu.cpp)
+    target_link_libraries(test_menu PRIVATE vxui)
+    add_test(NAME test_menu COMMAND test_menu)
 endif()
 
 if(VXUI_BUILD_DEMO)
