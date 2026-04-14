@@ -20,7 +20,9 @@ Testing/
 *.exe
 *.log
 .ignore
+vxui_api.md
 vxui_design.md
+vxui_architecture.md
 temp/
 tmp/
 .claude/
