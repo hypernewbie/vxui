@@ -35,15 +35,15 @@ static int label_frame( vxui_ctx* ctx )
 
 UTEST(menu_section, focus_skips_section_row) {
     vxui_ctx ctx = {};
-    section_frame( &ctx );          // establish: rows = [section, Play, Quit]
+    section_frame( &ctx );          // frame 1: establish [section, Play, Quit]
     ctx.input = 0;
 
-    // Focus starts at 0 (section row). Down should move to Play (row 1).
-    vxui_input( &ctx, "down" );
+    // Frame 2: no nav input. Initial skip advances focus from 0 (section) to 1 (Play).
     section_frame( &ctx );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
     ctx.input = 0;
 
-    // Confirm — should fire Play (row 1), not section (row 0).
+    // Frame 3: confirm — fires Play (row 1), not section (row 0).
     vxui_input( &ctx, "confirm" );
     int fired = section_frame( &ctx );
     ASSERT_EQ( fired, 0 );
@@ -60,13 +60,15 @@ UTEST(menu_section, counts_as_row) {
 
 UTEST(menu_label, focus_skips_label_row) {
     vxui_ctx ctx = {};
-    label_frame( &ctx );            // establish: rows = [label, Play, Quit]
+    label_frame( &ctx );            // frame 1: establish [label, Play, Quit]
     ctx.input = 0;
 
-    vxui_input( &ctx, "down" );
+    // Frame 2: no nav input. Initial skip advances focus from 0 (label) to 1 (Play).
     label_frame( &ctx );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
     ctx.input = 0;
 
+    // Frame 3: confirm — fires Play (row 1), not label (row 0).
     vxui_input( &ctx, "confirm" );
     int fired = label_frame( &ctx );
     ASSERT_EQ( fired, 0 );

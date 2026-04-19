@@ -39,16 +39,33 @@ enum vxui_input_action : uint32_t
     VXUI_INPUT_CANCEL  = 1 << 5,
 };
 
+struct vxui_draw_cmd
+{
+    glm::vec4  rect;    // x, y, w, h
+    glm::vec4  color;   // r, g, b, a
+};
+
+struct vxui_draw_list
+{
+    vxui_draw_cmd* cmds  = nullptr;
+    int            count = 0;
+};
+
 struct vxui_ctx
 {
     uint32_t active_page = 0;
-    uint32_t input       = 0;   // bitfield of vxui_input_action
+    uint32_t input       = 0;   // bitfield of vxui_input_action, cleared each vxui_frame
+    float    dt          = 0;
 
-    glm::uvec3 menu_state[VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows }
-    int menu_count  = 0;
-    int active_menu = -1;    // index into menus[], -1 = none
-    int active_menu_row = 0; // current row being declared
+    glm::uvec4 menu_state[VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows, skip_mask }
+    int      menu_count       = 0;
+    int      active_menu      = -1;  // index into menus[], -1 = none
+    int      active_menu_row  = 0;   // current row being declared
+    uint32_t active_menu_skip = 0;   // bitmask, accumulated during declaration
 };
+
+void           vxui_frame  ( vxui_ctx* ctx, float dt );
+vxui_draw_list vxui_render ( vxui_ctx* ctx );
 
 bool vxui_page           ( vxui_ctx* ctx, const char* name );
 void vxui_switch         ( vxui_ctx* ctx, const char* name );
