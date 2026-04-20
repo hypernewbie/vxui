@@ -1,6 +1,47 @@
 #ifdef VXUI_IMPL
 
+#define CLAY_IMPLEMENTATION
+#include "clay/clay.h"
 #include "vxui_impl_util.h"
+#include <cstring>
+
+static void vxui_clay_error( Clay_ErrorData e )
+{
+    (void) e;
+    assert( !"clay error" );
+}
+
+void vxui_init( vxui_ctx* ctx, float w, float h, void* clay_memory, size_t clay_size )
+{
+    assert( ctx && clay_memory && clay_size >= Clay_MinMemorySize() );
+    Clay_Arena arena = Clay_CreateArenaWithCapacityAndMemory( clay_size, clay_memory );
+    ctx->clay = Clay_Initialize( arena, { w, h }, { vxui_clay_error, nullptr } );
+}
+
+static Clay_SizingAxis vxui_sizing_to_clay( vxui_sizing s )
+{
+    switch ( s.type )
+    {
+        case VXUI_GROW:    return CLAY_SIZING_GROW( s.value );
+        case VXUI_FIXED:   return CLAY_SIZING_FIXED( s.value );
+        case VXUI_PERCENT: return CLAY_SIZING_PERCENT( s.value );
+        default:           return CLAY_SIZING_FIT( s.value );
+    }
+}
+
+static Clay_LayoutAlignmentX vxui_align_x_to_clay( uint8_t a )
+{
+    if ( a == 1 ) return CLAY_ALIGN_X_CENTER;
+    if ( a == 2 ) return CLAY_ALIGN_X_RIGHT;
+    return CLAY_ALIGN_X_LEFT;
+}
+
+static Clay_LayoutAlignmentY vxui_align_y_to_clay( uint8_t a )
+{
+    if ( a == 1 ) return CLAY_ALIGN_Y_CENTER;
+    if ( a == 2 ) return CLAY_ALIGN_Y_BOTTOM;
+    return CLAY_ALIGN_Y_TOP;
+}
 
 void vxui_frame( vxui_ctx* ctx, float dt )
 {
@@ -8,13 +49,65 @@ void vxui_frame( vxui_ctx* ctx, float dt )
     assert( ctx->active_menu == -1 );   // mismatched menu_begin/end from last frame
     ctx->input = 0;
     ctx->dt    = dt;
+    if ( ctx->clay )
+    {
+        Clay_SetCurrentContext( (Clay_Context*) ctx->clay );
+        Clay_BeginLayout();
+    }
 }
 
 vxui_draw_list vxui_render( vxui_ctx* ctx )
 {
     assert( ctx );
     assert( ctx->active_menu == -1 );   // unclosed menu
-    return {};   // TODO: Clay bridge
+
+    if ( !ctx->clay )
+    {
+        ctx->draw_list = {};
+        return ctx->draw_list;
+    }
+
+    Clay_RenderCommandArray cmds = Clay_EndLayout();
+
+    int count = 0;
+    for ( int i = 0; i < cmds.length && count < VXUI_MAX_DRAW_CMDS; i++ )
+    {
+        Clay_RenderCommand* cmd = &cmds.internalArray[i];
+        if ( cmd->commandType != CLAY_RENDER_COMMAND_TYPE_RECTANGLE ) continue;
+
+        vxui_draw_cmd& out = ctx->draw_buf[count++];
+        out.id   = cmd->id;
+        out.rect = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+    }
+
+    ctx->draw_list.cmds  = ctx->draw_buf;
+    ctx->draw_list.count = count;
+    return ctx->draw_list;
+}
+
+void vxui_div( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg )
+{
+    assert( ctx );
+
+    Clay_String clay_id = { false, (int32_t) strlen( id ), id };
+    Clay__OpenElementWithId( Clay__HashString( clay_id, 0 ) );
+
+    Clay_ElementDeclaration decl = {};
+    decl.layout.sizing.width     = vxui_sizing_to_clay( cfg.width );
+    decl.layout.sizing.height    = vxui_sizing_to_clay( cfg.height );
+    decl.layout.layoutDirection  = cfg.col ? CLAY_TOP_TO_BOTTOM : CLAY_LEFT_TO_RIGHT;
+    decl.layout.padding          = { cfg.padding[0], cfg.padding[1], cfg.padding[2], cfg.padding[3] };
+    decl.layout.childGap         = cfg.gap;
+    decl.layout.childAlignment.x = vxui_align_x_to_clay( cfg.align_x );
+    decl.layout.childAlignment.y = vxui_align_y_to_clay( cfg.align_y );
+
+    Clay__ConfigureOpenElement( decl );
+}
+
+void vxui_div_end( vxui_ctx* ctx )
+{
+    assert( ctx );
+    Clay__CloseElement();
 }
 
 bool vxui_page( vxui_ctx* ctx, const char* name )

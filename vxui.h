@@ -39,10 +39,30 @@ enum vxui_input_action : uint32_t
     VXUI_INPUT_CANCEL  = 1 << 5,
 };
 
+#define VXUI_FIT     0
+#define VXUI_GROW    1
+#define VXUI_FIXED   2
+#define VXUI_PERCENT 3
+
+struct vxui_sizing { uint8_t type; float value; };
+
+struct vxui_div_cfg
+{
+    vxui_sizing  width      = {};
+    vxui_sizing  height     = {};
+    bool         col        = false;
+    uint16_t     padding[4] = {};
+    uint16_t     gap        = 0;
+    uint8_t      align_x    = 0;   // 0=start  1=center  2=end
+    uint8_t      align_y    = 0;
+};
+
+#define VXUI_MAX_DRAW_CMDS 512
+
 struct vxui_draw_cmd
 {
-    glm::vec4  rect;    // x, y, w, h
-    glm::vec4  color;   // r, g, b, a
+    uint32_t  id;
+    glm::vec4 rect;     // x, y, w, h
 };
 
 struct vxui_draw_list
@@ -56,16 +76,23 @@ struct vxui_ctx
     uint32_t active_page = 0;
     uint32_t input       = 0;   // bitfield of vxui_input_action, cleared each vxui_frame
     float    dt          = 0;
+    void*    clay        = nullptr;
 
     glm::uvec4 menu_state[VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows, skip_mask }
     int      menu_count       = 0;
     int      active_menu      = -1;  // index into menus[], -1 = none
     int      active_menu_row  = 0;   // current row being declared
     uint32_t active_menu_skip = 0;   // bitmask, accumulated during declaration
+
+    vxui_draw_cmd  draw_buf[VXUI_MAX_DRAW_CMDS] = {};
+    vxui_draw_list draw_list                     = {};
 };
 
+void           vxui_init   ( vxui_ctx* ctx, float w, float h, void* clay_memory, size_t clay_size );
 void           vxui_frame  ( vxui_ctx* ctx, float dt );
 vxui_draw_list vxui_render ( vxui_ctx* ctx );
+void           vxui_div    ( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg = {} );
+void           vxui_div_end( vxui_ctx* ctx );
 
 bool vxui_page           ( vxui_ctx* ctx, const char* name );
 void vxui_switch         ( vxui_ctx* ctx, const char* name );
