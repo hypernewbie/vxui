@@ -25,7 +25,8 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 
-#define VXUI_MAX_MENUS 32
+#define VXUI_MAX_MENUS   32
+#define VXUI_ROW_HEIGHT  32
 
 // ============================================== API ==================================================
 

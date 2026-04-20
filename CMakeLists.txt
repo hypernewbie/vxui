@@ -57,6 +57,10 @@ if(VXUI_BUILD_TESTS)
     add_executable(test_integration tests/test_integration.cpp)
     target_link_libraries(test_integration PRIVATE vxui)
     add_test(NAME test_integration COMMAND test_integration)
+
+    add_executable(test_menu_draw tests/test_menu_draw.cpp)
+    target_link_libraries(test_menu_draw PRIVATE vxui)
+    add_test(NAME test_menu_draw COMMAND test_menu_draw)
 endif()
 
 if(VXUI_BUILD_DEMO)

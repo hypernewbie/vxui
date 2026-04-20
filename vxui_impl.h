@@ -222,9 +222,28 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap )
     return true;
 }
 
+static void vxui_menu_open_row( vxui_ctx* ctx, const char* label )
+{
+    // Composite id: menu hash as seed so same label in different menus doesn't collide.
+    Clay_String      cs   = { false, (int32_t) strlen( label ), label };
+    Clay_ElementId   eid  = Clay__HashString( cs, ctx->menu_state[ctx->active_menu].x );
+
+    Clay__OpenElementWithId( eid );
+
+    Clay_ElementDeclaration decl        = {};
+    decl.layout.sizing.width            = CLAY_SIZING_GROW( 0 );
+    decl.layout.sizing.height           = CLAY_SIZING_FIXED( VXUI_ROW_HEIGHT );
+    decl.backgroundColor                = { 0, 0, 0, 1 };  // alpha > 0 forces RECTANGLE emit
+
+    Clay__ConfigureOpenElement( decl );
+    Clay__CloseElement();
+}
+
 bool vxui_menu_action( vxui_ctx* ctx, const char* label )
 {
     assert( ctx && ctx->active_menu >= 0 );
+
+    vxui_menu_open_row( ctx, label );
 
     glm::uvec4& m = ctx->menu_state[ctx->active_menu];
     const uint32_t& current_row = m.y;
@@ -237,6 +256,8 @@ bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char*
 {
     assert( ctx && ctx->active_menu >= 0 );
     assert( index && options && count > 0 );
+
+    // TODO: emit rect (same pattern as vxui_menu_action via vxui_menu_open_row)
 
     glm::uvec4& m = ctx->menu_state[ctx->active_menu];
     const uint32_t& current_row = m.y;
@@ -259,6 +280,8 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
     assert( ctx && ctx->active_menu >= 0 );
     assert( value && mn < mx && step > 0.0f );
 
+    // TODO: emit rect (same pattern as vxui_menu_action via vxui_menu_open_row)
+
     glm::uvec4& m = ctx->menu_state[ctx->active_menu];
     const uint32_t& current_row = m.y;
     uint32_t row = ctx->active_menu_row++;
@@ -278,6 +301,7 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
 void vxui_menu_section( vxui_ctx* ctx, const char* title )
 {
     assert( ctx && ctx->active_menu >= 0 );
+    // TODO: emit rect (same pattern as vxui_menu_action via vxui_menu_open_row)
     ctx->active_menu_skip |= ( 1u << ctx->active_menu_row );
     ctx->active_menu_row++;
 }
@@ -285,6 +309,7 @@ void vxui_menu_section( vxui_ctx* ctx, const char* title )
 void vxui_menu_label( vxui_ctx* ctx, const char* text )
 {
     assert( ctx && ctx->active_menu >= 0 );
+    // TODO: emit rect (same pattern as vxui_menu_action via vxui_menu_open_row)
     ctx->active_menu_skip |= ( 1u << ctx->active_menu_row );
     ctx->active_menu_row++;
 }
