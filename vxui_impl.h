@@ -280,7 +280,7 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
     assert( ctx && ctx->active_menu >= 0 );
     assert( value && mn < mx && step > 0.0f );
 
-    // TODO: emit rect (same pattern as vxui_menu_action via vxui_menu_open_row)
+    vxui_menu_open_row( ctx, label );
 
     glm::uvec4& m = ctx->menu_state[ctx->active_menu];
     const uint32_t& current_row = m.y;
