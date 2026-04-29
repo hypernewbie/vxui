@@ -126,6 +126,77 @@ UTEST(menu_draw, row_has_fixed_height) {
     ASSERT_NEAR( dl.cmds[0].rect.w, (float) VXUI_ROW_HEIGHT, 1e-3f );  // rect.w = height (Clay h)
 }
 
+/* ---- option emits rect ----------------------------------------------- */
+
+UTEST(menu_draw, option_emits_rect) {
+    vxui_ctx ctx = make_ctx();
+    int idx = 0;
+    const char* opts[] = { "Easy", "Normal", "Hard" };
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_option( &ctx, "Difficulty", &idx, opts, 3 );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 1 );
+}
+
+UTEST(menu_draw, option_rect_id_matches_label) {
+    vxui_ctx ctx = make_ctx();
+    int idx = 0;
+    const char* opts[] = { "Easy", "Normal", "Hard" };
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_option( &ctx, "Difficulty", &idx, opts, 3 );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 1 );
+    ASSERT_EQ( dl.cmds[0].id, row_id( "m", "Difficulty" ) );
+}
+
+UTEST(menu_draw, option_row_has_fixed_height) {
+    vxui_ctx ctx = make_ctx();
+    int idx = 0;
+    const char* opts[] = { "Easy", "Normal", "Hard" };
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_option( &ctx, "Difficulty", &idx, opts, 3 );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 1 );
+    ASSERT_NEAR( dl.cmds[0].rect.w, (float) VXUI_ROW_HEIGHT, 1e-3f );
+}
+
+UTEST(menu_draw, action_and_option_emit_two_rects) {
+    vxui_ctx ctx = make_ctx();
+    int idx = 0;
+    const char* opts[] = { "A", "B" };
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_option( &ctx, "Difficulty", &idx, opts, 2 );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 2 );
+    ASSERT_EQ( dl.cmds[0].id, row_id( "m", "Play" ) );
+    ASSERT_EQ( dl.cmds[1].id, row_id( "m", "Difficulty" ) );
+}
+
 /* ---- section/label do not emit rects --------------------------------- */
 
 UTEST(menu_draw, section_emits_no_rect) {

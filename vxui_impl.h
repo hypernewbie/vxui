@@ -257,7 +257,7 @@ bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char*
     assert( ctx && ctx->active_menu >= 0 );
     assert( index && options && count > 0 );
 
-    // TODO: emit rect (same pattern as vxui_menu_action via vxui_menu_open_row)
+    vxui_menu_open_row( ctx, label );
 
     glm::uvec4& m = ctx->menu_state[ctx->active_menu];
     const uint32_t& current_row = m.y;
