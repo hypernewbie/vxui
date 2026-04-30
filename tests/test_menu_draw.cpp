@@ -566,6 +566,92 @@ UTEST(menu_draw, focus_rect_skips_section_row) {
     ASSERT_NE  ( dl.cmds[2].id,    dl.cmds[0].id );
 }
 
+UTEST(menu_draw, section_then_action_action_below) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_section( &ctx, "Header" );    // row 0
+        vxui_menu_action ( &ctx, "Play" );       // row 1
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    // Frame 2: focus skipped to row 1.
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_section( &ctx, "Header" );
+        vxui_menu_action ( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 3 );    // section + action + focus
+    ASSERT_NEAR( dl.cmds[0].rect.y, 0.0f,                            1e-3f );
+    ASSERT_NEAR( dl.cmds[1].rect.y, 1.0f * (float) VXUI_ROW_HEIGHT,  1e-3f );
+}
+
+UTEST(menu_draw, label_then_action_action_below) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_label ( &ctx, "Info" );        // row 0
+        vxui_menu_action( &ctx, "Play" );        // row 1
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_label ( &ctx, "Info" );
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 3 );
+    ASSERT_NEAR( dl.cmds[0].rect.y, 0.0f,                            1e-3f );
+    ASSERT_NEAR( dl.cmds[1].rect.y, 1.0f * (float) VXUI_ROW_HEIGHT,  1e-3f );
+}
+
+UTEST(menu_draw, interleaved_skip_rows_stack) {
+    vxui_ctx ctx = make_ctx();
+
+    // Frame 1: establish [section, action, label, action] (4 rows).
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_section( &ctx, "Top" );        // row 0
+        vxui_menu_action ( &ctx, "Play" );       // row 1
+        vxui_menu_label  ( &ctx, "Note" );       // row 2
+        vxui_menu_action ( &ctx, "Quit" );       // row 3
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_section( &ctx, "Top" );
+        vxui_menu_action ( &ctx, "Play" );
+        vxui_menu_label  ( &ctx, "Note" );
+        vxui_menu_action ( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 5 );    // 4 rows + 1 focus
+    ASSERT_NEAR( dl.cmds[0].rect.y, 0.0f,                            1e-3f );
+    ASSERT_NEAR( dl.cmds[1].rect.y, 1.0f * (float) VXUI_ROW_HEIGHT,  1e-3f );
+    ASSERT_NEAR( dl.cmds[2].rect.y, 2.0f * (float) VXUI_ROW_HEIGHT,  1e-3f );
+    ASSERT_NEAR( dl.cmds[3].rect.y, 3.0f * (float) VXUI_ROW_HEIGHT,  1e-3f );
+}
+
 UTEST(menu_draw, no_focus_rect_when_no_interactive_rows) {
     vxui_ctx ctx = make_ctx();
 
