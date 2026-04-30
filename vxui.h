@@ -91,7 +91,7 @@ struct vxui_ctx
 };
 
 void           vxui_init   ( vxui_ctx* ctx, float w, float h, void* clay_memory, size_t clay_size );
-void           vxui_frame  ( vxui_ctx* ctx, float dt );
+void           vxui_frame  ( vxui_ctx* ctx, float dt, float w = 0, float h = 0 );
 vxui_draw_list vxui_render ( vxui_ctx* ctx );
 void           vxui_div    ( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg = {} );
 void           vxui_div_end( vxui_ctx* ctx );

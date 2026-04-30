@@ -43,7 +43,7 @@ static Clay_LayoutAlignmentY vxui_align_y_to_clay( uint8_t a )
     return CLAY_ALIGN_Y_TOP;
 }
 
-void vxui_frame( vxui_ctx* ctx, float dt )
+void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
 {
     assert( ctx );
     assert( ctx->active_menu == -1 );   // mismatched menu_begin/end from last frame
@@ -52,6 +52,8 @@ void vxui_frame( vxui_ctx* ctx, float dt )
     if ( ctx->clay )
     {
         Clay_SetCurrentContext( (Clay_Context*) ctx->clay );
+        if ( w > 0 && h > 0 )
+            Clay_SetLayoutDimensions( { w, h } );
         Clay_BeginLayout();
     }
 }
