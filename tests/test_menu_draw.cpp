@@ -344,6 +344,72 @@ UTEST(menu_draw, label_row_has_fixed_height) {
     ASSERT_NEAR( dl.cmds[0].rect.w, (float) VXUI_ROW_HEIGHT, 1e-3f );
 }
 
+UTEST(menu_draw, first_row_at_origin_y) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 1 );
+    ASSERT_NEAR( dl.cmds[0].rect.y, 0.0f, 1e-3f );
+}
+
+UTEST(menu_draw, second_row_below_first) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 2 );
+    ASSERT_NEAR( dl.cmds[1].rect.y, dl.cmds[0].rect.y + (float) VXUI_ROW_HEIGHT, 1e-3f );
+}
+
+UTEST(menu_draw, three_rows_stack_vertically) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Options" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 3 );
+    ASSERT_NEAR( dl.cmds[0].rect.y, 0.0f,                              1e-3f );
+    ASSERT_NEAR( dl.cmds[1].rect.y, 1.0f * (float) VXUI_ROW_HEIGHT,    1e-3f );
+    ASSERT_NEAR( dl.cmds[2].rect.y, 2.0f * (float) VXUI_ROW_HEIGHT,    1e-3f );
+}
+
+UTEST(menu_draw, rows_share_same_x) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 2 );
+    ASSERT_NEAR( dl.cmds[0].rect.x, dl.cmds[1].rect.x, 1e-3f );
+}
+
 UTEST(menu_draw, all_row_types_emit_rects) {
     vxui_ctx ctx = make_ctx();
     int idx = 0;

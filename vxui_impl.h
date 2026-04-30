@@ -219,6 +219,18 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap )
             current_row = vxui_menu_next_row( current_row, num_rows, skip_mask, +1, wrap );
     }
 
+    // Open a column container so rows stack vertically.
+    Clay_String      cs  = { false, (int32_t) strlen( id ), id };
+    Clay_ElementId   eid = Clay__HashString( cs, 0 );
+    Clay__OpenElementWithId( eid );
+
+    Clay_ElementDeclaration decl = {};
+    decl.layout.layoutDirection  = CLAY_TOP_TO_BOTTOM;
+    decl.layout.sizing.width     = CLAY_SIZING_FIT( 0 );
+    decl.layout.sizing.height    = CLAY_SIZING_FIT( 0 );
+
+    Clay__ConfigureOpenElement( decl );
+
     return true;
 }
 
@@ -323,6 +335,8 @@ bool vxui_menu_cancelled( vxui_ctx* ctx )
 void vxui_menu_end( vxui_ctx* ctx )
 {
     assert( ctx && ctx->active_menu >= 0 );
+
+    Clay__CloseElement();   // close column container opened in vxui_menu
 
     glm::uvec4& m = ctx->menu_state[ctx->active_menu];
     m.z = ctx->active_menu_row;   // num_rows
