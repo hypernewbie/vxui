@@ -244,6 +244,11 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label )
     Clay_String      cs   = { false, (int32_t) strlen( label ), label };
     Clay_ElementId   eid  = Clay__HashString( cs, ctx->menu_state[ctx->active_menu].x );
 
+    assert( ctx->active_menu_row < VXUI_MAX_MENU_ROWS );
+    for ( int i = 0; i < ctx->active_menu_row; i++ )
+        assert( ctx->active_menu_row_ids[i] != eid.id && "duplicate label in same menu" );
+    ctx->active_menu_row_ids[ctx->active_menu_row] = eid.id;
+
     Clay__OpenElementWithId( eid );
 
     Clay_ElementDeclaration decl        = {};

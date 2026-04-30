@@ -1027,4 +1027,74 @@ UTEST(menu_draw, promoted_action_confirm_fires_on_frame_1) {
     ASSERT_TRUE( fired );
 }
 
+UTEST(menu_draw, all_five_row_types_with_distinct_labels) {
+    vxui_ctx ctx = make_ctx();
+
+    int idx = 0;
+    float v = 0.5f;
+    const char* opts[] = { "A", "B" };
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_section( &ctx, "Top" );
+        vxui_menu_label  ( &ctx, "Info" );
+        vxui_menu_action ( &ctx, "Play" );
+        vxui_menu_option ( &ctx, "Diff", &idx, opts, 2 );
+        vxui_menu_slider ( &ctx, "Vol",  &v, 0.0f, 1.0f, 0.1f );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    ASSERT_EQ( ctx.active_menu_row_ids[0], row_id( "m", "Top"  ) );
+    ASSERT_EQ( ctx.active_menu_row_ids[1], row_id( "m", "Info" ) );
+    ASSERT_EQ( ctx.active_menu_row_ids[2], row_id( "m", "Play" ) );
+    ASSERT_EQ( ctx.active_menu_row_ids[3], row_id( "m", "Diff" ) );
+    ASSERT_EQ( ctx.active_menu_row_ids[4], row_id( "m", "Vol"  ) );
+}
+
+UTEST(menu_draw, row_ids_reset_between_frames) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    ASSERT_EQ( ctx.active_menu_row_ids[0], row_id( "m", "Play" ) );
+    ASSERT_EQ( ctx.active_menu_row_ids[1], row_id( "m", "Quit" ) );
+}
+
+UTEST(menu_draw, row_ids_isolated_across_two_menus) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "left" ) )
+    {
+        vxui_menu_action( &ctx, "Back" );
+        vxui_menu_end( &ctx );
+    }
+    if ( vxui_menu( &ctx, "right" ) )
+    {
+        vxui_menu_action( &ctx, "Back" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    ASSERT_EQ( ctx.active_menu_row_ids[0], row_id( "right", "Back" ) );
+}
+
 UTEST_MAIN();

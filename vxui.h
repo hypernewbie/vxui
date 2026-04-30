@@ -25,8 +25,9 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 
-#define VXUI_MAX_MENUS   32
-#define VXUI_ROW_HEIGHT  32
+#define VXUI_MAX_MENUS      32
+#define VXUI_MAX_MENU_ROWS  32
+#define VXUI_ROW_HEIGHT     32
 
 // ============================================== API ==================================================
 
@@ -81,6 +82,7 @@ struct vxui_ctx
 
     glm::uvec4 menu_state       [VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows, skip_mask }
     glm::vec4  menu_focus_spring[VXUI_MAX_MENUS] = {}; // { offset_y, velocity_y, prev_row, _ }, prev_row -1 = unset
+    uint32_t active_menu_row_ids[VXUI_MAX_MENU_ROWS] = {}; // Clay ids of rows declared this frame, for dup detection
     int      menu_count           = 0;
     int      active_menu          = -1;  // index into menus[], -1 = none
     int      active_menu_row      = 0;   // current row being declared
