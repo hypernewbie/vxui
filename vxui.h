@@ -80,10 +80,11 @@ struct vxui_ctx
     void*    clay        = nullptr;
 
     glm::uvec4 menu_state[VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows, skip_mask }
-    int      menu_count       = 0;
-    int      active_menu      = -1;  // index into menus[], -1 = none
-    int      active_menu_row  = 0;   // current row being declared
-    uint32_t active_menu_skip = 0;   // bitmask, accumulated during declaration
+    int      menu_count           = 0;
+    int      active_menu          = -1;  // index into menus[], -1 = none
+    int      active_menu_row      = 0;   // current row being declared
+    uint32_t active_menu_skip     = 0;   // bitmask, accumulated during declaration
+    uint32_t active_menu_focus_id = 0;   // Clay id of focused row this frame, 0 = none
 
     vxui_draw_cmd  draw_buf[VXUI_MAX_DRAW_CMDS] = {};
     vxui_draw_list draw_list                     = {};

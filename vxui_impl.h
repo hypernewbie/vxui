@@ -193,9 +193,10 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap )
     assert( ctx->active_menu == -1 );   // no nested menus
 
     int idx = vxui_menu_get( ctx, vxui_hash( id ) );
-    ctx->active_menu      = idx;
-    ctx->active_menu_row  = 0;
-    ctx->active_menu_skip = 0;
+    ctx->active_menu          = idx;
+    ctx->active_menu_row      = 0;
+    ctx->active_menu_skip     = 0;
+    ctx->active_menu_focus_id = 0;
 
     glm::uvec4& m = ctx->menu_state[idx];
     uint32_t& current_row = m.y;
@@ -234,7 +235,7 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap )
     return true;
 }
 
-static void vxui_menu_open_row( vxui_ctx* ctx, const char* label )
+static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label )
 {
     // Composite id: menu hash as seed so same label in different menus doesn't collide.
     Clay_String      cs   = { false, (int32_t) strlen( label ), label };
@@ -249,17 +250,22 @@ static void vxui_menu_open_row( vxui_ctx* ctx, const char* label )
 
     Clay__ConfigureOpenElement( decl );
     Clay__CloseElement();
+
+    return eid.id;
 }
 
 bool vxui_menu_action( vxui_ctx* ctx, const char* label )
 {
     assert( ctx && ctx->active_menu >= 0 );
 
-    vxui_menu_open_row( ctx, label );
+    uint32_t row_id = vxui_menu_open_row( ctx, label );
 
     glm::uvec4& m = ctx->menu_state[ctx->active_menu];
     const uint32_t& current_row = m.y;
     uint32_t row = ctx->active_menu_row++;
+
+    if ( row == current_row )
+        ctx->active_menu_focus_id = row_id;
 
     return ( row == current_row ) && ( ctx->input & VXUI_INPUT_CONFIRM );
 }
@@ -269,12 +275,14 @@ bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char*
     assert( ctx && ctx->active_menu >= 0 );
     assert( index && options && count > 0 );
 
-    vxui_menu_open_row( ctx, label );
+    uint32_t row_id = vxui_menu_open_row( ctx, label );
 
     glm::uvec4& m = ctx->menu_state[ctx->active_menu];
     const uint32_t& current_row = m.y;
     uint32_t row = ctx->active_menu_row++;
     if ( row != current_row ) return false;
+
+    ctx->active_menu_focus_id = row_id;
 
     int prev = *index;
 
@@ -292,12 +300,14 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
     assert( ctx && ctx->active_menu >= 0 );
     assert( value && mn < mx && step > 0.0f );
 
-    vxui_menu_open_row( ctx, label );
+    uint32_t row_id = vxui_menu_open_row( ctx, label );
 
     glm::uvec4& m = ctx->menu_state[ctx->active_menu];
     const uint32_t& current_row = m.y;
     uint32_t row = ctx->active_menu_row++;
     if ( row != current_row ) return false;
+
+    ctx->active_menu_focus_id = row_id;
 
     float prev = *value;
 
@@ -336,15 +346,37 @@ void vxui_menu_end( vxui_ctx* ctx )
 {
     assert( ctx && ctx->active_menu >= 0 );
 
+    // Emit floating focus rect attached to the focused row's id.
+    if ( ctx->active_menu_focus_id != 0 )
+    {
+        Clay_String      cs   = CLAY_STRING( "focus" );
+        Clay_ElementId   eid  = Clay__HashString( cs, ctx->menu_state[ctx->active_menu].x );
+
+        Clay__OpenElementWithId( eid );
+
+        Clay_ElementDeclaration decl       = {};
+        decl.layout.sizing.width           = CLAY_SIZING_GROW( 0 );
+        decl.layout.sizing.height          = CLAY_SIZING_FIXED( VXUI_ROW_HEIGHT );
+        decl.backgroundColor               = { 0, 0, 0, 1 };
+        decl.floating.attachTo             = CLAY_ATTACH_TO_ELEMENT_WITH_ID;
+        decl.floating.parentId             = ctx->active_menu_focus_id;
+        decl.floating.attachPoints.element = CLAY_ATTACH_POINT_LEFT_TOP;
+        decl.floating.attachPoints.parent  = CLAY_ATTACH_POINT_LEFT_TOP;
+
+        Clay__ConfigureOpenElement( decl );
+        Clay__CloseElement();
+    }
+
     Clay__CloseElement();   // close column container opened in vxui_menu
 
     glm::uvec4& m = ctx->menu_state[ctx->active_menu];
     m.z = ctx->active_menu_row;   // num_rows
     m.w = ctx->active_menu_skip;  // skip_mask
 
-    ctx->active_menu      = -1;
-    ctx->active_menu_row  = 0;
-    ctx->active_menu_skip = 0;
+    ctx->active_menu          = -1;
+    ctx->active_menu_row      = 0;
+    ctx->active_menu_skip     = 0;
+    ctx->active_menu_focus_id = 0;
 }
 
 #endif // #ifdef VXUI_IMPL
