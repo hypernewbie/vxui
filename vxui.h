@@ -28,6 +28,8 @@
 #define VXUI_MAX_MENUS      32
 #define VXUI_MAX_MENU_ROWS  32
 #define VXUI_ROW_HEIGHT     32
+#define VXUI_INPUT_DELAY    0.4f
+#define VXUI_INPUT_REPEAT   0.1f
 
 // ============================================== API ==================================================
 
@@ -78,9 +80,13 @@ struct vxui_ctx
     uint32_t active_page      = 0;
     uint32_t input            = 0;    // bitfield of vxui_input_action, cleared each vxui_frame
     uint32_t prev_input       = 0;    // input bitfield from the previous frame
+    uint32_t input_repeated   = 0;    // bits firing this frame (just-pressed | repeat)
     uint32_t menu_active_mask = 0;    // bit i set if menu i was active this frame
     uint32_t prev_active_mask = 0;    // menu_active_mask from the previous frame
     bool     frame_active     = false;// true between vxui_frame and vxui_render
+    bool     inputs_committed = false;// input_repeated computed this frame
+    float    input_held_time  [6] = {};// seconds each input has been held
+    float    input_next_fire  [6] = {};// next held_time threshold to fire repeat
     float    dt               = 0;
     void*    clay             = nullptr;
 
@@ -112,8 +118,9 @@ void vxui_switch           ( vxui_ctx* ctx, const char* name );
 void vxui_input            ( vxui_ctx* ctx, const char* action, bool pressed = true );
 bool vxui_input_pressed    ( vxui_ctx* ctx, const char* action );
 bool vxui_input_just_pressed( vxui_ctx* ctx, const char* action );
+bool vxui_input_repeated    ( vxui_ctx* ctx, const char* action );
 
-bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true, int max_visible = 0 );
+bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true, int max_visible = 0, bool auto_repeat = false );
 bool vxui_menu_action    ( vxui_ctx* ctx, const char* label );
 bool vxui_menu_option    ( vxui_ctx* ctx, const char* label, int* index, const char** options, int count );
 bool vxui_menu_slider    ( vxui_ctx* ctx, const char* label, float* value, float mn = 0.0f, float mx = 1.0f, float step = 0.1f );

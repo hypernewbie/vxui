@@ -54,6 +54,7 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
     ctx->menu_active_mask = 0;
     ctx->dt               = dt;
     ctx->frame_active     = true;
+    ctx->inputs_committed = false;
     if ( ctx->clay )
     {
         Clay_SetCurrentContext( (Clay_Context*) ctx->clay );
@@ -63,12 +64,15 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
     }
 }
 
+static void vxui_commit_inputs( vxui_ctx* ctx );
+
 vxui_draw_list vxui_render( vxui_ctx* ctx )
 {
     assert( ctx );
     assert( ctx->active_menu == -1 );   // unclosed menu
     assert( ctx->frame_active && "vxui_render without vxui_frame" );
 
+    vxui_commit_inputs( ctx );
     ctx->frame_active = false;
 
     if ( !ctx->clay )
@@ -206,6 +210,52 @@ bool vxui_input_just_pressed( vxui_ctx* ctx, const char* action )
     return false;
 }
 
+static void vxui_commit_inputs( vxui_ctx* ctx )
+{
+    if ( ctx->inputs_committed ) return;
+    ctx->inputs_committed = true;
+    ctx->input_repeated   = 0;
+    for ( int i = 0; i < (int) s_vxui_inputs_n; i++ )
+    {
+        uint32_t bit = 1u << i;
+        bool now  = ( ctx->input      & bit ) != 0;
+        bool prev = ( ctx->prev_input & bit ) != 0;
+        if ( !now )
+        {
+            ctx->input_held_time[i] = 0;
+            continue;
+        }
+        if ( !prev )
+        {
+            ctx->input_held_time[i] = 0;
+            ctx->input_next_fire[i] = VXUI_INPUT_DELAY;
+            ctx->input_repeated    |= bit;
+        }
+        else
+        {
+            ctx->input_held_time[i] += ctx->dt;
+            if ( ctx->input_held_time[i] + 1e-5f >= ctx->input_next_fire[i] )
+            {
+                ctx->input_repeated    |= bit;
+                ctx->input_next_fire[i] += VXUI_INPUT_REPEAT;
+            }
+        }
+    }
+}
+
+bool vxui_input_repeated( vxui_ctx* ctx, const char* action )
+{
+    vxui_commit_inputs( ctx );
+    uint32_t hash = vxui_hash( action );
+    for ( int i = 0; i < (int) s_vxui_inputs_n; i++ )
+    {
+        if ( hash != s_vxui_inputs[i] ) continue;
+        return ( ctx->input_repeated & ( 1 << i ) ) != 0;
+    }
+    assert( !"invalid input action" );
+    return false;
+}
+
 static int vxui_menu_get( vxui_ctx* ctx, const char* name )
 {
     uint32_t id = vxui_hash( name );
@@ -240,10 +290,12 @@ static uint32_t vxui_menu_next_row( uint32_t from, uint32_t num_rows,
     return from;
 }
 
-bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible )
+bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible, bool auto_repeat )
 {
     assert( ctx );
     assert( ctx->active_menu == -1 );   // no nested menus
+
+    vxui_commit_inputs( ctx );
 
     int idx = vxui_menu_get( ctx, id );
     ctx->active_menu          = idx;
@@ -270,11 +322,12 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible )
         current_row = vxui_menu_next_row( current_row, num_rows, skip_mask, +1, true );
 
     // Navigate using last frame's count.
+    uint32_t nav = auto_repeat ? ctx->input_repeated : ctx->input;
     if ( num_rows > 0 )
     {
-        if ( ctx->input & VXUI_INPUT_UP )
+        if ( nav & VXUI_INPUT_UP )
             current_row = vxui_menu_next_row( current_row, num_rows, skip_mask, -1, wrap );
-        if ( ctx->input & VXUI_INPUT_DOWN )
+        if ( nav & VXUI_INPUT_DOWN )
             current_row = vxui_menu_next_row( current_row, num_rows, skip_mask, +1, wrap );
     }
 

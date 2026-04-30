@@ -89,6 +89,10 @@ if(VXUI_BUILD_TESTS)
     add_executable(test_menu_collision tests/test_menu_collision.cpp)
     target_link_libraries(test_menu_collision PRIVATE vxui)
     add_test(NAME test_menu_collision COMMAND test_menu_collision)
+
+    add_executable(test_input_repeated tests/test_input_repeated.cpp)
+    target_link_libraries(test_input_repeated PRIVATE vxui)
+    add_test(NAME test_input_repeated COMMAND test_input_repeated)
 endif()
 
 if(VXUI_BUILD_DEMO)
