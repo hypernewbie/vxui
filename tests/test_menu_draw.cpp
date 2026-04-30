@@ -809,6 +809,101 @@ UTEST(menu_draw, interleaved_skip_rows_stack) {
     ASSERT_NEAR( dl.cmds[3].rect.y, 3.0f * (float) VXUI_ROW_HEIGHT,  1e-3f );
 }
 
+UTEST(menu_draw, focus_rect_y_matches_action_after_section) {
+    vxui_ctx ctx = make_ctx();
+
+    // Menu = [section, action]. Frame 1 establishes; frame 2 settles focus to row 1.
+    for ( int i = 0; i < 60; i++ )
+    {
+        vxui_frame( &ctx, 1.0f / 60.0f );
+        if ( vxui_menu( &ctx, "m" ) )
+        {
+            vxui_menu_section( &ctx, "Header" );
+            vxui_menu_action ( &ctx, "Play" );
+            vxui_menu_end( &ctx );
+        }
+        vxui_render( &ctx );
+    }
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_section( &ctx, "Header" );
+        vxui_menu_action ( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 3 );
+    // Focus rect at row 1 (Play, y=32), not row 0 (Header, y=0).
+    ASSERT_NEAR( dl.cmds[2].rect.y, (float) VXUI_ROW_HEIGHT, 1e-2f );
+    ASSERT_NEAR( dl.cmds[2].rect.y, dl.cmds[1].rect.y,        1e-2f );
+}
+
+UTEST(menu_draw, focus_rect_y_matches_action_between_section_and_label) {
+    vxui_ctx ctx = make_ctx();
+
+    // Menu = [section, action, label]. Focus settles on action (row 1, y=32).
+    for ( int i = 0; i < 60; i++ )
+    {
+        vxui_frame( &ctx, 1.0f / 60.0f );
+        if ( vxui_menu( &ctx, "m" ) )
+        {
+            vxui_menu_section( &ctx, "Top" );
+            vxui_menu_action ( &ctx, "Play" );
+            vxui_menu_label  ( &ctx, "Note" );
+            vxui_menu_end( &ctx );
+        }
+        vxui_render( &ctx );
+    }
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_section( &ctx, "Top" );
+        vxui_menu_action ( &ctx, "Play" );
+        vxui_menu_label  ( &ctx, "Note" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 4 );
+    ASSERT_NEAR( dl.cmds[3].rect.y, (float) VXUI_ROW_HEIGHT, 1e-2f );
+    ASSERT_NEAR( dl.cmds[3].rect.y, dl.cmds[1].rect.y,        1e-2f );
+}
+
+UTEST(menu_draw, focus_rect_y_at_third_action_after_two_sections) {
+    vxui_ctx ctx = make_ctx();
+
+    // Menu = [section, label, action]. Focus settles on action (row 2, y=64).
+    for ( int i = 0; i < 60; i++ )
+    {
+        vxui_frame( &ctx, 1.0f / 60.0f );
+        if ( vxui_menu( &ctx, "m" ) )
+        {
+            vxui_menu_section( &ctx, "Top" );
+            vxui_menu_label  ( &ctx, "Note" );
+            vxui_menu_action ( &ctx, "Play" );
+            vxui_menu_end( &ctx );
+        }
+        vxui_render( &ctx );
+    }
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_section( &ctx, "Top" );
+        vxui_menu_label  ( &ctx, "Note" );
+        vxui_menu_action ( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 4 );
+    ASSERT_NEAR( dl.cmds[3].rect.y, 2.0f * (float) VXUI_ROW_HEIGHT, 1e-2f );
+    ASSERT_NEAR( dl.cmds[3].rect.y, dl.cmds[2].rect.y,                1e-2f );
+}
+
 UTEST(menu_draw, no_focus_rect_when_no_interactive_rows) {
     vxui_ctx ctx = make_ctx();
 
