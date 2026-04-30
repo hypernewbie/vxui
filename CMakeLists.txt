@@ -93,6 +93,10 @@ if(VXUI_BUILD_TESTS)
     add_executable(test_input_repeated tests/test_input_repeated.cpp)
     target_link_libraries(test_input_repeated PRIVATE vxui)
     add_test(NAME test_input_repeated COMMAND test_input_repeated)
+
+    add_executable(test_plot tests/test_plot.cpp)
+    target_link_libraries(test_plot PRIVATE vxui)
+    add_test(NAME test_plot COMMAND test_plot)
 endif()
 
 if(VXUI_BUILD_DEMO)
