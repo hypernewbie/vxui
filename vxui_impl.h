@@ -47,11 +47,13 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
 {
     assert( ctx );
     assert( ctx->active_menu == -1 );   // mismatched menu_begin/end from last frame
+    assert( !ctx->frame_active && "vxui_frame without intervening vxui_render" );
     ctx->prev_input       = ctx->input;
     ctx->prev_active_mask = ctx->menu_active_mask;
     ctx->input            = 0;
     ctx->menu_active_mask = 0;
     ctx->dt               = dt;
+    ctx->frame_active     = true;
     if ( ctx->clay )
     {
         Clay_SetCurrentContext( (Clay_Context*) ctx->clay );
@@ -65,6 +67,9 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
 {
     assert( ctx );
     assert( ctx->active_menu == -1 );   // unclosed menu
+    assert( ctx->frame_active && "vxui_render without vxui_frame" );
+
+    ctx->frame_active = false;
 
     if ( !ctx->clay )
     {

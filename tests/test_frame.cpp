@@ -187,6 +187,37 @@ UTEST(frame, count_resets_each_render) {
     ASSERT_EQ( dl2.count, 2 );
 }
 
+UTEST(frame, frame_active_set_by_vxui_frame) {
+    vxui_ctx ctx = make_ctx();
+    ASSERT_FALSE( ctx.frame_active );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    ASSERT_TRUE( ctx.frame_active );
+
+    vxui_render( &ctx );
+}
+
+UTEST(frame, frame_active_cleared_by_vxui_render) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_render( &ctx );
+    ASSERT_FALSE( ctx.frame_active );
+}
+
+UTEST(frame, frame_active_toggles_across_paired_calls) {
+    vxui_ctx ctx = make_ctx();
+
+    for ( int i = 0; i < 3; i++ )
+    {
+        ASSERT_FALSE( ctx.frame_active );
+        vxui_frame( &ctx, 1.0f / 60.0f );
+        ASSERT_TRUE ( ctx.frame_active );
+        vxui_render( &ctx );
+        ASSERT_FALSE( ctx.frame_active );
+    }
+}
+
 UTEST(frame, render_without_menu_returns_zero) {
     vxui_ctx ctx = make_ctx();
 

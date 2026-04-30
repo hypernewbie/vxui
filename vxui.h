@@ -80,6 +80,7 @@ struct vxui_ctx
     uint32_t prev_input       = 0;    // input bitfield from the previous frame
     uint32_t menu_active_mask = 0;    // bit i set if menu i was active this frame
     uint32_t prev_active_mask = 0;    // menu_active_mask from the previous frame
+    bool     frame_active     = false;// true between vxui_frame and vxui_render
     float    dt               = 0;
     void*    clay             = nullptr;
 

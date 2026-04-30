@@ -259,6 +259,127 @@ UTEST(menu, no_wrap_with_middle_skip_jumps_over) {
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 0 );
 }
 
+// Helper: action, two consecutive label skips, action, with wrap configurable.
+static void no_wrap_double_middle_skip_body( vxui_ctx* ctx, bool wrap )
+{
+    if ( vxui_menu( ctx, "test", wrap ) )
+    {
+        vxui_menu_action ( ctx, "A" );
+        vxui_menu_label  ( ctx, "L1" );
+        vxui_menu_label  ( ctx, "L2" );
+        vxui_menu_action ( ctx, "B" );
+        vxui_menu_end( ctx );
+    }
+}
+
+static void no_wrap_double_middle_skip_frame( vxui_ctx* ctx, uint32_t input, bool wrap )
+{
+    vxui_frame( ctx, 1.0f / 60.0f );
+    ctx->input = input;
+    no_wrap_double_middle_skip_body( ctx, wrap );
+    vxui_render( ctx );
+}
+
+UTEST(menu, no_wrap_jumps_over_two_consecutive_skip_rows) {
+    vxui_ctx ctx = make_ctx();
+    no_wrap_double_middle_skip_frame( &ctx, 0,                false );
+    no_wrap_double_middle_skip_frame( &ctx, VXUI_INPUT_DOWN,  false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 3 );
+    no_wrap_double_middle_skip_frame( &ctx, VXUI_INPUT_UP,    false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 0 );
+}
+
+// Helper: section, action, label, action, label, with wrap configurable.
+static void no_wrap_combined_skip_body( vxui_ctx* ctx, bool wrap )
+{
+    if ( vxui_menu( ctx, "test", wrap ) )
+    {
+        vxui_menu_section( ctx, "Top" );
+        vxui_menu_action ( ctx, "A" );
+        vxui_menu_label  ( ctx, "Mid" );
+        vxui_menu_action ( ctx, "B" );
+        vxui_menu_label  ( ctx, "End" );
+        vxui_menu_end( ctx );
+    }
+}
+
+static void no_wrap_combined_skip_frame( vxui_ctx* ctx, uint32_t input, bool wrap )
+{
+    vxui_frame( ctx, 1.0f / 60.0f );
+    ctx->input = input;
+    no_wrap_combined_skip_body( ctx, wrap );
+    vxui_render( ctx );
+}
+
+UTEST(menu, no_wrap_with_combined_leading_middle_trailing_skip) {
+    vxui_ctx ctx = make_ctx();
+    no_wrap_combined_skip_frame( &ctx, 0,                false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+
+    no_wrap_combined_skip_frame( &ctx, VXUI_INPUT_DOWN,  false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 3 );
+
+    no_wrap_combined_skip_frame( &ctx, VXUI_INPUT_DOWN,  false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 3 );
+
+    no_wrap_combined_skip_frame( &ctx, VXUI_INPUT_UP,    false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+
+    no_wrap_combined_skip_frame( &ctx, VXUI_INPUT_UP,    false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+}
+
+// Helper: all-skip menu (section + label only), wrap configurable.
+static void all_skip_body( vxui_ctx* ctx, bool wrap )
+{
+    if ( vxui_menu( ctx, "test", wrap ) )
+    {
+        vxui_menu_section( ctx, "S" );
+        vxui_menu_label  ( ctx, "L" );
+        vxui_menu_end( ctx );
+    }
+}
+
+static void all_skip_frame( vxui_ctx* ctx, uint32_t input, bool wrap )
+{
+    vxui_frame( ctx, 1.0f / 60.0f );
+    ctx->input = input;
+    all_skip_body( ctx, wrap );
+    vxui_render( ctx );
+}
+
+UTEST(menu, all_skip_menu_no_wrap_input_does_nothing) {
+    vxui_ctx ctx = make_ctx();
+    all_skip_frame( &ctx, 0,                false );
+    uint32_t row_after_init = ctx.menu_state[0].y;
+
+    all_skip_frame( &ctx, VXUI_INPUT_DOWN,  false );
+    ASSERT_EQ( ctx.menu_state[0].y, row_after_init );
+
+    all_skip_frame( &ctx, VXUI_INPUT_UP,    false );
+    ASSERT_EQ( ctx.menu_state[0].y, row_after_init );
+}
+
+UTEST(menu, all_skip_menu_wrap_input_does_nothing) {
+    vxui_ctx ctx = make_ctx();
+    all_skip_frame( &ctx, 0,                true );
+    uint32_t row_after_init = ctx.menu_state[0].y;
+
+    all_skip_frame( &ctx, VXUI_INPUT_DOWN,  true );
+    ASSERT_EQ( ctx.menu_state[0].y, row_after_init );
+
+    all_skip_frame( &ctx, VXUI_INPUT_UP,    true );
+    ASSERT_EQ( ctx.menu_state[0].y, row_after_init );
+}
+
+UTEST(menu, all_skip_menu_emits_no_focus_rect) {
+    vxui_ctx ctx = make_ctx();
+    all_skip_frame( &ctx, 0, true );
+    vxui_draw_list dl = ctx.draw_list;
+
+    ASSERT_EQ( dl.count, 2 );
+}
+
 /* ---- cancel ---------------------------------------------------------- */
 
 UTEST(menu, cancelled_detects_cancel) {
