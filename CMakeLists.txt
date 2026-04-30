@@ -73,6 +73,18 @@ if(VXUI_BUILD_TESTS)
     add_executable(test_root tests/test_root.cpp)
     target_link_libraries(test_root PRIVATE vxui)
     add_test(NAME test_root COMMAND test_root)
+
+    add_executable(test_menu_scroll tests/test_menu_scroll.cpp)
+    target_link_libraries(test_menu_scroll PRIVATE vxui)
+    add_test(NAME test_menu_scroll COMMAND test_menu_scroll)
+
+    add_executable(test_input_just_pressed tests/test_input_just_pressed.cpp)
+    target_link_libraries(test_input_just_pressed PRIVATE vxui)
+    add_test(NAME test_input_just_pressed COMMAND test_input_just_pressed)
+
+    add_executable(test_menu_remount tests/test_menu_remount.cpp)
+    target_link_libraries(test_menu_remount PRIVATE vxui)
+    add_test(NAME test_menu_remount COMMAND test_menu_remount)
 endif()
 
 if(VXUI_BUILD_DEMO)

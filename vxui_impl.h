@@ -47,8 +47,11 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
 {
     assert( ctx );
     assert( ctx->active_menu == -1 );   // mismatched menu_begin/end from last frame
-    ctx->input = 0;
-    ctx->dt    = dt;
+    ctx->prev_input       = ctx->input;
+    ctx->prev_active_mask = ctx->menu_active_mask;
+    ctx->input            = 0;
+    ctx->menu_active_mask = 0;
+    ctx->dt               = dt;
     if ( ctx->clay )
     {
         Clay_SetCurrentContext( (Clay_Context*) ctx->clay );
@@ -186,6 +189,18 @@ bool vxui_input_pressed( vxui_ctx* ctx, const char* action )
     return false;
 }
 
+bool vxui_input_just_pressed( vxui_ctx* ctx, const char* action )
+{
+    uint32_t hash = vxui_hash( action );
+    for ( int i = 0; i < (int) s_vxui_inputs_n; i++ )
+    {
+        if ( hash != s_vxui_inputs[i] ) continue;
+        return ( ctx->input & ~ctx->prev_input & ( 1 << i ) ) != 0;
+    }
+    assert( !"invalid input action" );
+    return false;
+}
+
 static int vxui_menu_get( vxui_ctx* ctx, uint32_t id )
 {
     for ( int i = 0; i < ctx->menu_count; i++ )
@@ -214,7 +229,7 @@ static uint32_t vxui_menu_next_row( uint32_t from, uint32_t num_rows,
     return from;
 }
 
-bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap )
+bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible )
 {
     assert( ctx );
     assert( ctx->active_menu == -1 );   // no nested menus
@@ -224,6 +239,11 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap )
     ctx->active_menu_row      = 0;
     ctx->active_menu_skip     = 0;
     ctx->active_menu_focus_id = 0;
+
+    // Snap focus spring on remount so reappearing menus don't animate from a stale offset.
+    bool is_remount = ( ctx->prev_active_mask & ( 1u << idx ) ) == 0;
+    if ( is_remount ) ctx->menu_focus_spring[idx] = { 0.0f, 0.0f, -1.0f, 0.0f };
+    ctx->menu_active_mask |= ( 1u << idx );
 
     glm::uvec4& m = ctx->menu_state[idx];
     uint32_t& current_row = m.y;
@@ -247,6 +267,21 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap )
             current_row = vxui_menu_next_row( current_row, num_rows, skip_mask, +1, wrap );
     }
 
+    // Scroll: keep focused row inside [scroll_top, scroll_top + max_visible).
+    int& scroll_top = ctx->menu_scroll_top[idx];
+    if ( max_visible > 0 )
+    {
+        if ( (int) current_row < scroll_top )
+            scroll_top = (int) current_row;
+        if ( (int) current_row >= scroll_top + max_visible )
+            scroll_top = (int) current_row - max_visible + 1;
+        if ( scroll_top < 0 ) scroll_top = 0;
+    }
+    else
+    {
+        scroll_top = 0;
+    }
+
     // Open a column container so rows stack vertically.
     Clay_String      cs  = { false, (int32_t) strlen( id ), id };
     Clay_ElementId   eid = Clay__HashString( cs, 0 );
@@ -255,7 +290,14 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap )
     Clay_ElementDeclaration decl = {};
     decl.layout.layoutDirection  = CLAY_TOP_TO_BOTTOM;
     decl.layout.sizing.width     = CLAY_SIZING_FIT( 0 );
-    decl.layout.sizing.height    = CLAY_SIZING_FIT( 0 );
+    decl.layout.sizing.height    = max_visible > 0
+                                   ? CLAY_SIZING_FIXED( (float) ( max_visible * VXUI_ROW_HEIGHT ) )
+                                   : CLAY_SIZING_FIT( 0 );
+    if ( max_visible > 0 )
+    {
+        decl.clip.vertical    = true;
+        decl.clip.childOffset = { 0.0f, -(float) ( scroll_top * VXUI_ROW_HEIGHT ) };
+    }
 
     Clay__ConfigureOpenElement( decl );
 

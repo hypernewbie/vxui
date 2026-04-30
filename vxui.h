@@ -75,13 +75,17 @@ struct vxui_draw_list
 
 struct vxui_ctx
 {
-    uint32_t active_page = 0;
-    uint32_t input       = 0;   // bitfield of vxui_input_action, cleared each vxui_frame
-    float    dt          = 0;
-    void*    clay        = nullptr;
+    uint32_t active_page      = 0;
+    uint32_t input            = 0;    // bitfield of vxui_input_action, cleared each vxui_frame
+    uint32_t prev_input       = 0;    // input bitfield from the previous frame
+    uint32_t menu_active_mask = 0;    // bit i set if menu i was active this frame
+    uint32_t prev_active_mask = 0;    // menu_active_mask from the previous frame
+    float    dt               = 0;
+    void*    clay             = nullptr;
 
     glm::uvec4 menu_state       [VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows, skip_mask }
     glm::vec4  menu_focus_spring[VXUI_MAX_MENUS] = {}; // { offset_y, velocity_y, prev_row, _ }, prev_row -1 = unset
+    int        menu_scroll_top  [VXUI_MAX_MENUS] = {}; // topmost visible row index when max_visible > 0
     uint32_t active_menu_row_ids[VXUI_MAX_MENU_ROWS] = {}; // Clay ids of rows declared this frame, for dup detection
     int      menu_count           = 0;
     int      active_menu          = -1;  // index into menus[], -1 = none
@@ -101,12 +105,13 @@ void           vxui_div_end ( vxui_ctx* ctx );
 void           vxui_root    ( vxui_ctx* ctx, const char* id, float x, float y );
 void           vxui_root_end( vxui_ctx* ctx );
 
-bool vxui_page           ( vxui_ctx* ctx, const char* name );
-void vxui_switch         ( vxui_ctx* ctx, const char* name );
-void vxui_input          ( vxui_ctx* ctx, const char* action, bool pressed = true );
-bool vxui_input_pressed  ( vxui_ctx* ctx, const char* action );
+bool vxui_page             ( vxui_ctx* ctx, const char* name );
+void vxui_switch           ( vxui_ctx* ctx, const char* name );
+void vxui_input            ( vxui_ctx* ctx, const char* action, bool pressed = true );
+bool vxui_input_pressed    ( vxui_ctx* ctx, const char* action );
+bool vxui_input_just_pressed( vxui_ctx* ctx, const char* action );
 
-bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true );
+bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true, int max_visible = 0 );
 bool vxui_menu_action    ( vxui_ctx* ctx, const char* label );
 bool vxui_menu_option    ( vxui_ctx* ctx, const char* label, int* index, const char** options, int count );
 bool vxui_menu_slider    ( vxui_ctx* ctx, const char* label, float* value, float mn = 0.0f, float mx = 1.0f, float step = 0.1f );
