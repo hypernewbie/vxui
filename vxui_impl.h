@@ -206,15 +206,21 @@ bool vxui_input_just_pressed( vxui_ctx* ctx, const char* action )
     return false;
 }
 
-static int vxui_menu_get( vxui_ctx* ctx, uint32_t id )
+static int vxui_menu_get( vxui_ctx* ctx, const char* name )
 {
+    uint32_t id = vxui_hash( name );
     for ( int i = 0; i < ctx->menu_count; i++ )
-        if ( ctx->menu_state[i].x == id ) return i;
+    {
+        if ( ctx->menu_state[i].x != id ) continue;
+        assert( strcmp( ctx->menu_names[i], name ) == 0 && "menu hash collision" );
+        return i;
+    }
 
     assert( ctx->menu_count < VXUI_MAX_MENUS );
     int idx = ctx->menu_count++;
     ctx->menu_state[idx]        = { id, 0, 0, 0 };
     ctx->menu_focus_spring[idx] = { 0.0f, 0.0f, -1.0f, 0.0f };  // prev_row -1 = unset, snap on first focus
+    ctx->menu_names[idx]        = name;
 
     return idx;
 }
@@ -239,7 +245,7 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible )
     assert( ctx );
     assert( ctx->active_menu == -1 );   // no nested menus
 
-    int idx = vxui_menu_get( ctx, vxui_hash( id ) );
+    int idx = vxui_menu_get( ctx, id );
     ctx->active_menu          = idx;
     ctx->active_menu_row      = 0;
     ctx->active_menu_skip     = 0;

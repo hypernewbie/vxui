@@ -85,6 +85,10 @@ if(VXUI_BUILD_TESTS)
     add_executable(test_menu_remount tests/test_menu_remount.cpp)
     target_link_libraries(test_menu_remount PRIVATE vxui)
     add_test(NAME test_menu_remount COMMAND test_menu_remount)
+
+    add_executable(test_menu_collision tests/test_menu_collision.cpp)
+    target_link_libraries(test_menu_collision PRIVATE vxui)
+    add_test(NAME test_menu_collision COMMAND test_menu_collision)
 endif()
 
 if(VXUI_BUILD_DEMO)
