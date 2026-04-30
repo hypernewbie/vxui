@@ -257,35 +257,38 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label )
     return eid.id;
 }
 
+static bool vxui_menu_row_interactive( vxui_ctx* ctx, const char* label )
+{
+    uint32_t row_id = vxui_menu_open_row( ctx, label );
+
+    glm::uvec4& m       = ctx->menu_state[ctx->active_menu];
+    uint32_t&   current = m.y;
+    uint32_t    row     = ctx->active_menu_row++;
+
+    // Promote focus to first interactive row when current is stuck on a leading skip row.
+    if ( current < row
+         && ( ctx->active_menu_skip & ( 1u << current ) )
+         && ctx->active_menu_focus_id == 0 )
+        current = row;
+
+    if ( row != current ) return false;
+
+    ctx->active_menu_focus_id = row_id;
+    return true;
+}
+
 bool vxui_menu_action( vxui_ctx* ctx, const char* label )
 {
     assert( ctx && ctx->active_menu >= 0 );
-
-    uint32_t row_id = vxui_menu_open_row( ctx, label );
-
-    glm::uvec4& m = ctx->menu_state[ctx->active_menu];
-    const uint32_t& current_row = m.y;
-    uint32_t row = ctx->active_menu_row++;
-
-    if ( row == current_row )
-        ctx->active_menu_focus_id = row_id;
-
-    return ( row == current_row ) && ( ctx->input & VXUI_INPUT_CONFIRM );
+    if ( !vxui_menu_row_interactive( ctx, label ) ) return false;
+    return ( ctx->input & VXUI_INPUT_CONFIRM ) != 0;
 }
 
 bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char** options, int count )
 {
     assert( ctx && ctx->active_menu >= 0 );
     assert( index && options && count > 0 );
-
-    uint32_t row_id = vxui_menu_open_row( ctx, label );
-
-    glm::uvec4& m = ctx->menu_state[ctx->active_menu];
-    const uint32_t& current_row = m.y;
-    uint32_t row = ctx->active_menu_row++;
-    if ( row != current_row ) return false;
-
-    ctx->active_menu_focus_id = row_id;
+    if ( !vxui_menu_row_interactive( ctx, label ) ) return false;
 
     int prev = *index;
 
@@ -302,15 +305,7 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
 {
     assert( ctx && ctx->active_menu >= 0 );
     assert( value && mn < mx && step > 0.0f );
-
-    uint32_t row_id = vxui_menu_open_row( ctx, label );
-
-    glm::uvec4& m = ctx->menu_state[ctx->active_menu];
-    const uint32_t& current_row = m.y;
-    uint32_t row = ctx->active_menu_row++;
-    if ( row != current_row ) return false;
-
-    ctx->active_menu_focus_id = row_id;
+    if ( !vxui_menu_row_interactive( ctx, label ) ) return false;
 
     float prev = *value;
 
@@ -349,7 +344,6 @@ void vxui_menu_end( vxui_ctx* ctx )
 {
     assert( ctx && ctx->active_menu >= 0 );
 
-    // Emit floating focus rect attached to the focused row's id.
     if ( ctx->active_menu_focus_id != 0 )
     {
         glm::uvec4& m       = ctx->menu_state[ctx->active_menu];
@@ -358,14 +352,13 @@ void vxui_menu_end( vxui_ctx* ctx )
         float& velocity_y   = spring.y;
         float& prev_row_f   = spring.z;
 
-        // On focus change: jump offset so the rect visually stays at the previous row,
-        // then spring decays it back to 0 (i.e. centered on the new focused row).
+        // On focus change, jump offset so the rect stays at the previous row,
+        // then spring decays it back to 0 (centered on the new focused row).
         float curr_row_f = (float) m.y;
         if ( prev_row_f >= 0.0f && prev_row_f != curr_row_f )
             offset_y += ( prev_row_f - curr_row_f ) * (float) VXUI_ROW_HEIGHT;
         prev_row_f = curr_row_f;
 
-        // Step spring toward 0 using stored dt.
         glm::vec2 s = { offset_y, velocity_y };
         vxui_spring_update( s, 0.0f, 12.0f, ctx->dt > 0.0f ? ctx->dt : 1.0f / 60.0f );
         offset_y   = s.x;
@@ -390,7 +383,7 @@ void vxui_menu_end( vxui_ctx* ctx )
         Clay__CloseElement();
     }
 
-    Clay__CloseElement();   // close column container opened in vxui_menu
+    Clay__CloseElement();
 
     glm::uvec4& m = ctx->menu_state[ctx->active_menu];
     m.z = ctx->active_menu_row;   // num_rows
