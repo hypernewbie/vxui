@@ -79,7 +79,8 @@ struct vxui_ctx
     float    dt          = 0;
     void*    clay        = nullptr;
 
-    glm::uvec4 menu_state[VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows, skip_mask }
+    glm::uvec4 menu_state       [VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows, skip_mask }
+    glm::vec4  menu_focus_spring[VXUI_MAX_MENUS] = {}; // { offset_y, velocity_y, prev_row, _ }, prev_row -1 = unset
     int      menu_count           = 0;
     int      active_menu          = -1;  // index into menus[], -1 = none
     int      active_menu_row      = 0;   // current row being declared

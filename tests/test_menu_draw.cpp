@@ -508,10 +508,10 @@ UTEST(menu_draw, focus_rect_position_matches_focused_row) {
     ASSERT_NEAR( dl.cmds[2].rect.y, dl.cmds[0].rect.y, 1e-3f );
 }
 
-UTEST(menu_draw, focus_rect_moves_with_navigation) {
+UTEST(menu_draw, focus_rect_settles_after_many_frames) {
     vxui_ctx ctx = make_ctx();
 
-    // Frame 1: establish menu (focus = 0)
+    // Establish menu, focus = 0. Spring snaps to row 0 on first frame (no jump).
     vxui_frame( &ctx, 1.0f / 60.0f );
     if ( vxui_menu( &ctx, "m" ) )
     {
@@ -521,7 +521,47 @@ UTEST(menu_draw, focus_rect_moves_with_navigation) {
     }
     vxui_render( &ctx );
 
-    // Frame 2: down input -> focus = 1
+    // Many idle frames, focus stays at row 0. Spring settled.
+    for ( int i = 0; i < 60; i++ )
+    {
+        vxui_frame( &ctx, 1.0f / 60.0f );
+        if ( vxui_menu( &ctx, "m" ) )
+        {
+            vxui_menu_action( &ctx, "Play" );
+            vxui_menu_action( &ctx, "Quit" );
+            vxui_menu_end( &ctx );
+        }
+        vxui_render( &ctx );
+    }
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 3 );
+    // Focus on row 0, spring settled, focus rect at row 0's y.
+    ASSERT_NEAR( dl.cmds[2].rect.y, dl.cmds[0].rect.y, 1e-3f );
+}
+
+UTEST(menu_draw, focus_rect_animates_after_navigation) {
+    vxui_ctx ctx = make_ctx();
+
+    // Frame 1: establish, focus = 0, spring snaps.
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    // Frame 2: down input -> focus = 1. Spring jumps offset to compensate, then steps once.
     vxui_frame( &ctx, 1.0f / 60.0f );
     ctx.input = VXUI_INPUT_DOWN;
     if ( vxui_menu( &ctx, "m" ) )
@@ -533,8 +573,125 @@ UTEST(menu_draw, focus_rect_moves_with_navigation) {
     vxui_draw_list dl = vxui_render( &ctx );
 
     ASSERT_EQ( dl.count, 3 );
-    // focus rect is at row 1 (Quit), so its y should match row 1's y
-    ASSERT_NEAR( dl.cmds[2].rect.y, dl.cmds[1].rect.y, 1e-3f );
+    // Focus rect's y is BETWEEN row 0 and row 1 (not yet at the new row).
+    float row0_y = dl.cmds[0].rect.y;
+    float row1_y = dl.cmds[1].rect.y;
+    float focus_y = dl.cmds[2].rect.y;
+    ASSERT_GT( focus_y, row0_y - 1e-3f );
+    ASSERT_LT( focus_y, row1_y + 1e-3f );
+    ASSERT_GT( focus_y, row0_y + 1e-3f );   // moved away from start
+    ASSERT_LT( focus_y, row1_y - 1e-3f );   // not yet at end
+}
+
+UTEST(menu_draw, focus_rect_settles_after_navigation) {
+    vxui_ctx ctx = make_ctx();
+
+    // Frame 1: establish.
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    // Frame 2: down input -> focus = 1.
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    ctx.input = VXUI_INPUT_DOWN;
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    // Many idle frames -> spring settles to new row.
+    for ( int i = 0; i < 120; i++ )
+    {
+        vxui_frame( &ctx, 1.0f / 60.0f );
+        if ( vxui_menu( &ctx, "m" ) )
+        {
+            vxui_menu_action( &ctx, "Play" );
+            vxui_menu_action( &ctx, "Quit" );
+            vxui_menu_end( &ctx );
+        }
+        vxui_render( &ctx );
+    }
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 3 );
+    ASSERT_NEAR( dl.cmds[2].rect.y, dl.cmds[1].rect.y, 1e-2f );
+}
+
+UTEST(menu_draw, focus_rect_first_frame_snaps) {
+    vxui_ctx ctx = make_ctx();
+
+    // First frame ever: focus is at row 0. Spring should snap immediately
+    // (no animation from origin), focus rect at row 0's position.
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 3 );
+    ASSERT_NEAR( dl.cmds[2].rect.y, dl.cmds[0].rect.y, 1e-3f );
+}
+
+UTEST(menu_draw, focus_spring_per_menu_isolation) {
+    vxui_ctx ctx = make_ctx();
+
+    // Two menus. Establish both with focus on row 0.
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "left" ) )
+    {
+        vxui_menu_action( &ctx, "L1" );
+        vxui_menu_action( &ctx, "L2" );
+        vxui_menu_end( &ctx );
+    }
+    if ( vxui_menu( &ctx, "right" ) )
+    {
+        vxui_menu_action( &ctx, "R1" );
+        vxui_menu_action( &ctx, "R2" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    // Settle both for many frames.
+    for ( int i = 0; i < 120; i++ )
+    {
+        vxui_frame( &ctx, 1.0f / 60.0f );
+        if ( vxui_menu( &ctx, "left" ) )
+        {
+            vxui_menu_action( &ctx, "L1" );
+            vxui_menu_action( &ctx, "L2" );
+            vxui_menu_end( &ctx );
+        }
+        if ( vxui_menu( &ctx, "right" ) )
+        {
+            vxui_menu_action( &ctx, "R1" );
+            vxui_menu_action( &ctx, "R2" );
+            vxui_menu_end( &ctx );
+        }
+        vxui_render( &ctx );
+    }
+
+    // Each menu's spring offset is independently 0.
+    ASSERT_NEAR( ctx.menu_focus_spring[0].x, 0.0f, 1e-2f );
+    ASSERT_NEAR( ctx.menu_focus_spring[1].x, 0.0f, 1e-2f );
 }
 
 UTEST(menu_draw, focus_rect_skips_section_row) {

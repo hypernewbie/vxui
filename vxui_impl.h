@@ -169,7 +169,8 @@ static int vxui_menu_get( vxui_ctx* ctx, uint32_t id )
 
     assert( ctx->menu_count < VXUI_MAX_MENUS );
     int idx = ctx->menu_count++;
-    ctx->menu_state[idx] = { id, 0, 0, 0 };
+    ctx->menu_state[idx]        = { id, 0, 0, 0 };
+    ctx->menu_focus_spring[idx] = { 0.0f, 0.0f, -1.0f, 0.0f };  // prev_row -1 = unset, snap on first focus
 
     return idx;
 }
@@ -351,8 +352,27 @@ void vxui_menu_end( vxui_ctx* ctx )
     // Emit floating focus rect attached to the focused row's id.
     if ( ctx->active_menu_focus_id != 0 )
     {
+        glm::uvec4& m       = ctx->menu_state[ctx->active_menu];
+        glm::vec4&  spring  = ctx->menu_focus_spring[ctx->active_menu];
+        float& offset_y     = spring.x;
+        float& velocity_y   = spring.y;
+        float& prev_row_f   = spring.z;
+
+        // On focus change: jump offset so the rect visually stays at the previous row,
+        // then spring decays it back to 0 (i.e. centered on the new focused row).
+        float curr_row_f = (float) m.y;
+        if ( prev_row_f >= 0.0f && prev_row_f != curr_row_f )
+            offset_y += ( prev_row_f - curr_row_f ) * (float) VXUI_ROW_HEIGHT;
+        prev_row_f = curr_row_f;
+
+        // Step spring toward 0 using stored dt.
+        glm::vec2 s = { offset_y, velocity_y };
+        vxui_spring_update( s, 0.0f, 12.0f, ctx->dt > 0.0f ? ctx->dt : 1.0f / 60.0f );
+        offset_y   = s.x;
+        velocity_y = s.y;
+
         Clay_String      cs   = CLAY_STRING( "focus" );
-        Clay_ElementId   eid  = Clay__HashString( cs, ctx->menu_state[ctx->active_menu].x );
+        Clay_ElementId   eid  = Clay__HashString( cs, m.x );
 
         Clay__OpenElementWithId( eid );
 
@@ -364,6 +384,7 @@ void vxui_menu_end( vxui_ctx* ctx )
         decl.floating.parentId             = ctx->active_menu_focus_id;
         decl.floating.attachPoints.element = CLAY_ATTACH_POINT_LEFT_TOP;
         decl.floating.attachPoints.parent  = CLAY_ATTACH_POINT_LEFT_TOP;
+        decl.floating.offset               = { 0.0f, offset_y };
 
         Clay__ConfigureOpenElement( decl );
         Clay__CloseElement();
