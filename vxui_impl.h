@@ -301,7 +301,7 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
 void vxui_menu_section( vxui_ctx* ctx, const char* title )
 {
     assert( ctx && ctx->active_menu >= 0 );
-    // TODO: emit rect (same pattern as vxui_menu_action via vxui_menu_open_row)
+    vxui_menu_open_row( ctx, title );
     ctx->active_menu_skip |= ( 1u << ctx->active_menu_row );
     ctx->active_menu_row++;
 }
@@ -309,7 +309,7 @@ void vxui_menu_section( vxui_ctx* ctx, const char* title )
 void vxui_menu_label( vxui_ctx* ctx, const char* text )
 {
     assert( ctx && ctx->active_menu >= 0 );
-    // TODO: emit rect (same pattern as vxui_menu_action via vxui_menu_open_row)
+    vxui_menu_open_row( ctx, text );
     ctx->active_menu_skip |= ( 1u << ctx->active_menu_row );
     ctx->active_menu_row++;
 }
