@@ -122,6 +122,143 @@ UTEST(menu, no_wrap_clamps_up) {
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 0 );
 }
 
+// Helper: declare two-action menu with wrap configurable.
+static void wrap_body( vxui_ctx* ctx, bool wrap )
+{
+    if ( vxui_menu( ctx, "test", wrap ) )
+    {
+        vxui_menu_action( ctx, "A" );
+        vxui_menu_action( ctx, "B" );
+        vxui_menu_end( ctx );
+    }
+}
+
+static void wrap_frame( vxui_ctx* ctx, uint32_t input, bool wrap )
+{
+    vxui_frame( ctx, 1.0f / 60.0f );
+    ctx->input = input;
+    wrap_body( ctx, wrap );
+    vxui_render( ctx );
+}
+
+UTEST(menu, no_wrap_clamps_down) {
+    vxui_ctx ctx = make_ctx();
+    wrap_frame( &ctx, 0,                false );
+    wrap_frame( &ctx, VXUI_INPUT_DOWN,  false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+    wrap_frame( &ctx, VXUI_INPUT_DOWN,  false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+}
+
+UTEST(menu, no_wrap_down_then_up_clamps_at_top) {
+    vxui_ctx ctx = make_ctx();
+    wrap_frame( &ctx, 0,                false );
+    wrap_frame( &ctx, VXUI_INPUT_DOWN,  false );
+    wrap_frame( &ctx, VXUI_INPUT_UP,    false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 0 );
+    wrap_frame( &ctx, VXUI_INPUT_UP,    false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 0 );
+}
+
+// Helper: section + 2 actions, with wrap configurable.
+static void no_wrap_section_body( vxui_ctx* ctx, bool wrap )
+{
+    if ( vxui_menu( ctx, "test", wrap ) )
+    {
+        vxui_menu_section( ctx, "Header" );
+        vxui_menu_action ( ctx, "Play" );
+        vxui_menu_action ( ctx, "Quit" );
+        vxui_menu_end( ctx );
+    }
+}
+
+static void no_wrap_section_frame( vxui_ctx* ctx, uint32_t input, bool wrap )
+{
+    vxui_frame( ctx, 1.0f / 60.0f );
+    ctx->input = input;
+    no_wrap_section_body( ctx, wrap );
+    vxui_render( ctx );
+}
+
+UTEST(menu, no_wrap_with_leading_skip_up_clamps_at_first_action) {
+    vxui_ctx ctx = make_ctx();
+    no_wrap_section_frame( &ctx, 0,             false );
+    no_wrap_section_frame( &ctx, 0,             false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+
+    no_wrap_section_frame( &ctx, VXUI_INPUT_UP, false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+}
+
+UTEST(menu, no_wrap_with_leading_skip_down_then_up_clamps_at_first_action) {
+    vxui_ctx ctx = make_ctx();
+    no_wrap_section_frame( &ctx, 0,                false );
+    no_wrap_section_frame( &ctx, VXUI_INPUT_DOWN,  false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 2 );
+    no_wrap_section_frame( &ctx, VXUI_INPUT_UP,    false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+    no_wrap_section_frame( &ctx, VXUI_INPUT_UP,    false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+}
+
+// Helper: 2 actions then a trailing label (skip row), wrap configurable.
+static void no_wrap_trailing_skip_body( vxui_ctx* ctx, bool wrap )
+{
+    if ( vxui_menu( ctx, "test", wrap ) )
+    {
+        vxui_menu_action ( ctx, "A" );
+        vxui_menu_action ( ctx, "B" );
+        vxui_menu_label  ( ctx, "Tail" );
+        vxui_menu_end( ctx );
+    }
+}
+
+static void no_wrap_trailing_skip_frame( vxui_ctx* ctx, uint32_t input, bool wrap )
+{
+    vxui_frame( ctx, 1.0f / 60.0f );
+    ctx->input = input;
+    no_wrap_trailing_skip_body( ctx, wrap );
+    vxui_render( ctx );
+}
+
+UTEST(menu, no_wrap_with_trailing_skip_down_clamps_at_last_action) {
+    vxui_ctx ctx = make_ctx();
+    no_wrap_trailing_skip_frame( &ctx, 0,                false );
+    no_wrap_trailing_skip_frame( &ctx, VXUI_INPUT_DOWN,  false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+    no_wrap_trailing_skip_frame( &ctx, VXUI_INPUT_DOWN,  false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+}
+
+// Helper: action, label (skip row), action, wrap configurable.
+static void no_wrap_middle_skip_body( vxui_ctx* ctx, bool wrap )
+{
+    if ( vxui_menu( ctx, "test", wrap ) )
+    {
+        vxui_menu_action ( ctx, "A" );
+        vxui_menu_label  ( ctx, "Mid" );
+        vxui_menu_action ( ctx, "B" );
+        vxui_menu_end( ctx );
+    }
+}
+
+static void no_wrap_middle_skip_frame( vxui_ctx* ctx, uint32_t input, bool wrap )
+{
+    vxui_frame( ctx, 1.0f / 60.0f );
+    ctx->input = input;
+    no_wrap_middle_skip_body( ctx, wrap );
+    vxui_render( ctx );
+}
+
+UTEST(menu, no_wrap_with_middle_skip_jumps_over) {
+    vxui_ctx ctx = make_ctx();
+    no_wrap_middle_skip_frame( &ctx, 0,                false );
+    no_wrap_middle_skip_frame( &ctx, VXUI_INPUT_DOWN,  false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 2 );
+    no_wrap_middle_skip_frame( &ctx, VXUI_INPUT_UP,    false );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 0 );
+}
+
 /* ---- cancel ---------------------------------------------------------- */
 
 UTEST(menu, cancelled_detects_cancel) {

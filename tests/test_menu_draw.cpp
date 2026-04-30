@@ -1097,4 +1097,215 @@ UTEST(menu_draw, row_ids_isolated_across_two_menus) {
     ASSERT_EQ( ctx.active_menu_row_ids[0], row_id( "right", "Back" ) );
 }
 
+UTEST(menu_draw, empty_menu_emits_no_rects) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 0 );
+}
+
+UTEST(menu_draw, empty_menu_records_zero_rows) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    ASSERT_EQ( ctx.menu_state[0].z, (uint32_t) 0 );
+    ASSERT_EQ( ctx.menu_state[0].w, (uint32_t) 0 );
+}
+
+UTEST(menu_draw, empty_menu_then_populated_works) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 3 );
+    ASSERT_EQ( ctx.menu_state[0].z, (uint32_t) 2 );
+}
+
+UTEST(menu_draw, empty_menu_no_focus_rect) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    for ( int i = 0; i < dl.count; i++ )
+        ASSERT_NE( dl.cmds[i].id, focus_id( "m" ) );
+}
+
+UTEST(menu_draw, focus_rect_width_matches_row_width) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 2 );
+    ASSERT_NEAR( dl.cmds[1].rect.z, dl.cmds[0].rect.z, 1e-3f );  // rect.z = width (Clay w)
+}
+
+UTEST(menu_draw, focus_rect_x_matches_row_x) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 2 );
+    ASSERT_NEAR( dl.cmds[1].rect.x, dl.cmds[0].rect.x, 1e-3f );
+}
+
+UTEST(menu_draw, focus_rect_height_matches_row_height) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 2 );
+    ASSERT_NEAR( dl.cmds[1].rect.w, dl.cmds[0].rect.w, 1e-3f );
+}
+
+UTEST(menu_draw, focus_rect_width_tracks_wider_label) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Continue Playing" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( dl.count, 3 );
+    ASSERT_NEAR( dl.cmds[0].rect.z, dl.cmds[1].rect.z, 1e-3f );
+    ASSERT_NEAR( dl.cmds[2].rect.z, dl.cmds[0].rect.z, 1e-3f );
+}
+
+UTEST(menu_draw, distinct_menu_names_get_distinct_slots) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "left" ) )
+    {
+        vxui_menu_action( &ctx, "A" );
+        vxui_menu_end( &ctx );
+    }
+    if ( vxui_menu( &ctx, "right" ) )
+    {
+        vxui_menu_action( &ctx, "A" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    ASSERT_EQ( ctx.menu_count, 2 );
+    ASSERT_NE( ctx.menu_state[0].x, ctx.menu_state[1].x );
+}
+
+UTEST(menu_draw, menu_state_persists_by_hash_id) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "A" );
+        vxui_menu_action( &ctx, "B" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    ctx.input = VXUI_INPUT_DOWN;
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "A" );
+        vxui_menu_action( &ctx, "B" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    ASSERT_EQ( ctx.menu_count, 1 );
+    ASSERT_EQ( ctx.menu_state[0].x, vxui_hash( "m" ) );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+}
+
+UTEST(menu_draw, two_menus_independent_focus) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "left" ) )
+    {
+        vxui_menu_action( &ctx, "L1" );
+        vxui_menu_action( &ctx, "L2" );
+        vxui_menu_end( &ctx );
+    }
+    if ( vxui_menu( &ctx, "right" ) )
+    {
+        vxui_menu_action( &ctx, "R1" );
+        vxui_menu_action( &ctx, "R2" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    ctx.input = VXUI_INPUT_DOWN;
+    if ( vxui_menu( &ctx, "left" ) )
+    {
+        vxui_menu_action( &ctx, "L1" );
+        vxui_menu_action( &ctx, "L2" );
+        vxui_menu_end( &ctx );
+    }
+    if ( vxui_menu( &ctx, "right" ) )
+    {
+        vxui_menu_action( &ctx, "R1" );
+        vxui_menu_action( &ctx, "R2" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+    ASSERT_EQ( ctx.menu_state[1].y, (uint32_t) 1 );
+}
+
 UTEST_MAIN();
