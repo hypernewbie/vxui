@@ -69,6 +69,10 @@ if(VXUI_BUILD_TESTS)
     add_executable(test_menu_in_div tests/test_menu_in_div.cpp)
     target_link_libraries(test_menu_in_div PRIVATE vxui)
     add_test(NAME test_menu_in_div COMMAND test_menu_in_div)
+
+    add_executable(test_root tests/test_root.cpp)
+    target_link_libraries(test_root PRIVATE vxui)
+    add_test(NAME test_root COMMAND test_root)
 endif()
 
 if(VXUI_BUILD_DEMO)

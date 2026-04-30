@@ -112,6 +112,30 @@ void vxui_div_end( vxui_ctx* ctx )
     Clay__CloseElement();
 }
 
+void vxui_root( vxui_ctx* ctx, const char* id, float x, float y )
+{
+    assert( ctx );
+
+    Clay_String clay_id = { false, (int32_t) strlen( id ), id };
+    Clay__OpenElementWithId( Clay__HashString( clay_id, 0 ) );
+
+    Clay_ElementDeclaration decl       = {};
+    decl.layout.sizing.width           = CLAY_SIZING_FIT( 0 );
+    decl.layout.sizing.height          = CLAY_SIZING_FIT( 0 );
+    decl.floating.attachTo             = CLAY_ATTACH_TO_ROOT;
+    decl.floating.attachPoints.element = CLAY_ATTACH_POINT_LEFT_TOP;
+    decl.floating.attachPoints.parent  = CLAY_ATTACH_POINT_LEFT_TOP;
+    decl.floating.offset               = { x, y };
+
+    Clay__ConfigureOpenElement( decl );
+}
+
+void vxui_root_end( vxui_ctx* ctx )
+{
+    assert( ctx );
+    Clay__CloseElement();
+}
+
 bool vxui_page( vxui_ctx* ctx, const char* name )
 {
     assert( ctx );
