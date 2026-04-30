@@ -220,4 +220,64 @@ UTEST(menu_slider, negative_range_clamps_at_min) {
     ASSERT_NEAR( v, -5.0f, 1e-5f );
 }
 
+UTEST(menu_slider, negative_range_clamps_at_max) {
+    vxui_ctx ctx = make_ctx();
+    float v = 5.0f;
+    step_frame( &ctx, &v, 0,                -5.0f, 5.0f, 1.0f );
+
+    step_frame( &ctx, &v, VXUI_INPUT_RIGHT, -5.0f, 5.0f, 1.0f );
+    ASSERT_NEAR( v, 5.0f, 1e-5f );
+}
+
+UTEST(menu_slider, partial_step_clamps_at_max) {
+    vxui_ctx ctx = make_ctx();
+    float v = 0.95f;
+    step_frame( &ctx, &v, 0,                0.0f, 1.0f, 0.1f );
+
+    step_frame( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.1f );
+    ASSERT_NEAR( v, 1.0f, 1e-5f );
+}
+
+UTEST(menu_slider, partial_step_clamps_at_min) {
+    vxui_ctx ctx = make_ctx();
+    float v = 0.05f;
+    step_frame( &ctx, &v, 0,                0.0f, 1.0f, 0.1f );
+
+    step_frame( &ctx, &v, VXUI_INPUT_LEFT,  0.0f, 1.0f, 0.1f );
+    ASSERT_NEAR( v, 0.0f, 1e-5f );
+}
+
+UTEST(menu_slider, tiny_step_long_ramp_no_drift) {
+    vxui_ctx ctx = make_ctx();
+    float v = 0.5f;
+    step_frame( &ctx, &v, 0,                0.0f, 1.0f, 0.001f );
+
+    for ( int i = 0; i < 100; i++ )
+        step_frame( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.001f );
+
+    ASSERT_NEAR( v, 0.6f, 1e-3f );
+}
+
+UTEST(menu_slider, large_base_small_step_increments) {
+    vxui_ctx ctx = make_ctx();
+    float v = 1000.0f;
+    step_frame( &ctx, &v, 0,                0.0f, 10000.0f, 0.001f );
+
+    bool changed = step_frame( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 10000.0f, 0.001f );
+    ASSERT_TRUE( changed );
+    ASSERT_NEAR( v, 1000.001f, 1e-4f );
+}
+
+UTEST(menu_slider, single_step_covers_full_range) {
+    vxui_ctx ctx = make_ctx();
+    float v = 0.0f;
+    step_frame( &ctx, &v, 0,                0.0f, 1.0f, 1.0f );
+
+    step_frame( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 1.0f );
+    ASSERT_NEAR( v, 1.0f, 1e-5f );
+
+    step_frame( &ctx, &v, VXUI_INPUT_LEFT,  0.0f, 1.0f, 1.0f );
+    ASSERT_NEAR( v, 0.0f, 1e-5f );
+}
+
 UTEST_MAIN();
