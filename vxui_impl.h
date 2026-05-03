@@ -15,11 +15,14 @@ static void vxui_clay_error( Clay_ErrorData e )
     assert( !"clay error" );
 }
 
+static Clay_Dimensions vxui_measure_text( Clay_StringSlice s, Clay_TextElementConfig* cfg, void* userData );
+
 void vxui_init( vxui_ctx* ctx, float w, float h, void* clay_memory, size_t clay_size )
 {
     assert( ctx && clay_memory && clay_size >= Clay_MinMemorySize() );
     Clay_Arena arena = Clay_CreateArenaWithCapacityAndMemory( clay_size, clay_memory );
     ctx->clay = Clay_Initialize( arena, { w, h }, { vxui_clay_error, nullptr } );
+    Clay_SetMeasureTextFunction( vxui_measure_text, ctx );
 }
 
 static Clay_SizingAxis vxui_sizing_to_clay( vxui_sizing s )
@@ -585,6 +588,20 @@ struct vxui_text_state
     std::vector< std::vector< uint8_t > > font_bytes; // VXUI owns the bytes; VEFC keeps weak pointers
     int          default_font = -1;                   // -1 = none loaded yet
 };
+
+static Clay_Dimensions vxui_measure_text( Clay_StringSlice s, Clay_TextElementConfig* cfg, void* userData )
+{
+    vxui_ctx* ctx = (vxui_ctx*) userData;
+    if ( !ctx || !ctx->text || s.length <= 0 ) return { 0, 0 };
+
+    vxui_text_state* st = (vxui_text_state*) ctx->text;
+    int font_id = ( cfg->fontId != 0 ) ? (int) cfg->fontId : st->default_font;
+    if ( font_id < 0 ) return { 0, 0 };
+
+    std::u8string text( (const char8_t*) s.chars, (size_t) s.length );
+    ve_fontcache_vec2 m = ve_fontcache_measure_text( &st->cache, font_id, text, 1.0f, 1.0f, true );
+    return { m.x, (float) cfg->fontSize };
+}
 
 vxui_font_id vxui_load_font( vxui_ctx* ctx, const void* data, size_t size, float size_px )
 {
