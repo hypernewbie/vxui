@@ -90,13 +90,45 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         if ( cmd->commandType != CLAY_RENDER_COMMAND_TYPE_RECTANGLE ) continue;
 
         vxui_draw_cmd& out = ctx->draw_buf[count++];
-        out.id   = cmd->id;
-        out.rect = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+        out.id       = cmd->id;
+        out.type     = VXUI_DRAW_RECT;
+        out.rect     = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+        out.text     = nullptr;
+        out.text_len = 0;
+        out.font     = 0;
+        out.font_px  = 0;
     }
 
     ctx->draw_list.cmds  = ctx->draw_buf;
     ctx->draw_list.count = count;
     return ctx->draw_list;
+}
+
+int vxui_draw_count( const vxui_draw_list& dl, uint8_t type )
+{
+    int n = 0;
+    for ( int i = 0; i < dl.count; i++ )
+        if ( dl.cmds[i].type == type ) n++;
+    return n;
+}
+
+const vxui_draw_cmd* vxui_draw_nth( const vxui_draw_list& dl, uint8_t type, int n )
+{
+    int seen = 0;
+    for ( int i = 0; i < dl.count; i++ )
+    {
+        if ( dl.cmds[i].type != type ) continue;
+        if ( seen == n ) return &dl.cmds[i];
+        seen++;
+    }
+    return nullptr;
+}
+
+const vxui_draw_cmd* vxui_draw_find( const vxui_draw_list& dl, uint8_t type, uint32_t id )
+{
+    for ( int i = 0; i < dl.count; i++ )
+        if ( dl.cmds[i].type == type && dl.cmds[i].id == id ) return &dl.cmds[i];
+    return nullptr;
 }
 
 void vxui_div( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg )

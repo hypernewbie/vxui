@@ -63,10 +63,18 @@ struct vxui_div_cfg
 
 #define VXUI_MAX_DRAW_CMDS 512
 
+#define VXUI_DRAW_RECT 0
+#define VXUI_DRAW_TEXT 1
+
 struct vxui_draw_cmd
 {
-    uint32_t  id;
-    glm::vec4 rect;     // x, y, w, h
+    uint32_t    id;
+    uint8_t     type;       // VXUI_DRAW_RECT | VXUI_DRAW_TEXT
+    glm::vec4   rect;       // x, y, w, h
+    const char* text;       // null when type != TEXT; valid until next vxui_frame
+    int32_t     text_len;
+    uint16_t    font;
+    uint16_t    font_px;
 };
 
 struct vxui_draw_list
@@ -121,6 +129,10 @@ bool vxui_input_just_pressed( vxui_ctx* ctx, const char* action );
 bool vxui_input_repeated    ( vxui_ctx* ctx, const char* action );
 
 bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true, int max_visible = 0, bool auto_repeat = false );
+
+int                  vxui_draw_count ( const vxui_draw_list& dl, uint8_t type );
+const vxui_draw_cmd* vxui_draw_nth   ( const vxui_draw_list& dl, uint8_t type, int n );
+const vxui_draw_cmd* vxui_draw_find  ( const vxui_draw_list& dl, uint8_t type, uint32_t id );
 bool vxui_menu_action    ( vxui_ctx* ctx, const char* label );
 bool vxui_menu_option    ( vxui_ctx* ctx, const char* label, int* index, const char** options, int count );
 bool vxui_menu_slider    ( vxui_ctx* ctx, const char* label, float* value, float mn = 0.0f, float mx = 1.0f, float step = 0.1f );
