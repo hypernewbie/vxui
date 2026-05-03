@@ -55,6 +55,7 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
     ctx->dt               = dt;
     ctx->frame_active     = true;
     ctx->inputs_committed = false;
+    ctx->text_offset      = 0;
     if ( ctx->clay )
     {
         Clay_SetCurrentContext( (Clay_Context*) ctx->clay );
@@ -102,6 +103,18 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
     ctx->draw_list.cmds  = ctx->draw_buf;
     ctx->draw_list.count = count;
     return ctx->draw_list;
+}
+
+// Copies src into ctx->text_buf, returns a stable pointer valid until next vxui_frame.
+// Returns nullptr if the buffer is full.
+static const char* vxui_text_alloc( vxui_ctx* ctx, const char* src, int len )
+{
+    assert( ctx && src && len >= 0 );
+    if ( ctx->text_offset + len > VXUI_MAX_TEXT_BYTES ) return nullptr;
+    char* dst = ctx->text_buf + ctx->text_offset;
+    for ( int i = 0; i < len; i++ ) dst[i] = src[i];
+    ctx->text_offset += len;
+    return dst;
 }
 
 int vxui_draw_count( const vxui_draw_list& dl, uint8_t type )
