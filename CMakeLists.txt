@@ -12,11 +12,31 @@ include(FetchContent)
 option(VXUI_BUILD_DEMO  "Build the VXUI demo"  ON)
 option(VXUI_BUILD_TESTS "Build the VXUI tests" ON)
 
+if(POLICY CMP0077)
+    cmake_policy(SET CMP0077 NEW)
+endif()
+
+FetchContent_Declare(
+    harfbuzz
+    GIT_REPOSITORY https://github.com/harfbuzz/harfbuzz.git
+    GIT_TAG 11.2.1
+)
+set(HB_BUILD_SUBSET   OFF CACHE BOOL "" FORCE)
+set(HB_BUILD_UTILS    OFF CACHE BOOL "" FORCE)
+set(HB_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+set(HB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(HB_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(harfbuzz)
+
 add_library(vxui INTERFACE)
 target_include_directories(vxui INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/vefc
+    ${harfbuzz_SOURCE_DIR}/src
 )
+target_link_libraries(vxui INTERFACE harfbuzz)
+target_compile_definitions(vxui INTERFACE VE_FONTCACHE_HARFBUZZ)
 
 if(MSVC)
     target_compile_options(vxui INTERFACE /utf-8)
@@ -100,32 +120,16 @@ if(VXUI_BUILD_TESTS)
 endif()
 
 if(VXUI_BUILD_DEMO)
-    if(POLICY CMP0077)
-        cmake_policy(SET CMP0077 NEW)
-    endif()
-
     FetchContent_Declare(
         freetype
         GIT_REPOSITORY https://github.com/freetype/freetype.git
         GIT_TAG VER-2-13-3
     )
-    set(FT_DISABLE_ZLIB ON CACHE BOOL "" FORCE)
-    set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
-    set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
+    set(FT_DISABLE_ZLIB   ON CACHE BOOL "" FORCE)
+    set(FT_DISABLE_BZIP2  ON CACHE BOOL "" FORCE)
+    set(FT_DISABLE_PNG    ON CACHE BOOL "" FORCE)
     set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(freetype)
-
-    FetchContent_Declare(
-        harfbuzz
-        GIT_REPOSITORY https://github.com/harfbuzz/harfbuzz.git
-        GIT_TAG 11.2.1
-    )
-    set(HB_BUILD_SUBSET OFF CACHE BOOL "" FORCE)
-    set(HB_BUILD_UTILS OFF CACHE BOOL "" FORCE)
-    set(HB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(HB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(HB_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(harfbuzz)
 
     add_executable(vxui_demo
         demo/main.cpp

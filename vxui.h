@@ -98,6 +98,7 @@ struct vxui_ctx
     float    input_next_fire  [6] = {};// next held_time threshold to fire repeat
     float    dt               = 0;
     void*    clay             = nullptr;
+    void*    text             = nullptr;// vxui_text_state*, lazy on first vxui_load_font
 
     glm::uvec4  menu_state       [VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows, skip_mask }
     glm::vec4   menu_focus_spring[VXUI_MAX_MENUS] = {}; // { offset_y, velocity_y, prev_row, _ }, prev_row -1 = unset
@@ -117,7 +118,12 @@ struct vxui_ctx
     int  text_offset                    = 0;
 };
 
+#define VXUI_FONT_INVALID 0xffff
+typedef uint16_t vxui_font_id;
+
 void           vxui_init    ( vxui_ctx* ctx, float w, float h, void* clay_memory, size_t clay_size );
+void           vxui_shutdown( vxui_ctx* ctx );
+vxui_font_id   vxui_load_font( vxui_ctx* ctx, const void* data, size_t size, float size_px );
 void           vxui_frame   ( vxui_ctx* ctx, float dt, float w = 0, float h = 0 );
 vxui_draw_list vxui_render  ( vxui_ctx* ctx );
 void           vxui_div     ( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg = {} );

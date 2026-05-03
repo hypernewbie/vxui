@@ -4,6 +4,10 @@
 #include "clay/clay.h"
 #include "vxui_impl_util.h"
 #include <cstring>
+#include <vector>
+#include <hb.h>
+#define VE_FONTCACHE_IMPL
+#include "ve_fontcache.h"
 
 static void vxui_clay_error( Clay_ErrorData e )
 {
@@ -573,6 +577,52 @@ void vxui_menu_end( vxui_ctx* ctx )
     ctx->active_menu_row      = 0;
     ctx->active_menu_skip     = 0;
     ctx->active_menu_focus_id = 0;
+}
+
+struct vxui_text_state
+{
+    ve_fontcache cache;
+    std::vector< std::vector< uint8_t > > font_bytes; // VXUI owns the bytes; VEFC keeps weak pointers
+    int          default_font = -1;                   // -1 = none loaded yet
+};
+
+vxui_font_id vxui_load_font( vxui_ctx* ctx, const void* data, size_t size, float size_px )
+{
+    assert( ctx && data && size > 0 );
+
+    if ( !ctx->text )
+    {
+        vxui_text_state* st = new vxui_text_state();
+        ve_fontcache_init( &st->cache, false );   // no FreeType: shaping/measure path only
+        ctx->text = st;
+    }
+
+    vxui_text_state* st = (vxui_text_state*) ctx->text;
+
+    st->font_bytes.emplace_back( (const uint8_t*) data, (const uint8_t*) data + size );
+    auto& bytes = st->font_bytes.back();
+
+    ve_font_id id = ve_fontcache_load( &st->cache, bytes.data(), bytes.size(), size_px );
+    if ( id < 0 )
+    {
+        st->font_bytes.pop_back();
+        return VXUI_FONT_INVALID;
+    }
+    assert( id < (ve_font_id) VXUI_FONT_INVALID );
+
+    if ( st->default_font < 0 ) st->default_font = (int) id;
+
+    return (vxui_font_id) id;
+}
+
+void vxui_shutdown( vxui_ctx* ctx )
+{
+    assert( ctx );
+    if ( !ctx->text ) return;
+    vxui_text_state* st = (vxui_text_state*) ctx->text;
+    ve_fontcache_shutdown( &st->cache );
+    delete st;
+    ctx->text = nullptr;
 }
 
 #endif // #ifdef VXUI_IMPL
