@@ -95,16 +95,30 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
     for ( int i = 0; i < cmds.length && count < VXUI_MAX_DRAW_CMDS; i++ )
     {
         Clay_RenderCommand* cmd = &cmds.internalArray[i];
-        if ( cmd->commandType != CLAY_RENDER_COMMAND_TYPE_RECTANGLE ) continue;
 
-        vxui_draw_cmd& out = ctx->draw_buf[count++];
-        out.id       = cmd->id;
-        out.type     = VXUI_DRAW_RECT;
-        out.rect     = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
-        out.text     = nullptr;
-        out.text_len = 0;
-        out.font     = 0;
-        out.font_px  = 0;
+        if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_RECTANGLE )
+        {
+            vxui_draw_cmd& out = ctx->draw_buf[count++];
+            out.id       = cmd->id;
+            out.type     = VXUI_DRAW_RECT;
+            out.rect     = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+            out.text     = nullptr;
+            out.text_len = 0;
+            out.font     = 0;
+            out.font_px  = 0;
+        }
+        else if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT )
+        {
+            const Clay_TextRenderData& t = cmd->renderData.text;
+            vxui_draw_cmd& out = ctx->draw_buf[count++];
+            out.id       = cmd->id;
+            out.type     = VXUI_DRAW_TEXT;
+            out.rect     = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+            out.text     = t.stringContents.chars;     // points into ctx->text_buf, valid until next vxui_frame
+            out.text_len = t.stringContents.length;
+            out.font     = t.fontId;
+            out.font_px  = t.fontSize;
+        }
     }
 
     ctx->draw_list.cmds  = ctx->draw_buf;
