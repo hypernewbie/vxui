@@ -25,11 +25,12 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 
-#define VXUI_MAX_MENUS      32
-#define VXUI_MAX_MENU_ROWS  32
-#define VXUI_ROW_HEIGHT     32
-#define VXUI_INPUT_DELAY    0.4f
-#define VXUI_INPUT_REPEAT   0.1f
+#define VXUI_MAX_MENUS         32
+#define VXUI_MAX_MENU_ROWS     32
+#define VXUI_ROW_HEIGHT        32
+#define VXUI_FONT_SIZE_DEFAULT ( VXUI_ROW_HEIGHT * 3 / 4 )
+#define VXUI_INPUT_DELAY       0.4f
+#define VXUI_INPUT_REPEAT      0.1f
 
 // ============================================== API ==================================================
 

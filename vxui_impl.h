@@ -423,8 +423,9 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible, bool 
 static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label )
 {
     // Composite id: menu hash as seed so same label in different menus doesn't collide.
-    Clay_String      cs   = { false, (int32_t) strlen( label ), label };
-    Clay_ElementId   eid  = Clay__HashString( cs, ctx->menu_state[ctx->active_menu].x );
+    int              label_len = (int) strlen( label );
+    Clay_String      cs        = { false, (int32_t) label_len, label };
+    Clay_ElementId   eid       = Clay__HashString( cs, ctx->menu_state[ctx->active_menu].x );
 
     assert( ctx->active_menu_row < VXUI_MAX_MENU_ROWS );
     for ( int i = 0; i < ctx->active_menu_row; i++ )
@@ -434,11 +435,20 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label )
     Clay__OpenElementWithId( eid );
 
     Clay_ElementDeclaration decl        = {};
-    decl.layout.sizing.width            = CLAY_SIZING_GROW( 0 );
+    decl.layout.sizing.width            = CLAY_SIZING_FIT( 0 );
     decl.layout.sizing.height           = CLAY_SIZING_FIXED( VXUI_ROW_HEIGHT );
     decl.backgroundColor                = { 0, 0, 0, 1 };  // alpha > 0 forces RECTANGLE emit
 
     Clay__ConfigureOpenElement( decl );
+
+    // Copy label into per-frame buffer so the Clay_String pointer stays valid through Clay_EndLayout.
+    const char* stable = vxui_text_alloc( ctx, label, label_len );
+    if ( stable )
+    {
+        Clay_String text_str = { false, (int32_t) label_len, stable };
+        CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontSize = (uint16_t) VXUI_FONT_SIZE_DEFAULT } ) );
+    }
+
     Clay__CloseElement();
 
     return eid.id;
