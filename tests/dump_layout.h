@@ -16,9 +16,10 @@ static void dump_layout( const vxui_draw_list& dl, float w, float h, float dt,
     fprintf( f, "# w %.1f h %.1f dt %.6f\n", w, h, dt );
     fprintf( f, "# columns: id x y w h label\n" );
 
-    for ( int i = 0; i < dl.count; i++ )
+    int rect_n = vxui_draw_count( dl, VXUI_DRAW_RECT );
+    for ( int i = 0; i < rect_n; i++ )
     {
-        const vxui_draw_cmd& c = dl.cmds[i];
+        const vxui_draw_cmd& c = *vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
         const char* label = label_for ? label_for( c.id ) : nullptr;
         fprintf( f, "0x%08x  %.1f  %.1f  %.1f  %.1f  %s\n",
                  c.id, c.rect.x, c.rect.y, c.rect.z, c.rect.w,

@@ -4,6 +4,8 @@
 #include "../vxui_impl.h"
 #include "dump_layout.h"
 #include <cstdio>
+#include <filesystem>
+#include <vector>
 
 static uint8_t s_clay_mem[16 * 1024 * 1024];
 
@@ -22,10 +24,30 @@ static const char* label_for( uint32_t id )
     return nullptr;
 }
 
+static const std::vector< uint8_t >& roboto_bytes()
+{
+    static std::vector< uint8_t > bytes = []() {
+        std::filesystem::path p = std::filesystem::path( __FILE__ ).parent_path().parent_path() / "fonts" / "Roboto-Regular.ttf";
+        FILE* f = fopen( p.string().c_str(), "rb" );
+        assert( f && "roboto_bytes: failed to open font file" );
+        fseek( f, 0, SEEK_END );
+        long sz = ftell( f );
+        fseek( f, 0, SEEK_SET );
+        std::vector< uint8_t > buf( (size_t) sz );
+        size_t got = fread( buf.data(), 1, (size_t) sz, f );
+        (void) got;
+        fclose( f );
+        return buf;
+    }();
+    return bytes;
+}
+
 static vxui_ctx make_ctx( float w = 1280, float h = 720 )
 {
     vxui_ctx ctx = {};
     vxui_init( &ctx, w, h, s_clay_mem, sizeof( s_clay_mem ) );
+    const std::vector< uint8_t >& b = roboto_bytes();
+    vxui_load_font( &ctx, b.data(), b.size(), (float) VXUI_FONT_SIZE_DEFAULT );
     return ctx;
 }
 
