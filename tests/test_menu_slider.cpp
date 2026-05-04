@@ -118,6 +118,13 @@ static bool step_frame( vxui_ctx* ctx, float* value, uint32_t input, float mn, f
     return changed;
 }
 
+// Helper: simulate one user click (press + release) as two frames.
+static void step_click( vxui_ctx* ctx, float* value, uint32_t input, float mn, float mx, float step )
+{
+    step_frame( ctx, value, input, mn, mx, step );
+    step_frame( ctx, value, 0,     mn, mx, step );
+}
+
 UTEST(menu_slider, tiny_step_increments) {
     vxui_ctx ctx = make_ctx();
     float v = 0.5f;
@@ -143,11 +150,11 @@ UTEST(menu_slider, large_step_increments) {
     float v = 0.0f;
     step_frame( &ctx, &v, 0,                0.0f, 1.0f, 0.5f );
 
-    step_frame( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.5f );
+    step_click( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.5f );
     ASSERT_NEAR( v, 0.5f, 1e-5f );
-    step_frame( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.5f );
+    step_click( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.5f );
     ASSERT_NEAR( v, 1.0f, 1e-5f );
-    step_frame( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.5f );
+    step_click( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.5f );
     ASSERT_NEAR( v, 1.0f, 1e-5f );
 }
 
@@ -157,7 +164,7 @@ UTEST(menu_slider, step_not_evenly_dividing_range_clamps_at_max) {
     step_frame( &ctx, &v, 0,                0.0f, 1.0f, 0.3f );
 
     for ( int i = 0; i < 10; i++ )
-        step_frame( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.3f );
+        step_click( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.3f );
 
     ASSERT_NEAR( v, 1.0f, 1e-5f );
 }
@@ -168,7 +175,7 @@ UTEST(menu_slider, step_not_evenly_dividing_range_clamps_at_min) {
     step_frame( &ctx, &v, 0,                0.0f, 1.0f, 0.3f );
 
     for ( int i = 0; i < 10; i++ )
-        step_frame( &ctx, &v, VXUI_INPUT_LEFT, 0.0f, 1.0f, 0.3f );
+        step_click( &ctx, &v, VXUI_INPUT_LEFT, 0.0f, 1.0f, 0.3f );
 
     ASSERT_NEAR( v, 0.0f, 1e-5f );
 }
@@ -253,7 +260,7 @@ UTEST(menu_slider, tiny_step_long_ramp_no_drift) {
     step_frame( &ctx, &v, 0,                0.0f, 1.0f, 0.001f );
 
     for ( int i = 0; i < 100; i++ )
-        step_frame( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.001f );
+        step_click( &ctx, &v, VXUI_INPUT_RIGHT, 0.0f, 1.0f, 0.001f );
 
     ASSERT_NEAR( v, 0.6f, 1e-3f );
 }

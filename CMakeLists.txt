@@ -114,9 +114,13 @@ if(VXUI_BUILD_TESTS)
     target_link_libraries(test_input_repeated PRIVATE vxui)
     add_test(NAME test_input_repeated COMMAND test_input_repeated)
 
+    add_executable(test_menu_input_edge tests/test_menu_input_edge.cpp)
+    target_link_libraries(test_menu_input_edge PRIVATE vxui)
+    add_test(NAME test_menu_input_edge COMMAND test_menu_input_edge)
+
     add_executable(test_plot tests/test_plot.cpp)
     target_link_libraries(test_plot PRIVATE vxui)
-    add_test(NAME test_plot COMMAND test_plot)
+    add_test(NAME test_plot COMMAND test_plot WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
 if(VXUI_BUILD_DEMO)

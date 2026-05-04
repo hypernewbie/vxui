@@ -80,6 +80,12 @@ UTEST(integration, page_menu_nav)
     vxui_render( &ctx );
     ASSERT_TRUE( vxui_page( &ctx, "options" ) );
 
+    // ---- Frame 2.5: release so next confirm is a fresh edge ----
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_page( &ctx, "options" ) )
+        if ( vxui_menu( &ctx, "opts" ) ) vxui_menu_end( &ctx );
+    vxui_render( &ctx );
+
     // ---- Frame 3: on "options", confirm Gameplay (row 0) → "options_gameplay" ----
     vxui_frame( &ctx, 1.0f / 60.0f );
     ctx.input = VXUI_INPUT_CONFIRM;
@@ -105,6 +111,12 @@ UTEST(integration, page_menu_nav)
     }
     vxui_render( &ctx );
     ASSERT_TRUE( vxui_page( &ctx, "options" ) );
+
+    // ---- Frame 4.5: release so next cancel is a fresh edge ----
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_page( &ctx, "options" ) )
+        if ( vxui_menu( &ctx, "opts" ) ) vxui_menu_end( &ctx );
+    vxui_render( &ctx );
 
     // ---- Frame 5: on "options", cancel → back to "title" ----
     vxui_frame( &ctx, 1.0f / 60.0f );

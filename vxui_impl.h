@@ -492,7 +492,8 @@ bool vxui_menu_action( vxui_ctx* ctx, const char* label )
 {
     assert( ctx && ctx->active_menu >= 0 );
     if ( !vxui_menu_row_interactive( ctx, label ) ) return false;
-    return ( ctx->input & VXUI_INPUT_CONFIRM ) != 0;
+    // Edge-triggered: holding confirm fires once, not every frame.
+    return ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CONFIRM ) != 0;
 }
 
 bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char** options, int count )
@@ -503,10 +504,11 @@ bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char*
 
     int prev = *index;
 
-    if ( ctx->input & VXUI_INPUT_RIGHT )
+    // DAS-repeat: hold cycles at VXUI_INPUT_DELAY/REPEAT, not every frame.
+    if ( ctx->input_repeated & VXUI_INPUT_RIGHT )
         *index = ( *index + 1 ) % count;
 
-    if ( ctx->input & VXUI_INPUT_LEFT )
+    if ( ctx->input_repeated & VXUI_INPUT_LEFT )
         *index = ( *index - 1 + count ) % count;
 
     return *index != prev;
@@ -520,10 +522,11 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
 
     float prev = *value;
 
-    if ( ctx->input & VXUI_INPUT_RIGHT )
+    // DAS-repeat: hold scrubs at VXUI_INPUT_DELAY/REPEAT, not every frame.
+    if ( ctx->input_repeated & VXUI_INPUT_RIGHT )
         *value = glm::min( *value + step, mx );
 
-    if ( ctx->input & VXUI_INPUT_LEFT )
+    if ( ctx->input_repeated & VXUI_INPUT_LEFT )
         *value = glm::max( *value - step, mn );
 
     return *value != prev;
@@ -545,10 +548,11 @@ void vxui_menu_label( vxui_ctx* ctx, const char* text )
     ctx->active_menu_row++;
 }
 
+// Edge-triggered: holding cancel fires once, not every frame.
 bool vxui_menu_cancelled( vxui_ctx* ctx )
 {
     assert( ctx );
-    return ( ctx->input & VXUI_INPUT_CANCEL ) != 0;
+    return ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CANCEL ) != 0;
 }
 
 void vxui_menu_end( vxui_ctx* ctx )
