@@ -118,7 +118,7 @@ UTEST(frame, many_cycles_compose) {
             vxui_menu_end( &ctx );
         }
         vxui_draw_list dl = vxui_render( &ctx );
-        ASSERT_EQ( dl.count, 2 );
+        ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     }
 }
 
@@ -175,7 +175,7 @@ UTEST(frame, count_resets_each_render) {
         vxui_menu_end( &ctx );
     }
     vxui_draw_list dl1 = vxui_render( &ctx );
-    ASSERT_EQ( dl1.count, 4 );
+    ASSERT_EQ( vxui_draw_count( dl1, VXUI_DRAW_RECT ), 4 );
 
     vxui_frame( &ctx, 1.0f / 60.0f );
     if ( vxui_menu( &ctx, "m" ) )
@@ -184,7 +184,7 @@ UTEST(frame, count_resets_each_render) {
         vxui_menu_end( &ctx );
     }
     vxui_draw_list dl2 = vxui_render( &ctx );
-    ASSERT_EQ( dl2.count, 2 );
+    ASSERT_EQ( vxui_draw_count( dl2, VXUI_DRAW_RECT ), 2 );
 }
 
 UTEST(frame, frame_active_set_by_vxui_frame) {
@@ -232,7 +232,7 @@ UTEST(frame, render_without_menu_returns_zero) {
         vxui_menu_end( &ctx );
     }
     dl = vxui_render( &ctx );
-    ASSERT_EQ( dl.count, 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
 
     vxui_frame( &ctx, 1.0f / 60.0f );
     dl = vxui_render( &ctx );

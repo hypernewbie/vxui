@@ -377,7 +377,7 @@ UTEST(menu, all_skip_menu_emits_no_focus_rect) {
     all_skip_frame( &ctx, 0, true );
     vxui_draw_list dl = ctx.draw_list;
 
-    ASSERT_EQ( dl.count, 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
 }
 
 /* ---- cancel ---------------------------------------------------------- */

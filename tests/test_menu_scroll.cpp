@@ -132,9 +132,7 @@ UTEST(menu_scroll, draw_list_shows_scrolled_positions) {
     Clay_String row2_cs = { false, 4, "row2" };
     uint32_t row2_id = Clay__HashString( row2_cs, vxui_hash( "m" ) ).id;
 
-    const vxui_draw_cmd* row2 = nullptr;
-    for ( int i = 0; i < dl.count; i++ )
-        if ( dl.cmds[i].id == row2_id ) { row2 = &dl.cmds[i]; break; }
+    const vxui_draw_cmd* row2 = vxui_draw_find( dl, VXUI_DRAW_RECT, row2_id );
     ASSERT_TRUE( row2 != nullptr );
     ASSERT_NEAR( row2->rect.y, 0.0f, 1e-3f );
 }

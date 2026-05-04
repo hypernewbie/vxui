@@ -105,9 +105,10 @@ UTEST(menu_remount, focus_rect_appears_at_correct_row_after_remount) {
     emit_menu( &ctx, 0 );
     vxui_draw_list dl = ctx.draw_list;
 
-    ASSERT_EQ( dl.count, 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
     // Focus rect should be at row 1 (Quit), spring snapped not animating.
-    ASSERT_NEAR( dl.cmds[2].rect.y, dl.cmds[1].rect.y, 1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y,
+                 vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1e-3f );
 }
 
 UTEST(menu_remount, two_menus_independent_remount_state) {

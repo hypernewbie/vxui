@@ -20,9 +20,7 @@ static uint32_t row_id( const char* menu, const char* label )
 
 static const vxui_draw_cmd* find_id( const vxui_draw_list& dl, uint32_t id )
 {
-    for ( int i = 0; i < dl.count; i++ )
-        if ( dl.cmds[i].id == id ) return &dl.cmds[i];
-    return nullptr;
+    return vxui_draw_find( dl, VXUI_DRAW_RECT, id );
 }
 
 UTEST(root, menu_inside_root_positioned_at_offset) {
@@ -38,7 +36,7 @@ UTEST(root, menu_inside_root_positioned_at_offset) {
     vxui_root_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( dl.count, 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     const vxui_draw_cmd* play = find_id( dl, row_id( "m", "Play" ) );
     ASSERT_TRUE( play != nullptr );
     ASSERT_NEAR( play->rect.x, 200.0f, 1e-3f );
@@ -171,7 +169,7 @@ UTEST(root, focus_rect_positioned_correctly_inside_root) {
     vxui_root_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( dl.count, 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
     const vxui_draw_cmd* play = find_id( dl, row_id( "m", "Play" ) );
     ASSERT_TRUE( play != nullptr );
     ASSERT_NEAR( play->rect.y, 250.0f, 1e-3f );

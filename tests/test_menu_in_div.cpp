@@ -43,11 +43,11 @@ UTEST(menu_in_div, rows_offset_by_div_padding) {
     vxui_div_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( dl.count, 3 );
-    ASSERT_NEAR( dl.cmds[0].rect.x, 50.0f, 1e-3f );
-    ASSERT_NEAR( dl.cmds[0].rect.y, 30.0f, 1e-3f );
-    ASSERT_NEAR( dl.cmds[1].rect.x, 50.0f, 1e-3f );
-    ASSERT_NEAR( dl.cmds[1].rect.y, 30.0f + (float) VXUI_ROW_HEIGHT, 1e-3f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.x, 50.0f, 1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 30.0f, 1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.x, 50.0f, 1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 30.0f + (float) VXUI_ROW_HEIGHT, 1e-3f );
 }
 
 UTEST(menu_in_div, focus_rect_attaches_correctly_in_div) {
@@ -69,17 +69,15 @@ UTEST(menu_in_div, focus_rect_attaches_correctly_in_div) {
     vxui_div_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( dl.count, 3 );
-    ASSERT_EQ( dl.cmds[2].id, focus_id( "m" ) );
-    ASSERT_NEAR( dl.cmds[2].rect.x, dl.cmds[0].rect.x, 1e-3f );
-    ASSERT_NEAR( dl.cmds[2].rect.y, dl.cmds[0].rect.y, 1e-3f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->id, focus_id( "m" ) );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.x, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.x, 1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 1e-3f );
 }
 
 static const vxui_draw_cmd* find_id( const vxui_draw_list& dl, uint32_t id )
 {
-    for ( int i = 0; i < dl.count; i++ )
-        if ( dl.cmds[i].id == id ) return &dl.cmds[i];
-    return nullptr;
+    return vxui_draw_find( dl, VXUI_DRAW_RECT, id );
 }
 
 UTEST(menu_in_div, two_menus_stack_in_column_div_with_gap) {
@@ -104,7 +102,7 @@ UTEST(menu_in_div, two_menus_stack_in_column_div_with_gap) {
     vxui_div_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( dl.count, 4 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 4 );
 
     const vxui_draw_cmd* a = find_id( dl, row_id( "top",    "A" ) );
     const vxui_draw_cmd* b = find_id( dl, row_id( "bottom", "B" ) );
@@ -142,9 +140,9 @@ UTEST(menu_in_div, menu_in_nested_divs_accumulates_padding) {
     vxui_div_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( dl.count, 2 );
-    ASSERT_NEAR( dl.cmds[0].rect.x, 25.0f, 1e-3f );
-    ASSERT_NEAR( dl.cmds[0].rect.y, 17.0f, 1e-3f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.x, 25.0f, 1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 17.0f, 1e-3f );
 }
 
 UTEST(menu_in_div, menu_inside_row_div_still_stacks_vertically) {
@@ -164,9 +162,9 @@ UTEST(menu_in_div, menu_inside_row_div_still_stacks_vertically) {
     vxui_div_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( dl.count, 3 );
-    ASSERT_NEAR( dl.cmds[0].rect.x, dl.cmds[1].rect.x,                            1e-3f );
-    ASSERT_NEAR( dl.cmds[1].rect.y, dl.cmds[0].rect.y + (float) VXUI_ROW_HEIGHT,  1e-3f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.x, vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.x,                            1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y + (float) VXUI_ROW_HEIGHT,  1e-3f );
 }
 
 UTEST(menu_in_div, navigation_works_when_nested_in_div) {
@@ -232,11 +230,12 @@ UTEST(menu_in_div, menu_at_root_versus_in_div_have_same_relative_layout) {
     vxui_div_end( &div_ctx );
     vxui_draw_list div_dl = vxui_render( &div_ctx );
 
-    ASSERT_EQ( root_dl.count, div_dl.count );
-    for ( int i = 0; i < root_dl.count; i++ )
+    int rect_n = vxui_draw_count( root_dl, VXUI_DRAW_RECT );
+    ASSERT_EQ( rect_n, vxui_draw_count( div_dl, VXUI_DRAW_RECT ) );
+    for ( int i = 0; i < rect_n; i++ )
     {
-        float dy_root = root_dl.cmds[i].rect.y - root_dl.cmds[0].rect.y;
-        float dy_div  = div_dl.cmds[i].rect.y  - div_dl.cmds[0].rect.y;
+        float dy_root = vxui_draw_nth( root_dl, VXUI_DRAW_RECT, i )->rect.y - vxui_draw_nth( root_dl, VXUI_DRAW_RECT, 0 )->rect.y;
+        float dy_div  = vxui_draw_nth( div_dl,  VXUI_DRAW_RECT, i )->rect.y - vxui_draw_nth( div_dl,  VXUI_DRAW_RECT, 0 )->rect.y;
         ASSERT_NEAR( dy_root, dy_div, 1e-3f );
     }
 }
