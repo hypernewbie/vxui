@@ -181,6 +181,27 @@ UTEST(menu_input_edge, slider_right_held_repeats_after_das) {
     ASSERT_NEAR( slider_frame( &ctx, &v, VXUI_INPUT_RIGHT, 0.05f ), 0.2f, 1e-5f );
 }
 
+UTEST(menu_input_edge, option_release_resets_das_delay) {
+    // After a press + partial hold + release, the next press starts a fresh
+    // DAS delay — i.e. held_time is reset on release. Without that reset,
+    // a quick re-press during the prior DAS window would auto-repeat instantly.
+    vxui_ctx ctx = make_ctx();
+    int idx = 0;
+    option_frame( &ctx, &idx, 0, 0.05f );
+
+    ASSERT_EQ( option_frame( &ctx, &idx, VXUI_INPUT_RIGHT, 0.05f ), 1 );
+    for ( int i = 0; i < 6; i++ )
+        option_frame( &ctx, &idx, VXUI_INPUT_RIGHT, 0.05f );
+    ASSERT_EQ( idx, 1 );                                    // 0.30s held, no DAS yet
+
+    option_frame( &ctx, &idx, 0, 0.05f );                   // release
+
+    ASSERT_EQ( option_frame( &ctx, &idx, VXUI_INPUT_RIGHT, 0.05f ), 2 );
+    for ( int i = 0; i < 6; i++ )
+        option_frame( &ctx, &idx, VXUI_INPUT_RIGHT, 0.05f );
+    ASSERT_EQ( idx, 2 );                                    // fresh 0.30s, no DAS yet
+}
+
 UTEST(menu_input_edge, slider_re_press_fires_again) {
     vxui_ctx ctx = make_ctx();
     float v = 0.0f;
