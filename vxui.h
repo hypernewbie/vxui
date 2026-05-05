@@ -139,7 +139,7 @@ bool vxui_input_pressed    ( vxui_ctx* ctx, const char* action );
 bool vxui_input_just_pressed( vxui_ctx* ctx, const char* action );
 bool vxui_input_repeated    ( vxui_ctx* ctx, const char* action );
 
-bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true, int max_visible = 0, bool auto_repeat = false );
+bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true, int max_visible = 0 );
 
 int                  vxui_draw_count ( const vxui_draw_list& dl, uint8_t type );
 const vxui_draw_cmd* vxui_draw_nth   ( const vxui_draw_list& dl, uint8_t type, int n );

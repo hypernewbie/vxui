@@ -27,6 +27,7 @@ static void emit_menu( vxui_ctx* ctx, int n_rows, int max_visible, uint32_t inpu
         vxui_menu_end( ctx );
     }
     vxui_render( ctx );
+    ctx->input = 0;   // release so next call registers as a fresh edge
 }
 
 UTEST(menu_scroll, no_scroll_when_max_visible_zero) {
@@ -154,6 +155,7 @@ UTEST(menu_scroll, scroll_with_skip_rows) {
             vxui_menu_end( &ctx );
         }
         vxui_render( &ctx );
+        ctx.input = 0;
     };
 
     emit( 0 );
@@ -166,12 +168,15 @@ UTEST(menu_scroll, scroll_with_skip_rows) {
     ASSERT_EQ( ctx.menu_scroll_top[0], 2 );
 }
 
+// Two menus share the input bitfield by design. This test verifies they each
+// keep their own scroll_top in distinct array slots — different max_visible
+// drives different scroll behavior under the same input.
 UTEST(menu_scroll, two_menus_independent_scroll) {
     vxui_ctx ctx = make_ctx();
 
-    auto emit_two = [&]( uint32_t input_a, uint32_t input_b ) {
+    auto emit_two = [&]( uint32_t input ) {
         vxui_frame( &ctx, 1.0f / 60.0f );
-        ctx.input = input_a;
+        ctx.input = input;
         if ( vxui_menu( &ctx, "ma", true, 3 ) )
         {
             for ( int i = 0; i < 8; i++ )
@@ -182,8 +187,7 @@ UTEST(menu_scroll, two_menus_independent_scroll) {
             }
             vxui_menu_end( &ctx );
         }
-        ctx.input = input_b;
-        if ( vxui_menu( &ctx, "mb", true, 3 ) )
+        if ( vxui_menu( &ctx, "mb", true, 6 ) )
         {
             for ( int i = 0; i < 8; i++ )
             {
@@ -194,17 +198,18 @@ UTEST(menu_scroll, two_menus_independent_scroll) {
             vxui_menu_end( &ctx );
         }
         vxui_render( &ctx );
+        ctx.input = 0;
     };
 
-    emit_two( 0, 0 );
+    emit_two( 0 );
 
     for ( int i = 0; i < 5; i++ )
-        emit_two( VXUI_INPUT_DOWN, 0 );
+        emit_two( VXUI_INPUT_DOWN );
 
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 5 );
-    ASSERT_EQ( ctx.menu_state[1].y, (uint32_t) 0 );
-    ASSERT_EQ( ctx.menu_scroll_top[0], 3 );
-    ASSERT_EQ( ctx.menu_scroll_top[1], 0 );
+    ASSERT_EQ( ctx.menu_state[1].y, (uint32_t) 5 );
+    ASSERT_EQ( ctx.menu_scroll_top[0], 3 );    // max_visible=3, focus at 5 → top=3
+    ASSERT_EQ( ctx.menu_scroll_top[1], 0 );    // max_visible=6, focus at 5 fits → top=0
 }
 
 UTEST_MAIN();

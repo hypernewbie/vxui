@@ -356,7 +356,7 @@ static uint32_t vxui_menu_next_row( uint32_t from, uint32_t num_rows,
     return from;
 }
 
-bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible, bool auto_repeat )
+bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible )
 {
     assert( ctx );
     assert( ctx->active_menu == -1 );   // no nested menus
@@ -387,13 +387,13 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible, bool 
     if ( num_rows > 0 && ( skip_mask & ( 1u << current_row ) ) )
         current_row = vxui_menu_next_row( current_row, num_rows, skip_mask, +1, true );
 
-    // Navigate using last frame's count.
-    uint32_t nav = auto_repeat ? ctx->input_repeated : ctx->input;
+    // Navigate using last frame's count. DAS-paced (initial press fires, then
+    // VXUI_INPUT_DELAY/REPEAT). Holding nav at 60Hz roll is never the right UX.
     if ( num_rows > 0 )
     {
-        if ( nav & VXUI_INPUT_UP )
+        if ( ctx->input_repeated & VXUI_INPUT_UP )
             current_row = vxui_menu_next_row( current_row, num_rows, skip_mask, -1, wrap );
-        if ( nav & VXUI_INPUT_DOWN )
+        if ( ctx->input_repeated & VXUI_INPUT_DOWN )
             current_row = vxui_menu_next_row( current_row, num_rows, skip_mask, +1, wrap );
     }
 

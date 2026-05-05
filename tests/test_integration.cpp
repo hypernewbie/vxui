@@ -40,6 +40,7 @@ static void settings_menu_frame( vxui_ctx* ctx, settings_state* s, uint32_t inpu
         vxui_menu_end( ctx );
     }
     vxui_render( ctx );
+    ctx->input = 0;   // release so next call registers as a fresh edge
 }
 
 // ---- 3.1 Page + menu navigation (title → options → back) ---------------

@@ -97,6 +97,7 @@ static int title_frame( vxui_ctx* ctx, uint32_t input )
         vxui_menu_end( ctx );
     }
     vxui_render( ctx );
+    ctx->input = 0;   // release so next call registers as a fresh edge
     return chosen;
 }
 
@@ -223,6 +224,7 @@ static void gameplay_frame( vxui_ctx* ctx, gameplay_state* s, uint32_t input )
         vxui_menu_end( ctx );
     }
     vxui_render( ctx );
+    ctx->input = 0;   // release so next call registers as a fresh edge
 }
 
 UTEST(game_gameplay, six_rows_plus_focus) {

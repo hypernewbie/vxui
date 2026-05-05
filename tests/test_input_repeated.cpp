@@ -135,11 +135,11 @@ UTEST(input_repeated, commit_is_idempotent_within_frame) {
     vxui_render( &ctx );
 }
 
-static int menu_auto_repeat_frame( vxui_ctx* ctx, uint32_t input, bool auto_repeat, float dt )
+static int menu_nav_frame( vxui_ctx* ctx, uint32_t input, float dt )
 {
     vxui_frame( ctx, dt );
     ctx->input = input;
-    if ( vxui_menu( ctx, "test", true, 0, auto_repeat ) )
+    if ( vxui_menu( ctx, "test" ) )
     {
         vxui_menu_action( ctx, "A" );
         vxui_menu_action( ctx, "B" );
@@ -152,50 +152,36 @@ static int menu_auto_repeat_frame( vxui_ctx* ctx, uint32_t input, bool auto_repe
     return (int) ctx->menu_state[0].y;
 }
 
-UTEST(input_repeated, menu_auto_repeat_true_holds_position) {
+UTEST(input_repeated, menu_nav_holds_position_within_das) {
     vxui_ctx ctx = make_ctx();
-    menu_auto_repeat_frame( &ctx, 0, true, 0.05f );
+    menu_nav_frame( &ctx, 0, 0.05f );
 
-    int row = menu_auto_repeat_frame( &ctx, VXUI_INPUT_DOWN, true, 0.05f );
+    int row = menu_nav_frame( &ctx, VXUI_INPUT_DOWN, 0.05f );
     ASSERT_EQ( row, 1 );
 
     for ( int i = 0; i < 7; i++ )
     {
-        row = menu_auto_repeat_frame( &ctx, VXUI_INPUT_DOWN, true, 0.05f );
+        row = menu_nav_frame( &ctx, VXUI_INPUT_DOWN, 0.05f );
         ASSERT_EQ( row, 1 );
     }
 
-    row = menu_auto_repeat_frame( &ctx, VXUI_INPUT_DOWN, true, 0.05f );
+    row = menu_nav_frame( &ctx, VXUI_INPUT_DOWN, 0.05f );
     ASSERT_EQ( row, 2 );
 }
 
-UTEST(input_repeated, menu_auto_repeat_false_rolls_on_hold) {
+UTEST(input_repeated, menu_nav_release_resets_das) {
     vxui_ctx ctx = make_ctx();
-    menu_auto_repeat_frame( &ctx, 0, false, 0.05f );
-
-    int row = menu_auto_repeat_frame( &ctx, VXUI_INPUT_DOWN, false, 0.05f );
-    ASSERT_EQ( row, 1 );
-
-    row = menu_auto_repeat_frame( &ctx, VXUI_INPUT_DOWN, false, 0.05f );
-    ASSERT_EQ( row, 2 );
-
-    row = menu_auto_repeat_frame( &ctx, VXUI_INPUT_DOWN, false, 0.05f );
-    ASSERT_EQ( row, 3 );
-}
-
-UTEST(input_repeated, menu_auto_repeat_true_release_resets) {
-    vxui_ctx ctx = make_ctx();
-    menu_auto_repeat_frame( &ctx, 0, true, 0.05f );
-    menu_auto_repeat_frame( &ctx, VXUI_INPUT_DOWN, true, 0.05f );
+    menu_nav_frame( &ctx, 0, 0.05f );
+    menu_nav_frame( &ctx, VXUI_INPUT_DOWN, 0.05f );
 
     for ( int i = 0; i < 5; i++ )
-        menu_auto_repeat_frame( &ctx, VXUI_INPUT_DOWN, true, 0.05f );
+        menu_nav_frame( &ctx, VXUI_INPUT_DOWN, 0.05f );
     int row = (int) ctx.menu_state[0].y;
     ASSERT_EQ( row, 1 );
 
-    menu_auto_repeat_frame( &ctx, 0, true, 0.05f );
+    menu_nav_frame( &ctx, 0, 0.05f );
 
-    row = menu_auto_repeat_frame( &ctx, VXUI_INPUT_DOWN, true, 0.05f );
+    row = menu_nav_frame( &ctx, VXUI_INPUT_DOWN, 0.05f );
     ASSERT_EQ( row, 2 );
 }
 
