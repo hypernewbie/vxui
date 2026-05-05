@@ -129,34 +129,33 @@ endif()
 
 if(VXUI_BUILD_DEMO)
     FetchContent_Declare(
-        freetype
-        GIT_REPOSITORY https://github.com/freetype/freetype.git
-        GIT_TAG VER-2-13-3
+        glfw
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG 3.4
     )
-    set(FT_DISABLE_ZLIB   ON CACHE BOOL "" FORCE)
-    set(FT_DISABLE_BZIP2  ON CACHE BOOL "" FORCE)
-    set(FT_DISABLE_PNG    ON CACHE BOOL "" FORCE)
-    set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(freetype)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(glfw)
 
     add_executable(vxui_demo
         demo/main.cpp
-        demo/windows/vxui_demo_manifest.rc
-        vefc/demo/include/glad/glad.c
     )
     target_include_directories(vxui_demo PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/vefc/demo/include
-        ${freetype_SOURCE_DIR}/include
-        ${harfbuzz_SOURCE_DIR}/src
     )
-    target_link_libraries(vxui_demo PRIVATE vxui freetype harfbuzz glu32 ole32 windowscodecs)
+    target_link_libraries(vxui_demo PRIVATE vxui glfw)
     target_compile_definitions(vxui_demo PRIVATE
         VXUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-        VE_FONTCACHE_FREETYPE_RASTERISATION
-        VE_FONTCACHE_HARFBUZZ
         $<$<CONFIG:Debug>:VXUI_DEBUG>
     )
-    if(MSVC)
-        target_link_options(vxui_demo PRIVATE "/MANIFEST:NO")
+    if(WIN32)
+        target_link_libraries(vxui_demo PRIVATE opengl32)
+    elseif(APPLE)
+        find_package(OpenGL REQUIRED)
+        target_link_libraries(vxui_demo PRIVATE OpenGL::GL)
+    elseif(UNIX)
+        find_package(OpenGL REQUIRED)
+        target_link_libraries(vxui_demo PRIVATE OpenGL::GL)
     endif()
 endif()
