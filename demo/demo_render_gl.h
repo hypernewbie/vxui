@@ -277,8 +277,6 @@ static void vxui_gl_render_rects( vxui_gl_state* gl, const vxui_draw_list& dl, f
     glBindVertexArray( 0 );
 }
 
-// VEFC drawlist execute loop. Phase 2a: stands up the dispatch; Phase 2b
-// fills the drawlist with text via ve_fontcache_draw_text.
 static void vxui_gl_execute_text( vxui_gl_state* gl, ve_fontcache* cache, int win_w, int win_h )
 {
     ve_fontcache_optimise_drawlist( cache );
@@ -361,6 +359,31 @@ static void vxui_gl_execute_text( vxui_gl_state* gl, ve_fontcache* cache, int wi
     ve_fontcache_flush_drawlist( cache );
 }
 
+static void vxui_gl_emit_text( vxui_text_state* st, const vxui_draw_list& dl, float w, float h )
+{
+    int text_n = vxui_draw_count( dl, VXUI_DRAW_TEXT );
+    if ( text_n <= 0 ) return;
+
+    ve_fontcache_configure_snap( &st->cache, (unsigned) w, (unsigned) h );
+    float text_colour[4] = { 0.95f, 0.95f, 0.95f, 1.0f };
+    ve_fontcache_set_colour( &st->cache, text_colour );
+
+    float inv_w = 1.0f / w;
+    float inv_h = 1.0f / h;
+
+    for ( int i = 0; i < text_n; i++ )
+    {
+        const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_TEXT, i );
+        ve_font_id font = ( c->font != 0 ) ? (ve_font_id) c->font : st->default_font;
+        if ( font < 0 || c->text_len <= 0 ) continue;
+
+        std::u8string text( (const char8_t*) c->text, (size_t) c->text_len );
+        float posx = c->rect.x * inv_w;
+        float posy = 1.0f - ( c->rect.y + c->font_px ) * inv_h;   // VEFC pen = baseline, y-up
+        ve_fontcache_draw_text( &st->cache, font, text, posx, posy, inv_w, inv_h );
+    }
+}
+
 void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h )
 {
     assert( ctx && ctx->renderer );
@@ -371,6 +394,7 @@ void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h )
     if ( ctx->text )
     {
         vxui_text_state* st = (vxui_text_state*) ctx->text;
+        vxui_gl_emit_text( st, dl, w, h );
         vxui_gl_execute_text( gl, &st->cache, (int) w, (int) h );
     }
 }
