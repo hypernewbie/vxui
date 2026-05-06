@@ -11,6 +11,8 @@
 #include "vxui.h"
 #define VXUI_IMPL
 #include "vxui_impl.h"
+#define VXUI_DEMO_RENDER_GL_IMPL
+#include "demo_render_gl.h"
 
 #ifndef VXUI_SOURCE_DIR
     #define VXUI_SOURCE_DIR "."
@@ -77,6 +79,8 @@ int main( int /*argc*/, char** /*argv*/ )
     }
     vxui_load_font( &ctx, font_bytes.data(), font_bytes.size(), (float) VXUI_FONT_SIZE_DEFAULT );
 
+    vxui_gl_init( &ctx );
+
     int frame = 0;
     while ( !glfwWindowShouldClose( window ) )
     {
@@ -96,6 +100,7 @@ int main( int /*argc*/, char** /*argv*/ )
             vxui_menu_end( &ctx );
         }
         vxui_draw_list dl = vxui_render( &ctx );
+        vxui_gl_render( &ctx, dl, (float) fb_w, (float) fb_h );
 
         if ( ( frame % 60 ) == 0 )
             printf( "frame %d: %d rects, %d texts\n",
@@ -107,7 +112,8 @@ int main( int /*argc*/, char** /*argv*/ )
         glfwSwapBuffers( window );
     }
 
-    vxui_shutdown( &ctx );
+    vxui_gl_shutdown( &ctx );
+    vxui_shutdown   ( &ctx );
     glfwDestroyWindow( window );
     glfwTerminate();
     return 0;

@@ -100,6 +100,7 @@ struct vxui_ctx
     float    dt               = 0;
     void*    clay             = nullptr;
     void*    text             = nullptr;// vxui_text_state*, lazy on first vxui_load_font
+    void*    renderer         = nullptr;// owned by sibling render module
 
     glm::uvec4  menu_state       [VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows, skip_mask }
     glm::vec4   menu_focus_spring[VXUI_MAX_MENUS] = {}; // { offset_y, velocity_y, prev_row, _ }, prev_row -1 = unset
