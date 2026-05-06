@@ -17,46 +17,21 @@ void vxui_gl_shutdown( vxui_ctx* ctx );
 
 #include <cstdio>
 #include <cassert>
-#include <vector>
 #include "ve_fontcache.h"
+
+// VXUI extension to VEFC's dcall.pass namespace. Solid colour quad on screen.
+#define VXUI_GL_PASS_RECT 8
 
 struct vxui_gl_state
 {
-    // Rect path.
-    GLuint rect_vao    = 0;
-    GLuint rect_vbo    = 0;
-    GLuint rect_ibo    = 0;
-    GLuint rect_prog   = 0;
-    GLint  rect_colour = -1;
-    GLint  rect_screen = -1;
-
-    // Text path (VEFC backend).
-    GLuint text_vao            = 0;
+    GLuint vao                 = 0;
     GLuint shader_render_glyph = 0;
     GLuint shader_blit_atlas   = 0;
     GLuint shader_draw_text    = 0;
+    GLuint shader_rect         = 0;
     GLuint fbo[2]              = { 0, 0 };
     GLuint fbo_texture[2]      = { 0, 0 };
 };
-
-static const char* s_vxui_gl_rect_vs = R"(#version 330 core
-in vec2 vpos;
-uniform vec2 screen;
-void main( void )
-{
-    vec2 ndc = vpos / screen * 2.0 - 1.0;
-    gl_Position = vec4( ndc.x, -ndc.y, 0.0, 1.0 );
-}
-)";
-
-static const char* s_vxui_gl_rect_fs = R"(#version 330 core
-out vec4 fragc;
-uniform vec4 colour;
-void main( void )
-{
-    fragc = colour;
-}
-)";
 
 // VEFC text shaders — byte-identical to vefc/demo/demo.cpp.
 static const char* s_vxui_gl_vefc_vs_shared = R"(#version 330 core
@@ -135,7 +110,18 @@ void main( void ) {
 }
 )";
 
-static GLuint vxui_gl_compile( const char* vs_src, const char* fs_src, bool with_vtex )
+// Shares vs_draw_text geometry layout (normalized vpos, * 2 - 1 to NDC).
+// vtex is unused for solid quads but the attrib stays bound for layout match.
+static const char* s_vxui_gl_rect_fs = R"(#version 330 core
+in vec2 uv;
+out vec4 fragc;
+uniform vec4 colour;
+void main( void ) {
+    fragc = colour;
+}
+)";
+
+static GLuint vxui_gl_compile( const char* vs_src, const char* fs_src )
 {
     char log[1024];
     GLint ok = 0;
@@ -156,7 +142,7 @@ static GLuint vxui_gl_compile( const char* vs_src, const char* fs_src, bool with
     glAttachShader( p, vs );
     glAttachShader( p, fs );
     glBindAttribLocation( p, 0, "vpos" );
-    if ( with_vtex ) glBindAttribLocation( p, 1, "vtex" );
+    glBindAttribLocation( p, 1, "vtex" );
     glLinkProgram( p );
     glGetProgramiv( p, GL_LINK_STATUS, &ok );
     if ( !ok ) { glGetProgramInfoLog( p, sizeof( log ), nullptr, log ); fprintf( stderr, "vxui_gl: link: %s\n", log ); }
@@ -200,84 +186,94 @@ void vxui_gl_init( vxui_ctx* ctx )
     vxui_gl_state* gl = new vxui_gl_state();
     ctx->renderer = gl;
 
-    // Rect path.
-    gl->rect_prog   = vxui_gl_compile( s_vxui_gl_rect_vs, s_vxui_gl_rect_fs, false );
-    gl->rect_colour = glGetUniformLocation( gl->rect_prog, "colour" );
-    gl->rect_screen = glGetUniformLocation( gl->rect_prog, "screen" );
+    gl->shader_render_glyph = vxui_gl_compile( s_vxui_gl_vefc_vs_shared,    s_vxui_gl_vefc_fs_render_glyph );
+    gl->shader_blit_atlas   = vxui_gl_compile( s_vxui_gl_vefc_vs_shared,    s_vxui_gl_vefc_fs_blit_atlas   );
+    gl->shader_draw_text    = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_vefc_fs_draw_text    );
+    gl->shader_rect         = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_rect_fs              );
 
-    glGenVertexArrays( 1, &gl->rect_vao );
-    glGenBuffers( 1, &gl->rect_vbo );
-    glGenBuffers( 1, &gl->rect_ibo );
-    glBindVertexArray( gl->rect_vao );
-    glBindBuffer( GL_ARRAY_BUFFER, gl->rect_vbo );
-    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, gl->rect_ibo );
-    glEnableVertexAttribArray( 0 );
-    glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof( float ), (void*) 0 );
-    glBindVertexArray( 0 );
-
-    // Text path (VEFC).
-    gl->shader_render_glyph = vxui_gl_compile( s_vxui_gl_vefc_vs_shared,    s_vxui_gl_vefc_fs_render_glyph, true );
-    gl->shader_blit_atlas   = vxui_gl_compile( s_vxui_gl_vefc_vs_shared,    s_vxui_gl_vefc_fs_blit_atlas,   true );
-    gl->shader_draw_text    = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_vefc_fs_draw_text,    true );
-    glGenVertexArrays( 1, &gl->text_vao );
+    glGenVertexArrays( 1, &gl->vao );
     vxui_gl_setup_fbo( gl );
 }
 
-static void vxui_gl_push_quad( std::vector< float >& verts, std::vector< uint32_t >& idx,
-                               float x, float y, float w, float h )
+// Push a quad into VEFC's drawlist as a PASS_RECT dcall. Verts are normalized
+// 0..1 with y up (matches vs_draw_text). VXUI rects come in as pixel y-down.
+static void vxui_gl_push_rect_dcall( ve_fontcache_drawlist* dl, float x, float y, float w, float h,
+                                     float fb_w, float fb_h, const float colour[4] )
 {
-    uint32_t base = (uint32_t) ( verts.size() / 2 );
-    verts.insert( verts.end(), { x, y,  x + w, y,  x + w, y + h,  x, y + h } );
-    idx.insert( idx.end(), { base, base + 1, base + 2,  base, base + 2, base + 3 } );
+    float x0 = x / fb_w;
+    float x1 = ( x + w ) / fb_w;
+    float y0 = 1.0f - y / fb_h;
+    float y1 = 1.0f - ( y + h ) / fb_h;
+
+    uint32_t base = (uint32_t) dl->vertices.size();
+    dl->vertices.push_back( { x0, y0, 0.0f, 0.0f } );
+    dl->vertices.push_back( { x1, y0, 0.0f, 0.0f } );
+    dl->vertices.push_back( { x1, y1, 0.0f, 0.0f } );
+    dl->vertices.push_back( { x0, y1, 0.0f, 0.0f } );
+
+    uint32_t idx_start = (uint32_t) dl->indices.size();
+    dl->indices.push_back( base + 0 );
+    dl->indices.push_back( base + 1 );
+    dl->indices.push_back( base + 2 );
+    dl->indices.push_back( base + 0 );
+    dl->indices.push_back( base + 2 );
+    dl->indices.push_back( base + 3 );
+
+    ve_fontcache_draw dcall;
+    dcall.pass        = VXUI_GL_PASS_RECT;
+    dcall.start_index = idx_start;
+    dcall.end_index   = (uint32_t) dl->indices.size();
+    dcall.colour[0] = colour[0];
+    dcall.colour[1] = colour[1];
+    dcall.colour[2] = colour[2];
+    dcall.colour[3] = colour[3];
+    dl->dcalls.push_back( dcall );
 }
 
-static void vxui_gl_render_rects( vxui_gl_state* gl, const vxui_draw_list& dl, float w, float h )
+static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, const vxui_draw_list& dl, float w, float h )
 {
     int rect_n = vxui_draw_count( dl, VXUI_DRAW_RECT );
     if ( rect_n <= 0 ) return;
 
-    // TODO Phase 3: per-rect colour via VEFC dcall. Phase 1 = last rect = focus.
-    std::vector< float >    verts;
-    std::vector< uint32_t > idx;
+    // TODO: per-rect colour from ctx (or id introspection). Phase 3 keeps the
+    // Phase 1 hack: last rect = focus, rest = row.
+    float row_colour  [4] = { 0.15f, 0.15f, 0.18f, 1.0f };
+    float focus_colour[4] = { 0.30f, 0.55f, 0.85f, 1.0f };
 
-    for ( int i = 0; i < rect_n - 1; i++ )
+    for ( int i = 0; i < rect_n; i++ )
     {
         const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
-        vxui_gl_push_quad( verts, idx, c->rect.x, c->rect.y, c->rect.z, c->rect.w );
+        const float* col = ( i == rect_n - 1 ) ? focus_colour : row_colour;
+        vxui_gl_push_rect_dcall( fdl, c->rect.x, c->rect.y, c->rect.z, c->rect.w, w, h, col );
     }
-    int row_idx_count   = (int) idx.size();
-    int focus_idx_start = row_idx_count;
-    {
-        const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, rect_n - 1 );
-        vxui_gl_push_quad( verts, idx, c->rect.x, c->rect.y, c->rect.z, c->rect.w );
-    }
-    int focus_idx_count = (int) idx.size() - focus_idx_start;
-
-    glBindVertexArray( gl->rect_vao );
-    glBindBuffer( GL_ARRAY_BUFFER, gl->rect_vbo );
-    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, gl->rect_ibo );
-    glBufferData( GL_ARRAY_BUFFER, (GLsizeiptr)( verts.size() * sizeof( float ) ), verts.data(), GL_DYNAMIC_DRAW );
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)( idx.size() * sizeof( uint32_t ) ), idx.data(), GL_DYNAMIC_DRAW );
-
-    glUseProgram( gl->rect_prog );
-    glUniform2f( gl->rect_screen, w, h );
-    glEnable( GL_BLEND );
-    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-
-    if ( row_idx_count > 0 )
-    {
-        glUniform4f( gl->rect_colour, 0.15f, 0.15f, 0.18f, 1.0f );
-        glDrawElements( GL_TRIANGLES, row_idx_count, GL_UNSIGNED_INT, (void*) 0 );
-    }
-    if ( focus_idx_count > 0 )
-    {
-        glUniform4f( gl->rect_colour, 0.30f, 0.55f, 0.85f, 1.0f );
-        glDrawElements( GL_TRIANGLES, focus_idx_count, GL_UNSIGNED_INT, (void*) ( (size_t) focus_idx_start * sizeof( uint32_t ) ) );
-    }
-    glBindVertexArray( 0 );
 }
 
-static void vxui_gl_execute_text( vxui_gl_state* gl, ve_fontcache* cache, int win_w, int win_h )
+static void vxui_gl_emit_text( vxui_text_state* st, const vxui_draw_list& dl, float w, float h )
+{
+    int text_n = vxui_draw_count( dl, VXUI_DRAW_TEXT );
+    if ( text_n <= 0 ) return;
+
+    ve_fontcache_configure_snap( &st->cache, (unsigned) w, (unsigned) h );
+    float text_colour[4] = { 0.95f, 0.95f, 0.95f, 1.0f };
+    ve_fontcache_set_colour( &st->cache, text_colour );
+
+    float inv_w = 1.0f / w;
+    float inv_h = 1.0f / h;
+
+    for ( int i = 0; i < text_n; i++ )
+    {
+        const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_TEXT, i );
+        ve_font_id font = ( c->font != 0 ) ? (ve_font_id) c->font : st->default_font;
+        if ( font < 0 || c->text_len <= 0 ) continue;
+
+        std::u8string text( (const char8_t*) c->text, (size_t) c->text_len );
+        float posx = c->rect.x * inv_w;
+        float posy = 1.0f - ( c->rect.y + c->font_px ) * inv_h;   // VEFC pen = baseline, y-up
+        ve_fontcache_draw_text( &st->cache, font, text, posx, posy, inv_w, inv_h );
+    }
+}
+
+static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, int win_h )
 {
     ve_fontcache_optimise_drawlist( cache );
     ve_fontcache_drawlist* drawlist = ve_fontcache_get_drawlist( cache );
@@ -287,7 +283,7 @@ static void vxui_gl_execute_text( vxui_gl_state* gl, ve_fontcache* cache, int wi
         return;
     }
 
-    glBindVertexArray( gl->text_vao );
+    glBindVertexArray( gl->vao );
     GLuint vbo = 0, ibo = 0;
     glGenBuffers( 1, &vbo );
     glGenBuffers( 1, &ibo );
@@ -343,6 +339,16 @@ static void vxui_gl_execute_text( vxui_gl_state* gl, ve_fontcache* cache, int wi
             glUniform4fv( glGetUniformLocation( gl->shader_draw_text, "colour" ), 1, dcall.colour );
             glEnable( GL_FRAMEBUFFER_SRGB );
         }
+        else if ( dcall.pass == VXUI_GL_PASS_RECT )
+        {
+            glUseProgram( gl->shader_rect );
+            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+            glViewport( 0, 0, win_w, win_h );
+            glScissor( 0, 0, win_w, win_h );
+            glUniform4fv( glGetUniformLocation( gl->shader_rect, "colour" ), 1, dcall.colour );
+            glDisable( GL_FRAMEBUFFER_SRGB );
+        }
         if ( dcall.clear_before_draw )
         {
             glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
@@ -359,44 +365,18 @@ static void vxui_gl_execute_text( vxui_gl_state* gl, ve_fontcache* cache, int wi
     ve_fontcache_flush_drawlist( cache );
 }
 
-static void vxui_gl_emit_text( vxui_text_state* st, const vxui_draw_list& dl, float w, float h )
-{
-    int text_n = vxui_draw_count( dl, VXUI_DRAW_TEXT );
-    if ( text_n <= 0 ) return;
-
-    ve_fontcache_configure_snap( &st->cache, (unsigned) w, (unsigned) h );
-    float text_colour[4] = { 0.95f, 0.95f, 0.95f, 1.0f };
-    ve_fontcache_set_colour( &st->cache, text_colour );
-
-    float inv_w = 1.0f / w;
-    float inv_h = 1.0f / h;
-
-    for ( int i = 0; i < text_n; i++ )
-    {
-        const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_TEXT, i );
-        ve_font_id font = ( c->font != 0 ) ? (ve_font_id) c->font : st->default_font;
-        if ( font < 0 || c->text_len <= 0 ) continue;
-
-        std::u8string text( (const char8_t*) c->text, (size_t) c->text_len );
-        float posx = c->rect.x * inv_w;
-        float posy = 1.0f - ( c->rect.y + c->font_px ) * inv_h;   // VEFC pen = baseline, y-up
-        ve_fontcache_draw_text( &st->cache, font, text, posx, posy, inv_w, inv_h );
-    }
-}
-
 void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h )
 {
     assert( ctx && ctx->renderer );
     vxui_gl_state* gl = (vxui_gl_state*) ctx->renderer;
+    if ( !ctx->text ) return;
 
-    vxui_gl_render_rects( gl, dl, w, h );
+    vxui_text_state* st = (vxui_text_state*) ctx->text;
+    ve_fontcache_drawlist* fdl = ve_fontcache_get_drawlist( &st->cache );
 
-    if ( ctx->text )
-    {
-        vxui_text_state* st = (vxui_text_state*) ctx->text;
-        vxui_gl_emit_text( st, dl, w, h );
-        vxui_gl_execute_text( gl, &st->cache, (int) w, (int) h );
-    }
+    vxui_gl_emit_rects( fdl, dl, w, h );
+    vxui_gl_emit_text ( st, dl, w, h );
+    vxui_gl_execute   ( gl, &st->cache, (int) w, (int) h );
 }
 
 void vxui_gl_shutdown( vxui_ctx* ctx )
@@ -404,15 +384,11 @@ void vxui_gl_shutdown( vxui_ctx* ctx )
     if ( !ctx || !ctx->renderer ) return;
     vxui_gl_state* gl = (vxui_gl_state*) ctx->renderer;
 
-    glDeleteBuffers( 1, &gl->rect_vbo );
-    glDeleteBuffers( 1, &gl->rect_ibo );
-    glDeleteVertexArrays( 1, &gl->rect_vao );
-    glDeleteProgram( gl->rect_prog );
-
-    glDeleteVertexArrays( 1, &gl->text_vao );
+    glDeleteVertexArrays( 1, &gl->vao );
     glDeleteProgram( gl->shader_render_glyph );
     glDeleteProgram( gl->shader_blit_atlas );
     glDeleteProgram( gl->shader_draw_text );
+    glDeleteProgram( gl->shader_rect );
     glDeleteFramebuffers( 2, gl->fbo );
     glDeleteTextures( 2, gl->fbo_texture );
 
