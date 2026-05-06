@@ -103,10 +103,13 @@ int main( int /*argc*/, char** /*argv*/ )
         vxui_gl_render( &ctx, dl, (float) fb_w, (float) fb_h );
 
         if ( ( frame % 60 ) == 0 )
+        {
             printf( "frame %d: %d rects, %d texts\n",
                     frame,
                     vxui_draw_count( dl, VXUI_DRAW_RECT ),
                     vxui_draw_count( dl, VXUI_DRAW_TEXT ) );
+            fflush( stdout );
+        }
         frame++;
 
         glfwSwapBuffers( window );
