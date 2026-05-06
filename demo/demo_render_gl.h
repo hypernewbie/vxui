@@ -121,6 +121,29 @@ void main( void ) {
 }
 )";
 
+static void vxui_gl_check_error( const char* tag )
+{
+#ifdef VXUI_DEBUG
+    GLenum err = glGetError();
+    if ( err != GL_NO_ERROR )
+    {
+        const char* name = "GL_???";
+        switch ( err )
+        {
+            case GL_INVALID_ENUM:                  name = "GL_INVALID_ENUM";                  break;
+            case GL_INVALID_VALUE:                 name = "GL_INVALID_VALUE";                 break;
+            case GL_INVALID_OPERATION:             name = "GL_INVALID_OPERATION";             break;
+            case GL_OUT_OF_MEMORY:                 name = "GL_OUT_OF_MEMORY";                 break;
+            case GL_INVALID_FRAMEBUFFER_OPERATION: name = "GL_INVALID_FRAMEBUFFER_OPERATION"; break;
+        }
+        fprintf( stderr, "vxui_gl: %s at %s\n", name, tag );
+        assert( !"vxui_gl error" );
+    }
+#else
+    (void) tag;
+#endif
+}
+
 static GLuint vxui_gl_compile( const char* vs_src, const char* fs_src )
 {
     char log[1024];
@@ -347,7 +370,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glViewport( 0, 0, win_w, win_h );
             glScissor( 0, 0, win_w, win_h );
             glUniform4fv( glGetUniformLocation( gl->shader_rect, "colour" ), 1, dcall.colour );
-            glDisable( GL_FRAMEBUFFER_SRGB );
+            glEnable( GL_FRAMEBUFFER_SRGB );   // match text path so linear colours stay consistent
         }
         if ( dcall.clear_before_draw )
         {
@@ -363,6 +386,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
     glBindFramebuffer( GL_FRAMEBUFFER, 0 );
     glBindVertexArray( 0 );
     ve_fontcache_flush_drawlist( cache );
+    vxui_gl_check_error( "execute" );
 }
 
 void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h )
