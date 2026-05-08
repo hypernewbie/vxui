@@ -82,6 +82,10 @@ if(VXUI_BUILD_TESTS)
     target_link_libraries(test_menu_draw PRIVATE vxui)
     add_test(NAME test_menu_draw COMMAND test_menu_draw)
 
+    add_executable(test_render_data tests/test_render_data.cpp)
+    target_link_libraries(test_render_data PRIVATE vxui)
+    add_test(NAME test_render_data COMMAND test_render_data)
+
     add_executable(test_game_menu tests/test_game_menu.cpp)
     target_link_libraries(test_game_menu PRIVATE vxui)
     add_test(NAME test_game_menu COMMAND test_game_menu)

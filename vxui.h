@@ -68,10 +68,16 @@ struct vxui_div_cfg
 #define VXUI_DRAW_RECT 0
 #define VXUI_DRAW_TEXT 1
 
+#define VXUI_DRAW_FOCUSED  0x01
+#define VXUI_DRAW_PRESSED  0x02
+#define VXUI_DRAW_DISABLED 0x04
+#define VXUI_DRAW_HOVERED  0x08
+
 struct vxui_draw_cmd
 {
     uint32_t    id;
     uint8_t     type;       // VXUI_DRAW_RECT | VXUI_DRAW_TEXT
+    uint8_t     state;      // VXUI_DRAW_FOCUSED | _PRESSED | _DISABLED | _HOVERED
     glm::vec4   rect;       // x, y, w, h
     const char* text;       // null when type != TEXT; valid until next vxui_frame
     int32_t     text_len;
@@ -112,6 +118,11 @@ struct vxui_ctx
     int      active_menu_row      = 0;   // current row being declared
     uint32_t active_menu_skip     = 0;   // bitmask, accumulated during declaration
     uint32_t active_menu_focus_id = 0;   // Clay id of focused row this frame, 0 = none
+
+    uint32_t focused_row_ids[VXUI_MAX_MENUS] = {};   // per-frame, count = focused_row_count
+    int      focused_row_count               = 0;
+    uint32_t pressed_row_ids[VXUI_MAX_MENUS] = {};   // per-frame, count = pressed_row_count
+    int      pressed_row_count               = 0;
 
     vxui_draw_cmd  draw_buf[VXUI_MAX_DRAW_CMDS] = {};
     vxui_draw_list draw_list                     = {};

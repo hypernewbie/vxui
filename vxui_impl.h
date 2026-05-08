@@ -55,14 +55,16 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
     assert( ctx );
     assert( ctx->active_menu == -1 );   // mismatched menu_begin/end from last frame
     assert( !ctx->frame_active && "vxui_frame without intervening vxui_render" );
-    ctx->prev_input       = ctx->input;
-    ctx->prev_active_mask = ctx->menu_active_mask;
-    ctx->input            = 0;
-    ctx->menu_active_mask = 0;
-    ctx->dt               = dt;
-    ctx->frame_active     = true;
-    ctx->inputs_committed = false;
-    ctx->text_offset      = 0;
+    ctx->prev_input        = ctx->input;
+    ctx->prev_active_mask  = ctx->menu_active_mask;
+    ctx->input             = 0;
+    ctx->menu_active_mask  = 0;
+    ctx->dt                = dt;
+    ctx->frame_active      = true;
+    ctx->inputs_committed  = false;
+    ctx->text_offset       = 0;
+    ctx->focused_row_count = 0;
+    ctx->pressed_row_count = 0;
     if ( ctx->clay )
     {
         Clay_SetCurrentContext( (Clay_Context*) ctx->clay );
@@ -101,6 +103,7 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             vxui_draw_cmd& out = ctx->draw_buf[count++];
             out.id       = cmd->id;
             out.type     = VXUI_DRAW_RECT;
+            out.state    = 0;
             out.rect     = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
             out.text     = nullptr;
             out.text_len = 0;
@@ -113,11 +116,26 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             vxui_draw_cmd& out = ctx->draw_buf[count++];
             out.id       = cmd->id;
             out.type     = VXUI_DRAW_TEXT;
+            out.state    = 0;
             out.rect     = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
             out.text     = t.stringContents.chars;     // points into ctx->text_buf, valid until next vxui_frame
             out.text_len = t.stringContents.length;
             out.font     = t.fontId;
             out.font_px  = t.fontSize;
+        }
+    }
+
+    for ( int i = 0; i < count; i++ )
+    {
+        vxui_draw_cmd& c = ctx->draw_buf[i];
+        if ( c.type != VXUI_DRAW_RECT ) continue;
+        for ( int j = 0; j < ctx->focused_row_count; j++ )
+        {
+            if ( c.id == ctx->focused_row_ids[j] ) { c.state |= VXUI_DRAW_FOCUSED; break; }
+        }
+        for ( int j = 0; j < ctx->pressed_row_count; j++ )
+        {
+            if ( c.id == ctx->pressed_row_ids[j] ) { c.state |= VXUI_DRAW_PRESSED; break; }
         }
     }
 
@@ -492,6 +510,8 @@ bool vxui_menu_action( vxui_ctx* ctx, const char* label )
 {
     assert( ctx && ctx->active_menu >= 0 );
     if ( !vxui_menu_row_interactive( ctx, label ) ) return false;
+    if ( ( ctx->input & VXUI_INPUT_CONFIRM ) && ctx->pressed_row_count < VXUI_MAX_MENUS )
+        ctx->pressed_row_ids[ctx->pressed_row_count++] = ctx->active_menu_focus_id;
     // Edge-triggered: holding confirm fires once, not every frame.
     return ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CONFIRM ) != 0;
 }
@@ -501,6 +521,7 @@ bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char*
     assert( ctx && ctx->active_menu >= 0 );
     assert( index && options && count > 0 );
     if ( !vxui_menu_row_interactive( ctx, label ) ) return false;
+    // TODO: PRESSED state on confirm-held mirror, see vxui_menu_action.
 
     int prev = *index;
 
@@ -519,6 +540,7 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
     assert( ctx && ctx->active_menu >= 0 );
     assert( value && mn < mx && step > 0.0f );
     if ( !vxui_menu_row_interactive( ctx, label ) ) return false;
+    // TODO: PRESSED state on confirm-held mirror, see vxui_menu_action.
 
     float prev = *value;
 
@@ -561,6 +583,9 @@ void vxui_menu_end( vxui_ctx* ctx )
 
     if ( ctx->active_menu_focus_id != 0 )
     {
+        if ( ctx->focused_row_count < VXUI_MAX_MENUS )
+            ctx->focused_row_ids[ctx->focused_row_count++] = ctx->active_menu_focus_id;
+
         glm::uvec4& m       = ctx->menu_state[ctx->active_menu];
         glm::vec4&  spring  = ctx->menu_focus_spring[ctx->active_menu];
         float& offset_y     = spring.x;
