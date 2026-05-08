@@ -218,6 +218,229 @@ UTEST(render_data, two_menus_each_focused_row_has_focused_bit) {
     ASSERT_TRUE( ( r->state & VXUI_DRAW_FOCUSED ) != 0 );
 }
 
+UTEST(render_data, no_resolver_render_block_zero) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    for ( int i = 0; i < dl.count; i++ )
+    {
+        const vxui_render_data& r = dl.cmds[i].render;
+        ASSERT_EQ( r.material_id,      (uint32_t) 0 );
+        ASSERT_EQ( r.texture_id,       (uint32_t) 0 );
+        ASSERT_EQ( r.flags,            (uint32_t) 0 );
+        ASSERT_EQ( r.outline_thickness, 0.0f );
+        ASSERT_EQ( r.colour[0],         0.0f );
+        ASSERT_EQ( r.params[7],         0.0f );
+    }
+}
+
+UTEST(render_data, resolver_called_once_per_cmd) {
+    vxui_ctx ctx = make_ctx();
+
+    struct ud_t { int count = 0; };
+    ud_t ud;
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd*, vxui_render_data*, void* u ) { ((ud_t*)u)->count++; },
+        &ud );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( ud.count, dl.count );
+}
+
+UTEST(render_data, resolver_sees_correct_state_on_focused_row) {
+    vxui_ctx ctx = make_ctx();
+
+    struct ud_t { uint8_t seen_state = 0; uint32_t target_id = 0; };
+    ud_t ud;
+    ud.target_id = row_id( "m", "Play" );
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd* c, vxui_render_data*, void* u )
+        {
+            ud_t* d = (ud_t*) u;
+            if ( c->id == d->target_id ) d->seen_state = c->state;
+        },
+        &ud );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    ASSERT_TRUE( ( ud.seen_state & VXUI_DRAW_FOCUSED ) != 0 );
+}
+
+UTEST(render_data, resolver_sees_correct_id_on_each_cmd) {
+    vxui_ctx ctx = make_ctx();
+
+    struct ud_t { uint32_t ids[8] = {}; int n = 0; };
+    ud_t ud;
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd* c, vxui_render_data*, void* u )
+        {
+            ud_t* d = (ud_t*) u;
+            if ( d->n < 8 ) d->ids[d->n++] = c->id;
+        },
+        &ud );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( ud.n, dl.count );
+    bool found_play = false, found_quit = false;
+    for ( int i = 0; i < ud.n; i++ )
+    {
+        if ( ud.ids[i] == row_id( "m", "Play" ) ) found_play = true;
+        if ( ud.ids[i] == row_id( "m", "Quit" ) ) found_quit = true;
+    }
+    ASSERT_TRUE( found_play );
+    ASSERT_TRUE( found_quit );
+}
+
+UTEST(render_data, resolver_output_appears_in_packet_unchanged) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd*, vxui_render_data* out, void* )
+        {
+            out->material_id      = 0xC0FFEE;
+            out->texture_id       = 42;
+            out->flags            = 7;
+            out->outline_thickness = 3.14f;
+            out->colour[0]        = 0.11f;
+            out->outline_colour[3] = 0.99f;
+            out->uv[2]            = 0.75f;
+            out->params[7]        = 0.5f;
+        },
+        nullptr );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Play" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_EQ  ( c->render.material_id,      (uint32_t) 0xC0FFEE );
+    ASSERT_EQ  ( c->render.texture_id,       (uint32_t) 42 );
+    ASSERT_EQ  ( c->render.flags,            (uint32_t) 7 );
+    ASSERT_NEAR( c->render.outline_thickness, 3.14f,  1e-5f );
+    ASSERT_NEAR( c->render.colour[0],         0.11f,  1e-5f );
+    ASSERT_NEAR( c->render.outline_colour[3], 0.99f,  1e-5f );
+    ASSERT_NEAR( c->render.uv[2],             0.75f,  1e-5f );
+    ASSERT_NEAR( c->render.params[7],         0.5f,   1e-5f );
+}
+
+UTEST(render_data, resolver_can_distinguish_rect_vs_text_by_type) {
+    vxui_ctx ctx = make_ctx();
+
+    struct ud_t { int rect_n = 0; int text_n = 0; };
+    ud_t ud;
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd* c, vxui_render_data*, void* u )
+        {
+            ud_t* d = (ud_t*) u;
+            if ( c->type == VXUI_DRAW_RECT ) d->rect_n++;
+            if ( c->type == VXUI_DRAW_TEXT ) d->text_n++;
+        },
+        &ud );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( ud.rect_n, vxui_draw_count( dl, VXUI_DRAW_RECT ) );
+    ASSERT_EQ( ud.text_n, vxui_draw_count( dl, VXUI_DRAW_TEXT ) );
+    ASSERT_EQ( ud.rect_n + ud.text_n, dl.count );
+}
+
+UTEST(render_data, resolver_userdata_passes_through) {
+    vxui_ctx ctx = make_ctx();
+
+    struct ud_t { void* seen = nullptr; };
+    ud_t ud;
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd*, vxui_render_data*, void* u )
+        {
+            ud_t* d = (ud_t*) u;
+            d->seen = u;
+        },
+        &ud );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    ASSERT_TRUE( ud.seen == &ud );
+}
+
+UTEST(render_data, text_cmd_render_zero_when_resolver_skips_text) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd* c, vxui_render_data* out, void* )
+        {
+            if ( c->type != VXUI_DRAW_RECT ) return;
+            out->colour[0] = 1.0f;
+        },
+        nullptr );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    int n = vxui_draw_count( dl, VXUI_DRAW_TEXT );
+    for ( int i = 0; i < n; i++ )
+    {
+        const vxui_render_data& r = vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->render;
+        ASSERT_EQ( r.material_id, (uint32_t) 0 );
+        ASSERT_EQ( r.colour[0],    0.0f );
+        ASSERT_EQ( r.params[7],    0.0f );
+    }
+}
+
 UTEST(render_data, focused_row_carries_focus_offset_zero_on_snap) {
     vxui_ctx ctx = make_ctx();
 

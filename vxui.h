@@ -73,17 +73,31 @@ struct vxui_div_cfg
 #define VXUI_DRAW_DISABLED 0x04
 #define VXUI_DRAW_HOVERED  0x08
 
+struct vxui_render_data
+{
+    uint32_t material_id;
+    uint32_t texture_id;
+    uint32_t flags;
+    float    outline_thickness;
+
+    float colour        [ 4 ];
+    float outline_colour[ 4 ];
+    float uv            [ 4 ];
+    float params        [ 8 ];
+};
+
 struct vxui_draw_cmd
 {
-    uint32_t    id;
-    uint8_t     type;            // VXUI_DRAW_RECT | VXUI_DRAW_TEXT
-    uint8_t     state;           // VXUI_DRAW_FOCUSED | _PRESSED | _DISABLED | _HOVERED
-    glm::vec4   rect;            // x, y, w, h
-    float       focus_offset_y;  // VXUI-owned spring; nonzero only on FOCUSED RECT cmds
-    const char* text;            // null when type != TEXT; valid until next vxui_frame
-    int32_t     text_len;
-    uint16_t    font;
-    uint16_t    font_px;
+    uint32_t         id;
+    uint8_t          type;            // VXUI_DRAW_RECT | VXUI_DRAW_TEXT
+    uint8_t          state;           // VXUI_DRAW_FOCUSED | _PRESSED | _DISABLED | _HOVERED
+    glm::vec4        rect;            // x, y, w, h
+    float            focus_offset_y;  // VXUI-owned spring; nonzero only on FOCUSED RECT cmds
+    const char*      text;            // null when type != TEXT; valid until next vxui_frame
+    int32_t          text_len;
+    uint16_t         font;
+    uint16_t         font_px;
+    vxui_render_data render;
 };
 
 struct vxui_draw_list
@@ -91,6 +105,8 @@ struct vxui_draw_list
     vxui_draw_cmd* cmds  = nullptr;
     int            count = 0;
 };
+
+typedef void ( *vxui_render_data_fn )( const vxui_draw_cmd* cmd, vxui_render_data* out, void* userdata );
 
 struct vxui_ctx
 {
@@ -131,6 +147,9 @@ struct vxui_ctx
 
     char text_buf[VXUI_MAX_TEXT_BYTES] = {};  // per-frame label storage; reset in vxui_frame
     int  text_offset                    = 0;
+
+    vxui_render_data_fn render_data_fn       = nullptr;
+    void*               render_data_userdata = nullptr;
 };
 
 #define VXUI_FONT_INVALID 0xffff
@@ -158,6 +177,7 @@ bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true, int 
 int                  vxui_draw_count ( const vxui_draw_list& dl, uint8_t type );
 const vxui_draw_cmd* vxui_draw_nth   ( const vxui_draw_list& dl, uint8_t type, int n );
 const vxui_draw_cmd* vxui_draw_find  ( const vxui_draw_list& dl, uint8_t type, uint32_t id );
+void vxui_set_render_data_fn( vxui_ctx* ctx, vxui_render_data_fn fn, void* userdata );
 bool vxui_menu_action    ( vxui_ctx* ctx, const char* label );
 bool vxui_menu_option    ( vxui_ctx* ctx, const char* label, int* index, const char** options, int count );
 bool vxui_menu_slider    ( vxui_ctx* ctx, const char* label, float* value, float mn = 0.0f, float mx = 1.0f, float step = 0.1f );

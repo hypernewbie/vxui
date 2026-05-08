@@ -34,6 +34,23 @@ static std::vector< uint8_t > load_file( const char* path )
 
 static uint8_t s_clay_mem[16 * 1024 * 1024];
 
+static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, void* /*ud*/ )
+{
+    if ( c->type != VXUI_DRAW_RECT ) return;
+
+    if ( c->state & VXUI_DRAW_PRESSED )
+    {
+        out->colour[0] = 0.45f; out->colour[1] = 0.70f; out->colour[2] = 1.00f; out->colour[3] = 1.0f;
+        return;
+    }
+    if ( c->state & VXUI_DRAW_FOCUSED )
+    {
+        out->colour[0] = 0.30f; out->colour[1] = 0.55f; out->colour[2] = 0.85f; out->colour[3] = 1.0f;
+        return;
+    }
+    out->colour[0] = 0.15f; out->colour[1] = 0.15f; out->colour[2] = 0.18f; out->colour[3] = 1.0f;
+}
+
 int main( int /*argc*/, char** /*argv*/ )
 {
     if ( !glfwInit() )
@@ -80,6 +97,7 @@ int main( int /*argc*/, char** /*argv*/ )
     vxui_load_font( &ctx, font_bytes.data(), font_bytes.size(), (float) VXUI_FONT_SIZE_DEFAULT );
 
     vxui_gl_init( &ctx );
+    vxui_set_render_data_fn( &ctx, demo_render_data, nullptr );
 
     static const struct { int key; const char* action; } s_keymap[] = {
         { GLFW_KEY_UP,     "up"      },

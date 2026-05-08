@@ -144,9 +144,24 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         }
     }
 
+    for ( int i = 0; i < count; i++ )
+    {
+        vxui_draw_cmd& c = ctx->draw_buf[i];
+        c.render = {};
+        if ( ctx->render_data_fn )
+            ctx->render_data_fn( &c, &c.render, ctx->render_data_userdata );
+    }
+
     ctx->draw_list.cmds  = ctx->draw_buf;
     ctx->draw_list.count = count;
     return ctx->draw_list;
+}
+
+void vxui_set_render_data_fn( vxui_ctx* ctx, vxui_render_data_fn fn, void* userdata )
+{
+    assert( ctx );
+    ctx->render_data_fn       = fn;
+    ctx->render_data_userdata = userdata;
 }
 
 // Copies src into ctx->text_buf, returns a stable pointer valid until next vxui_frame.
