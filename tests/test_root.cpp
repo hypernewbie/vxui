@@ -36,7 +36,7 @@ UTEST(root, menu_inside_root_positioned_at_offset) {
     vxui_root_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
     const vxui_draw_cmd* play = find_id( dl, row_id( "m", "Play" ) );
     ASSERT_TRUE( play != nullptr );
     ASSERT_NEAR( play->rect.x, 200.0f, 1e-3f );
@@ -155,7 +155,7 @@ UTEST(root, navigation_works_inside_root) {
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
 }
 
-UTEST(root, focus_rect_positioned_correctly_inside_root) {
+UTEST(root, focused_row_positioned_correctly_inside_root) {
     vxui_ctx ctx = make_ctx();
 
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -169,10 +169,11 @@ UTEST(root, focus_rect_positioned_correctly_inside_root) {
     vxui_root_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     const vxui_draw_cmd* play = find_id( dl, row_id( "m", "Play" ) );
     ASSERT_TRUE( play != nullptr );
     ASSERT_NEAR( play->rect.y, 250.0f, 1e-3f );
+    ASSERT_TRUE( ( play->state & VXUI_DRAW_FOCUSED ) != 0 );
 }
 
 UTEST(root, root_id_is_hashed_independently_of_other_roots) {

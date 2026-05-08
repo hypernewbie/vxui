@@ -19,14 +19,7 @@ static uint32_t row_id( const char* menu, const char* label )
     return Clay__HashString( cs, vxui_hash( menu ) ).id;
 }
 
-// Focus rect id: menu hash as seed, "focus" as key. Matches vxui_menu_end.
-static uint32_t focus_id( const char* menu )
-{
-    Clay_String cs = CLAY_STRING( "focus" );
-    return Clay__HashString( cs, vxui_hash( menu ) ).id;
-}
-
-UTEST(menu_draw, one_action_two_rects) {
+UTEST(menu_draw, one_action_one_rect) {
     vxui_ctx ctx = make_ctx();
 
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -37,10 +30,10 @@ UTEST(menu_draw, one_action_two_rects) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
 }
 
-UTEST(menu_draw, three_actions_four_rects) {
+UTEST(menu_draw, three_actions_three_rects) {
     vxui_ctx ctx = make_ctx();
 
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -53,7 +46,7 @@ UTEST(menu_draw, three_actions_four_rects) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 4 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
 }
 
 UTEST(menu_draw, rect_id_matches_label) {
@@ -67,7 +60,7 @@ UTEST(menu_draw, rect_id_matches_label) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->id, row_id( "m", "Play" ) );
 }
 
@@ -84,7 +77,7 @@ UTEST(menu_draw, three_rect_ids_match_labels) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 4 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->id, row_id( "m", "Play" ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->id, row_id( "m", "Options" ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->id, row_id( "m", "Quit" ) );
@@ -106,7 +99,7 @@ UTEST(menu_draw, same_label_different_menus_distinct_ids) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 4 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->id, row_id( "left",  "Back" ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->id, row_id( "right", "Back" ) );
     ASSERT_NE( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->id, vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->id );
@@ -123,7 +116,7 @@ UTEST(menu_draw, row_has_fixed_height) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.w, (float) VXUI_ROW_HEIGHT, 1e-3f );  // rect.w = height (Clay h)
 }
 
@@ -140,7 +133,7 @@ UTEST(menu_draw, option_emits_rect) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
 }
 
 UTEST(menu_draw, option_rect_id_matches_label) {
@@ -156,7 +149,7 @@ UTEST(menu_draw, option_rect_id_matches_label) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->id, row_id( "m", "Difficulty" ) );
 }
 
@@ -173,7 +166,7 @@ UTEST(menu_draw, option_row_has_fixed_height) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.w, (float) VXUI_ROW_HEIGHT, 1e-3f );
 }
 
@@ -191,7 +184,7 @@ UTEST(menu_draw, action_and_option_emit_two_rects) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->id, row_id( "m", "Play" ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->id, row_id( "m", "Difficulty" ) );
 }
@@ -208,7 +201,7 @@ UTEST(menu_draw, slider_emits_rect) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
 }
 
 UTEST(menu_draw, slider_rect_id_matches_label) {
@@ -223,7 +216,7 @@ UTEST(menu_draw, slider_rect_id_matches_label) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->id, row_id( "m", "Volume" ) );
 }
 
@@ -239,7 +232,7 @@ UTEST(menu_draw, slider_row_has_fixed_height) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.w, (float) VXUI_ROW_HEIGHT, 1e-3f );
 }
 
@@ -259,7 +252,7 @@ UTEST(menu_draw, action_option_slider_emit_three_rects) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 4 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->id, row_id( "m", "Play" ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->id, row_id( "m", "Difficulty" ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->id, row_id( "m", "Volume" ) );
@@ -364,7 +357,7 @@ UTEST(menu_draw, first_row_at_origin_y) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 0.0f, 1e-3f );
 }
 
@@ -380,7 +373,7 @@ UTEST(menu_draw, second_row_below_first) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y + (float) VXUI_ROW_HEIGHT, 1e-3f );
 }
 
@@ -397,10 +390,10 @@ UTEST(menu_draw, three_rows_stack_vertically) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 4 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 0.0f,                              1e-3f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1.0f * (float) VXUI_ROW_HEIGHT,    1e-3f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, 2.0f * (float) VXUI_ROW_HEIGHT,    1e-3f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 0.0f,                           1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1.0f * (float) VXUI_ROW_HEIGHT, 1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, 2.0f * (float) VXUI_ROW_HEIGHT, 1e-3f );
 }
 
 UTEST(menu_draw, rows_share_same_x) {
@@ -415,7 +408,7 @@ UTEST(menu_draw, rows_share_same_x) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.x, vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.x, 1e-3f );
 }
 
@@ -449,7 +442,7 @@ UTEST(menu_draw, all_row_types_emit_rects) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 6 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 5 );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->id, row_id( "m", "Header" ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->id, row_id( "m", "Info" ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->id, row_id( "m", "Play" ) );
@@ -457,8 +450,7 @@ UTEST(menu_draw, all_row_types_emit_rects) {
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 4 )->id, row_id( "m", "Volume" ) );
 }
 
-
-UTEST(menu_draw, focus_rect_present_when_action_focusable) {
+UTEST(menu_draw, focused_row_has_focused_state) {
     vxui_ctx ctx = make_ctx();
 
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -469,26 +461,12 @@ UTEST(menu_draw, focus_rect_present_when_action_focusable) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
-    ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->id, focus_id( "m" ) );
+    const vxui_draw_cmd* play = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Play" ) );
+    ASSERT_TRUE( play != nullptr );
+    ASSERT_TRUE( ( play->state & VXUI_DRAW_FOCUSED ) != 0 );
 }
 
-UTEST(menu_draw, focus_rect_id_is_menu_focus_hash) {
-    vxui_ctx ctx = make_ctx();
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    if ( vxui_menu( &ctx, "settings" ) )
-    {
-        vxui_menu_action( &ctx, "Apply" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_draw_list dl = vxui_render( &ctx );
-
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
-    ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->id, focus_id( "settings" ) );
-}
-
-UTEST(menu_draw, focus_rect_position_matches_focused_row) {
+UTEST(menu_draw, focus_offset_zero_on_first_frame) {
     vxui_ctx ctx = make_ctx();
 
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -500,11 +478,12 @@ UTEST(menu_draw, focus_rect_position_matches_focused_row) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 1e-3f );
+    const vxui_draw_cmd* play = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Play" ) );
+    ASSERT_TRUE( play != nullptr );
+    ASSERT_NEAR( play->focus_offset_y, 0.0f, 1e-3f );
 }
 
-UTEST(menu_draw, focus_rect_settles_after_many_frames) {
+UTEST(menu_draw, focus_offset_nonzero_immediately_after_navigation) {
     vxui_ctx ctx = make_ctx();
 
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -515,6 +494,74 @@ UTEST(menu_draw, focus_rect_settles_after_many_frames) {
         vxui_menu_end( &ctx );
     }
     vxui_render( &ctx );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    ctx.input = VXUI_INPUT_DOWN;
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* quit = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Quit" ) );
+    ASSERT_TRUE( quit != nullptr );
+    ASSERT_TRUE( ( quit->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_LT( quit->focus_offset_y, -(float) VXUI_ROW_HEIGHT * 0.1f );
+}
+
+UTEST(menu_draw, focus_offset_settles_to_zero) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    ctx.input = VXUI_INPUT_DOWN;
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    for ( int i = 0; i < 120; i++ )
+    {
+        vxui_frame( &ctx, 1.0f / 60.0f );
+        if ( vxui_menu( &ctx, "m" ) )
+        {
+            vxui_menu_action( &ctx, "Play" );
+            vxui_menu_action( &ctx, "Quit" );
+            vxui_menu_end( &ctx );
+        }
+        vxui_render( &ctx );
+    }
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* quit = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Quit" ) );
+    ASSERT_TRUE( quit != nullptr );
+    ASSERT_TRUE( ( quit->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_NEAR( quit->focus_offset_y, 0.0f, 1e-2f );
+}
+
+UTEST(menu_draw, focus_offset_settles_after_many_still_frames) {
+    vxui_ctx ctx = make_ctx();
 
     for ( int i = 0; i < 60; i++ )
     {
@@ -537,146 +584,13 @@ UTEST(menu_draw, focus_rect_settles_after_many_frames) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 1e-3f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    const vxui_draw_cmd* play = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Play" ) );
+    ASSERT_TRUE( play != nullptr );
+    ASSERT_NEAR( play->focus_offset_y, 0.0f, 1e-3f );
 }
 
-UTEST(menu_draw, focus_rect_animates_after_navigation) {
-    vxui_ctx ctx = make_ctx();
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    if ( vxui_menu( &ctx, "m" ) )
-    {
-        vxui_menu_action( &ctx, "Play" );
-        vxui_menu_action( &ctx, "Quit" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_render( &ctx );
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    ctx.input = VXUI_INPUT_DOWN;
-    if ( vxui_menu( &ctx, "m" ) )
-    {
-        vxui_menu_action( &ctx, "Play" );
-        vxui_menu_action( &ctx, "Quit" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_draw_list dl = vxui_render( &ctx );
-
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
-    float row0_y = vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y;
-    float row1_y = vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y;
-    float focus_y = vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y;
-    ASSERT_GT( focus_y, row0_y - 1e-3f );
-    ASSERT_LT( focus_y, row1_y + 1e-3f );
-    ASSERT_GT( focus_y, row0_y + 1e-3f );
-    ASSERT_LT( focus_y, row1_y - 1e-3f );
-}
-
-UTEST(menu_draw, focus_rect_settles_after_navigation) {
-    vxui_ctx ctx = make_ctx();
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    if ( vxui_menu( &ctx, "m" ) )
-    {
-        vxui_menu_action( &ctx, "Play" );
-        vxui_menu_action( &ctx, "Quit" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_render( &ctx );
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    ctx.input = VXUI_INPUT_DOWN;
-    if ( vxui_menu( &ctx, "m" ) )
-    {
-        vxui_menu_action( &ctx, "Play" );
-        vxui_menu_action( &ctx, "Quit" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_render( &ctx );
-
-    for ( int i = 0; i < 120; i++ )
-    {
-        vxui_frame( &ctx, 1.0f / 60.0f );
-        if ( vxui_menu( &ctx, "m" ) )
-        {
-            vxui_menu_action( &ctx, "Play" );
-            vxui_menu_action( &ctx, "Quit" );
-            vxui_menu_end( &ctx );
-        }
-        vxui_render( &ctx );
-    }
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    if ( vxui_menu( &ctx, "m" ) )
-    {
-        vxui_menu_action( &ctx, "Play" );
-        vxui_menu_action( &ctx, "Quit" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_draw_list dl = vxui_render( &ctx );
-
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1e-2f );
-}
-
-UTEST(menu_draw, focus_rect_first_frame_snaps) {
-    vxui_ctx ctx = make_ctx();
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    if ( vxui_menu( &ctx, "m" ) )
-    {
-        vxui_menu_action( &ctx, "Play" );
-        vxui_menu_action( &ctx, "Quit" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_draw_list dl = vxui_render( &ctx );
-
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 1e-3f );
-}
-
-UTEST(menu_draw, focus_spring_per_menu_isolation) {
-    vxui_ctx ctx = make_ctx();
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    if ( vxui_menu( &ctx, "left" ) )
-    {
-        vxui_menu_action( &ctx, "L1" );
-        vxui_menu_action( &ctx, "L2" );
-        vxui_menu_end( &ctx );
-    }
-    if ( vxui_menu( &ctx, "right" ) )
-    {
-        vxui_menu_action( &ctx, "R1" );
-        vxui_menu_action( &ctx, "R2" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_render( &ctx );
-
-    for ( int i = 0; i < 120; i++ )
-    {
-        vxui_frame( &ctx, 1.0f / 60.0f );
-        if ( vxui_menu( &ctx, "left" ) )
-        {
-            vxui_menu_action( &ctx, "L1" );
-            vxui_menu_action( &ctx, "L2" );
-            vxui_menu_end( &ctx );
-        }
-        if ( vxui_menu( &ctx, "right" ) )
-        {
-            vxui_menu_action( &ctx, "R1" );
-            vxui_menu_action( &ctx, "R2" );
-            vxui_menu_end( &ctx );
-        }
-        vxui_render( &ctx );
-    }
-
-    ASSERT_NEAR( ctx.menu_focus_spring[0].x, 0.0f, 1e-2f );
-    ASSERT_NEAR( ctx.menu_focus_spring[1].x, 0.0f, 1e-2f );
-}
-
-UTEST(menu_draw, focus_rect_skips_section_row) {
+UTEST(menu_draw, focus_skips_section_row) {
     vxui_ctx ctx = make_ctx();
 
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -697,9 +611,13 @@ UTEST(menu_draw, focus_rect_skips_section_row) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1e-3f );
-    ASSERT_NE  ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->id,    vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->id );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    const vxui_draw_cmd* play   = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Play" ) );
+    const vxui_draw_cmd* header = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Header" ) );
+    ASSERT_TRUE( play   != nullptr );
+    ASSERT_TRUE( header != nullptr );
+    ASSERT_TRUE( ( play->state   & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_EQ  ( header->state   & VXUI_DRAW_FOCUSED, (uint8_t) 0 );
 }
 
 UTEST(menu_draw, section_then_action_action_below) {
@@ -723,9 +641,9 @@ UTEST(menu_draw, section_then_action_action_below) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 0.0f,                            1e-3f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1.0f * (float) VXUI_ROW_HEIGHT,  1e-3f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 0.0f,                           1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1.0f * (float) VXUI_ROW_HEIGHT, 1e-3f );
 }
 
 UTEST(menu_draw, label_then_action_action_below) {
@@ -749,9 +667,9 @@ UTEST(menu_draw, label_then_action_action_below) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 0.0f,                            1e-3f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1.0f * (float) VXUI_ROW_HEIGHT,  1e-3f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 0.0f,                           1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1.0f * (float) VXUI_ROW_HEIGHT, 1e-3f );
 }
 
 UTEST(menu_draw, interleaved_skip_rows_stack) {
@@ -779,14 +697,14 @@ UTEST(menu_draw, interleaved_skip_rows_stack) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 5 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 0.0f,                            1e-3f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1.0f * (float) VXUI_ROW_HEIGHT,  1e-3f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, 2.0f * (float) VXUI_ROW_HEIGHT,  1e-3f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 3 )->rect.y, 3.0f * (float) VXUI_ROW_HEIGHT,  1e-3f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 4 );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 0.0f,                           1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1.0f * (float) VXUI_ROW_HEIGHT, 1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, 2.0f * (float) VXUI_ROW_HEIGHT, 1e-3f );
+    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 3 )->rect.y, 3.0f * (float) VXUI_ROW_HEIGHT, 1e-3f );
 }
 
-UTEST(menu_draw, focus_rect_y_matches_action_after_section) {
+UTEST(menu_draw, focus_offset_y_matches_action_after_section) {
     vxui_ctx ctx = make_ctx();
 
     for ( int i = 0; i < 60; i++ )
@@ -810,43 +728,47 @@ UTEST(menu_draw, focus_rect_y_matches_action_after_section) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    const vxui_draw_cmd* play = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Play" ) );
+    ASSERT_TRUE( play != nullptr );
+    ASSERT_TRUE( ( play->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_NEAR( play->focus_offset_y, 0.0f, 1e-2f );
+}
+
+UTEST(menu_draw, focus_offset_y_matches_action_between_section_and_label) {
+    vxui_ctx ctx = make_ctx();
+
+    for ( int i = 0; i < 60; i++ )
+    {
+        vxui_frame( &ctx, 1.0f / 60.0f );
+        if ( vxui_menu( &ctx, "m" ) )
+        {
+            vxui_menu_section( &ctx, "Top" );
+            vxui_menu_action ( &ctx, "Play" );
+            vxui_menu_label  ( &ctx, "Note" );
+            vxui_menu_end( &ctx );
+        }
+        vxui_render( &ctx );
+    }
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_section( &ctx, "Top" );
+        vxui_menu_action ( &ctx, "Play" );
+        vxui_menu_label  ( &ctx, "Note" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, (float) VXUI_ROW_HEIGHT, 1e-2f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y,        1e-2f );
+    const vxui_draw_cmd* play = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Play" ) );
+    ASSERT_TRUE( play != nullptr );
+    ASSERT_TRUE( ( play->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_NEAR( play->focus_offset_y, 0.0f, 1e-2f );
 }
 
-UTEST(menu_draw, focus_rect_y_matches_action_between_section_and_label) {
-    vxui_ctx ctx = make_ctx();
-
-    for ( int i = 0; i < 60; i++ )
-    {
-        vxui_frame( &ctx, 1.0f / 60.0f );
-        if ( vxui_menu( &ctx, "m" ) )
-        {
-            vxui_menu_section( &ctx, "Top" );
-            vxui_menu_action ( &ctx, "Play" );
-            vxui_menu_label  ( &ctx, "Note" );
-            vxui_menu_end( &ctx );
-        }
-        vxui_render( &ctx );
-    }
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    if ( vxui_menu( &ctx, "m" ) )
-    {
-        vxui_menu_section( &ctx, "Top" );
-        vxui_menu_action ( &ctx, "Play" );
-        vxui_menu_label  ( &ctx, "Note" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_draw_list dl = vxui_render( &ctx );
-
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 4 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 3 )->rect.y, (float) VXUI_ROW_HEIGHT, 1e-2f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 3 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y,        1e-2f );
-}
-
-UTEST(menu_draw, focus_rect_y_at_third_action_after_two_sections) {
+UTEST(menu_draw, focus_offset_y_at_third_row_after_two_skip_rows) {
     vxui_ctx ctx = make_ctx();
 
     for ( int i = 0; i < 60; i++ )
@@ -872,12 +794,15 @@ UTEST(menu_draw, focus_rect_y_at_third_action_after_two_sections) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 4 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 3 )->rect.y, 2.0f * (float) VXUI_ROW_HEIGHT, 1e-2f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 3 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y,                1e-2f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    const vxui_draw_cmd* play = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Play" ) );
+    ASSERT_TRUE( play != nullptr );
+    ASSERT_TRUE( ( play->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_NEAR( play->focus_offset_y, 0.0f, 1e-2f );
+    ASSERT_NEAR( play->rect.y, 2.0f * (float) VXUI_ROW_HEIGHT, 1e-2f );
 }
 
-UTEST(menu_draw, no_focus_rect_when_no_interactive_rows) {
+UTEST(menu_draw, no_focus_when_no_interactive_rows) {
     vxui_ctx ctx = make_ctx();
 
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -890,6 +815,8 @@ UTEST(menu_draw, no_focus_rect_when_no_interactive_rows) {
     vxui_draw_list dl = vxui_render( &ctx );
 
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    for ( int i = 0; i < 2; i++ )
+        ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, i )->state & VXUI_DRAW_FOCUSED, (uint8_t) 0 );
 }
 
 UTEST(menu_draw, focus_present_on_frame_1_with_leading_section) {
@@ -904,7 +831,7 @@ UTEST(menu_draw, focus_present_on_frame_1_with_leading_section) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
 }
 
@@ -920,7 +847,7 @@ UTEST(menu_draw, focus_present_on_frame_1_with_leading_label) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
 }
 
@@ -953,9 +880,12 @@ UTEST(menu_draw, only_first_interactive_row_gets_promoted_focus) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 4 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 3 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1e-3f );
+    const vxui_draw_cmd* a1 = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "A1" ) );
+    ASSERT_TRUE( a1 != nullptr );
+    ASSERT_TRUE( ( a1->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_NEAR( a1->focus_offset_y, 0.0f, 1e-3f );
 }
 
 UTEST(menu_draw, action_first_does_not_get_promoted) {
@@ -988,7 +918,7 @@ UTEST(menu_draw, promoted_focus_works_with_option) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
 }
 
@@ -1006,7 +936,7 @@ UTEST(menu_draw, promoted_focus_works_with_slider) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
 }
 
@@ -1143,70 +1073,11 @@ UTEST(menu_draw, empty_menu_then_populated_works) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_EQ( ctx.menu_state[0].z, (uint32_t) 2 );
 }
 
-UTEST(menu_draw, empty_menu_no_focus_rect) {
-    vxui_ctx ctx = make_ctx();
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    if ( vxui_menu( &ctx, "m" ) )
-    {
-        vxui_menu_end( &ctx );
-    }
-    vxui_draw_list dl = vxui_render( &ctx );
-
-    for ( int i = 0; i < vxui_draw_count( dl, VXUI_DRAW_RECT ); i++ )
-        ASSERT_NE( vxui_draw_nth( dl, VXUI_DRAW_RECT, i )->id, focus_id( "m" ) );
-}
-
-UTEST(menu_draw, focus_rect_width_matches_row_width) {
-    vxui_ctx ctx = make_ctx();
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    if ( vxui_menu( &ctx, "m" ) )
-    {
-        vxui_menu_action( &ctx, "Play" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_draw_list dl = vxui_render( &ctx );
-
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.z, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.z, 1e-3f );  // rect.z = width (Clay w)
-}
-
-UTEST(menu_draw, focus_rect_x_matches_row_x) {
-    vxui_ctx ctx = make_ctx();
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    if ( vxui_menu( &ctx, "m" ) )
-    {
-        vxui_menu_action( &ctx, "Play" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_draw_list dl = vxui_render( &ctx );
-
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.x, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.x, 1e-3f );
-}
-
-UTEST(menu_draw, focus_rect_height_matches_row_height) {
-    vxui_ctx ctx = make_ctx();
-
-    vxui_frame( &ctx, 1.0f / 60.0f );
-    if ( vxui_menu( &ctx, "m" ) )
-    {
-        vxui_menu_action( &ctx, "Play" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_draw_list dl = vxui_render( &ctx );
-
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.w, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.w, 1e-3f );
-}
-
-UTEST(menu_draw, focus_rect_width_tracks_wider_label) {
+UTEST(menu_draw, rows_share_same_width_when_uniform_labels) {
     vxui_ctx ctx = make_ctx();
 
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -1218,9 +1089,8 @@ UTEST(menu_draw, focus_rect_width_tracks_wider_label) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.z, vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.z, 1e-3f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.z, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.z, 1e-3f );
 }
 
 UTEST(menu_draw, distinct_menu_names_get_distinct_slots) {
@@ -1268,6 +1138,46 @@ UTEST(menu_draw, menu_state_persists_by_hash_id) {
     ASSERT_EQ( ctx.menu_count, 1 );
     ASSERT_EQ( ctx.menu_state[0].x, vxui_hash( "m" ) );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+}
+
+UTEST(menu_draw, focus_spring_per_menu_isolation) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "left" ) )
+    {
+        vxui_menu_action( &ctx, "L1" );
+        vxui_menu_action( &ctx, "L2" );
+        vxui_menu_end( &ctx );
+    }
+    if ( vxui_menu( &ctx, "right" ) )
+    {
+        vxui_menu_action( &ctx, "R1" );
+        vxui_menu_action( &ctx, "R2" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    for ( int i = 0; i < 120; i++ )
+    {
+        vxui_frame( &ctx, 1.0f / 60.0f );
+        if ( vxui_menu( &ctx, "left" ) )
+        {
+            vxui_menu_action( &ctx, "L1" );
+            vxui_menu_action( &ctx, "L2" );
+            vxui_menu_end( &ctx );
+        }
+        if ( vxui_menu( &ctx, "right" ) )
+        {
+            vxui_menu_action( &ctx, "R1" );
+            vxui_menu_action( &ctx, "R2" );
+            vxui_menu_end( &ctx );
+        }
+        vxui_render( &ctx );
+    }
+
+    ASSERT_NEAR( ctx.menu_focus_spring[0].x, 0.0f, 1e-2f );
+    ASSERT_NEAR( ctx.menu_focus_spring[1].x, 0.0f, 1e-2f );
 }
 
 UTEST(menu_draw, two_menus_independent_focus) {

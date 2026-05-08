@@ -218,6 +218,127 @@ UTEST(render_data, two_menus_each_focused_row_has_focused_bit) {
     ASSERT_TRUE( ( r->state & VXUI_DRAW_FOCUSED ) != 0 );
 }
 
+UTEST(render_data, focused_row_carries_focus_offset_zero_on_snap) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Play" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_TRUE( ( c->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_NEAR( c->focus_offset_y, 0.0f, 1e-3f );
+}
+
+UTEST(render_data, unfocused_rows_focus_offset_zero) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Quit" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_EQ  ( c->state & VXUI_DRAW_FOCUSED, (uint8_t) 0 );
+    ASSERT_NEAR( c->focus_offset_y, 0.0f, 1e-3f );
+}
+
+UTEST(render_data, text_cmd_focus_offset_zero) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    int n = vxui_draw_count( dl, VXUI_DRAW_TEXT );
+    for ( int i = 0; i < n; i++ )
+        ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->focus_offset_y, 0.0f, 1e-3f );
+}
+
+UTEST(render_data, focus_offset_nonzero_after_focus_move) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    ctx.input = VXUI_INPUT_DOWN;
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Quit" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_TRUE( ( c->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_LT( c->focus_offset_y, -(float) VXUI_ROW_HEIGHT * 0.1f );
+}
+
+UTEST(render_data, focus_offset_settles_toward_zero) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    ctx.input = VXUI_INPUT_DOWN;
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_action( &ctx, "Quit" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_render( &ctx );
+
+    float prev_abs = (float) VXUI_ROW_HEIGHT;
+    for ( int i = 0; i < 10; i++ )
+    {
+        vxui_frame( &ctx, 1.0f / 60.0f );
+        if ( vxui_menu( &ctx, "m" ) )
+        {
+            vxui_menu_action( &ctx, "Play" );
+            vxui_menu_action( &ctx, "Quit" );
+            vxui_menu_end( &ctx );
+        }
+        vxui_draw_list dl = vxui_render( &ctx );
+
+        const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Quit" ) );
+        ASSERT_TRUE( c != nullptr );
+        float abs_offset = c->focus_offset_y < 0.0f ? -c->focus_offset_y : c->focus_offset_y;
+        ASSERT_LT( abs_offset, prev_abs + 1e-3f );
+        prev_abs = abs_offset;
+    }
+}
+
 UTEST(render_data, same_label_two_menus_only_focused_one_has_bit) {
     vxui_ctx ctx = make_ctx();
 

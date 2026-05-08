@@ -42,12 +42,6 @@ static uint32_t row_id( const char* menu, const char* label )
     return Clay__HashString( cs, vxui_hash( menu ) ).id;
 }
 
-static uint32_t focus_id( const char* menu )
-{
-    Clay_String fs = CLAY_STRING( "focus" );
-    return Clay__HashString( fs, vxui_hash( menu ) ).id;
-}
-
 UTEST(menu_text, longer_label_yields_wider_row) {
     vxui_ctx ctx = make_ctx();
 
@@ -67,7 +61,7 @@ UTEST(menu_text, longer_label_yields_wider_row) {
     ASSERT_LT( hi->rect.z, long_->rect.z );
 }
 
-UTEST(menu_text, focus_rect_width_matches_focused_row) {
+UTEST(menu_text, focused_row_has_focused_bit_with_font) {
     vxui_ctx ctx = make_ctx();
 
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -79,14 +73,12 @@ UTEST(menu_text, focus_rect_width_matches_focused_row) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    const vxui_draw_cmd* play  = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "test", "Play" ) );
-    const vxui_draw_cmd* focus = vxui_draw_find( dl, VXUI_DRAW_RECT, focus_id( "test" ) );
-    ASSERT_TRUE( play  != nullptr );
-    ASSERT_TRUE( focus != nullptr );
-    ASSERT_NEAR( focus->rect.z, play->rect.z, 0.5f );
+    const vxui_draw_cmd* play = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "test", "Play" ) );
+    ASSERT_TRUE( play != nullptr );
+    ASSERT_TRUE( ( play->state & VXUI_DRAW_FOCUSED ) != 0 );
 }
 
-UTEST(menu_text, focus_rect_tracks_focus_change) {
+UTEST(menu_text, focused_bit_moves_with_navigation) {
     vxui_ctx ctx = make_ctx();
 
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -108,11 +100,12 @@ UTEST(menu_text, focus_rect_tracks_focus_change) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    const vxui_draw_cmd* row1  = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "test", "Continue Playing" ) );
-    const vxui_draw_cmd* focus = vxui_draw_find( dl, VXUI_DRAW_RECT, focus_id( "test" ) );
-    ASSERT_TRUE( row1  != nullptr );
-    ASSERT_TRUE( focus != nullptr );
-    ASSERT_NEAR( focus->rect.z, row1->rect.z, 0.5f );
+    const vxui_draw_cmd* cp   = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "test", "Continue Playing" ) );
+    const vxui_draw_cmd* play = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "test", "Play" ) );
+    ASSERT_TRUE( cp   != nullptr );
+    ASSERT_TRUE( play != nullptr );
+    ASSERT_TRUE( ( cp->state   & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_EQ  ( play->state   & VXUI_DRAW_FOCUSED, (uint8_t) 0 );
 }
 
 UTEST(menu_text, no_font_loaded_emits_zero_width_rows) {

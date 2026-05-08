@@ -101,27 +101,29 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_RECTANGLE )
         {
             vxui_draw_cmd& out = ctx->draw_buf[count++];
-            out.id       = cmd->id;
-            out.type     = VXUI_DRAW_RECT;
-            out.state    = 0;
-            out.rect     = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
-            out.text     = nullptr;
-            out.text_len = 0;
-            out.font     = 0;
-            out.font_px  = 0;
+            out.id             = cmd->id;
+            out.type           = VXUI_DRAW_RECT;
+            out.state          = 0;
+            out.rect           = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+            out.focus_offset_y = 0;
+            out.text           = nullptr;
+            out.text_len       = 0;
+            out.font           = 0;
+            out.font_px        = 0;
         }
         else if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT )
         {
             const Clay_TextRenderData& t = cmd->renderData.text;
             vxui_draw_cmd& out = ctx->draw_buf[count++];
-            out.id       = cmd->id;
-            out.type     = VXUI_DRAW_TEXT;
-            out.state    = 0;
-            out.rect     = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
-            out.text     = t.stringContents.chars;     // points into ctx->text_buf, valid until next vxui_frame
-            out.text_len = t.stringContents.length;
-            out.font     = t.fontId;
-            out.font_px  = t.fontSize;
+            out.id             = cmd->id;
+            out.type           = VXUI_DRAW_TEXT;
+            out.state          = 0;
+            out.rect           = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+            out.focus_offset_y = 0;
+            out.text           = t.stringContents.chars;     // points into ctx->text_buf, valid until next vxui_frame
+            out.text_len       = t.stringContents.length;
+            out.font           = t.fontId;
+            out.font_px        = t.fontSize;
         }
     }
 
@@ -131,7 +133,10 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         if ( c.type != VXUI_DRAW_RECT ) continue;
         for ( int j = 0; j < ctx->focused_row_count; j++ )
         {
-            if ( c.id == ctx->focused_row_ids[j] ) { c.state |= VXUI_DRAW_FOCUSED; break; }
+            if ( c.id != ctx->focused_row_ids[j] ) continue;
+            c.state          |= VXUI_DRAW_FOCUSED;
+            c.focus_offset_y  = ctx->focus_offsets[j];
+            break;
         }
         for ( int j = 0; j < ctx->pressed_row_count; j++ )
         {
@@ -583,17 +588,14 @@ void vxui_menu_end( vxui_ctx* ctx )
 
     if ( ctx->active_menu_focus_id != 0 )
     {
-        if ( ctx->focused_row_count < VXUI_MAX_MENUS )
-            ctx->focused_row_ids[ctx->focused_row_count++] = ctx->active_menu_focus_id;
-
         glm::uvec4& m       = ctx->menu_state[ctx->active_menu];
         glm::vec4&  spring  = ctx->menu_focus_spring[ctx->active_menu];
         float& offset_y     = spring.x;
         float& velocity_y   = spring.y;
         float& prev_row_f   = spring.z;
 
-        // On focus change, jump offset so the rect stays at the previous row,
-        // then spring decays it back to 0 (centered on the new focused row).
+        // On focus change, snap offset to keep the visual displacement at the
+        // previous row, then spring it back to 0.
         float curr_row_f = (float) m.y;
         if ( prev_row_f >= 0.0f && prev_row_f != curr_row_f )
             offset_y += ( prev_row_f - curr_row_f ) * (float) VXUI_ROW_HEIGHT;
@@ -604,23 +606,12 @@ void vxui_menu_end( vxui_ctx* ctx )
         offset_y   = s.x;
         velocity_y = s.y;
 
-        Clay_String      cs   = CLAY_STRING( "focus" );
-        Clay_ElementId   eid  = Clay__HashString( cs, m.x );
-
-        Clay__OpenElementWithId( eid );
-
-        Clay_ElementDeclaration decl       = {};
-        decl.layout.sizing.width           = CLAY_SIZING_GROW( 0 );
-        decl.layout.sizing.height          = CLAY_SIZING_FIXED( VXUI_ROW_HEIGHT );
-        decl.backgroundColor               = { 0, 0, 0, 1 };
-        decl.floating.attachTo             = CLAY_ATTACH_TO_ELEMENT_WITH_ID;
-        decl.floating.parentId             = ctx->active_menu_focus_id;
-        decl.floating.attachPoints.element = CLAY_ATTACH_POINT_LEFT_TOP;
-        decl.floating.attachPoints.parent  = CLAY_ATTACH_POINT_LEFT_TOP;
-        decl.floating.offset               = { 0.0f, offset_y };
-
-        Clay__ConfigureOpenElement( decl );
-        Clay__CloseElement();
+        if ( ctx->focused_row_count < VXUI_MAX_MENUS )
+        {
+            ctx->focused_row_ids[ctx->focused_row_count] = ctx->active_menu_focus_id;
+            ctx->focus_offsets  [ctx->focused_row_count] = offset_y;
+            ctx->focused_row_count++;
+        }
     }
 
     Clay__CloseElement();

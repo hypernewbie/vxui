@@ -101,12 +101,12 @@ static int title_frame( vxui_ctx* ctx, uint32_t input )
     return chosen;
 }
 
-UTEST(game_title, has_seven_rows_plus_focus) {
+UTEST(game_title, has_seven_rows) {
     vxui_ctx ctx = make_ctx();
     title_frame( &ctx, 0 );
     vxui_draw_list dl = ctx.draw_list;
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 8 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 7 );
 }
 
 UTEST(game_title, all_seven_rows_have_correct_ids) {
@@ -114,7 +114,7 @@ UTEST(game_title, all_seven_rows_have_correct_ids) {
     title_frame( &ctx, 0 );
     vxui_draw_list dl = ctx.draw_list;
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 8 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 7 );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->id, row_id( "title", "Play"         ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->id, row_id( "title", "Missions"     ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->id, row_id( "title", "Stage Select" ) );
@@ -122,7 +122,6 @@ UTEST(game_title, all_seven_rows_have_correct_ids) {
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 4 )->id, row_id( "title", "Unlocks"      ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 5 )->id, row_id( "title", "Extras"       ) );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 6 )->id, row_id( "title", "Quit"         ) );
-    ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 7 )->id, focus_id( "title"               ) );
 }
 
 UTEST(game_title, all_rows_stack_at_row_height_intervals) {
@@ -130,7 +129,7 @@ UTEST(game_title, all_rows_stack_at_row_height_intervals) {
     title_frame( &ctx, 0 );
     vxui_draw_list dl = ctx.draw_list;
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 8 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 7 );
     for ( int i = 0; i < 7; i++ )
         ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, i )->rect.y, (float) ( i * VXUI_ROW_HEIGHT ), 1e-3f );
 }
@@ -140,7 +139,7 @@ UTEST(game_title, all_rows_have_fixed_height) {
     title_frame( &ctx, 0 );
     vxui_draw_list dl = ctx.draw_list;
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 8 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 7 );
     for ( int i = 0; i < 7; i++ )
         ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, i )->rect.w, (float) VXUI_ROW_HEIGHT, 1e-3f );
 }
@@ -192,8 +191,11 @@ UTEST(game_title, focus_settles_on_quit_after_navigation) {
         title_frame( &ctx, 0 );
 
     vxui_draw_list dl = ctx.draw_list;
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 8 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 7 )->rect.y, 6.0f * (float) VXUI_ROW_HEIGHT, 1e-2f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 7 );
+    const vxui_draw_cmd* quit = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "title", "Quit" ) );
+    ASSERT_TRUE( quit != nullptr );
+    ASSERT_TRUE( ( quit->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_NEAR( quit->focus_offset_y, 0.0f, 1e-2f );
 }
 
 static const char* s_diff_keys [] = { "Easy", "Normal", "Hard" };
@@ -227,13 +229,13 @@ static void gameplay_frame( vxui_ctx* ctx, gameplay_state* s, uint32_t input )
     ctx->input = 0;   // release so next call registers as a fresh edge
 }
 
-UTEST(game_gameplay, six_rows_plus_focus) {
+UTEST(game_gameplay, has_six_rows) {
     vxui_ctx ctx = make_ctx();
     gameplay_state s;
     gameplay_frame( &ctx, &s, 0 );
 
     vxui_draw_list dl = ctx.draw_list;
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 7 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 6 );
 }
 
 UTEST(game_gameplay, focus_starts_on_first_interactive_row) {
@@ -330,12 +332,12 @@ UTEST(game_gameplay, all_six_rows_stack_vertically) {
     gameplay_frame( &ctx, &s, 0 );
     vxui_draw_list dl = ctx.draw_list;
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 7 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 6 );
     for ( int i = 0; i < 6; i++ )
         ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, i )->rect.y, (float) ( i * VXUI_ROW_HEIGHT ), 1e-3f );
 }
 
-UTEST(game_gameplay, focus_rect_settles_on_apply_after_full_navigation) {
+UTEST(game_gameplay, focus_settles_on_apply_after_full_navigation) {
     vxui_ctx ctx = make_ctx();
     gameplay_state s;
     gameplay_frame( &ctx, &s, 0 );
@@ -347,8 +349,11 @@ UTEST(game_gameplay, focus_rect_settles_on_apply_after_full_navigation) {
         gameplay_frame( &ctx, &s, 0 );
 
     vxui_draw_list dl = ctx.draw_list;
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 7 );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 6 )->rect.y, 5.0f * (float) VXUI_ROW_HEIGHT, 1e-2f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 6 );
+    const vxui_draw_cmd* apply = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "gameplay", "Apply" ) );
+    ASSERT_TRUE( apply != nullptr );
+    ASSERT_TRUE( ( apply->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_NEAR( apply->focus_offset_y, 0.0f, 1e-2f );
 }
 
 UTEST(plot, title_menu_default_focus) {

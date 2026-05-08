@@ -76,10 +76,11 @@ struct vxui_div_cfg
 struct vxui_draw_cmd
 {
     uint32_t    id;
-    uint8_t     type;       // VXUI_DRAW_RECT | VXUI_DRAW_TEXT
-    uint8_t     state;      // VXUI_DRAW_FOCUSED | _PRESSED | _DISABLED | _HOVERED
-    glm::vec4   rect;       // x, y, w, h
-    const char* text;       // null when type != TEXT; valid until next vxui_frame
+    uint8_t     type;            // VXUI_DRAW_RECT | VXUI_DRAW_TEXT
+    uint8_t     state;           // VXUI_DRAW_FOCUSED | _PRESSED | _DISABLED | _HOVERED
+    glm::vec4   rect;            // x, y, w, h
+    float       focus_offset_y;  // VXUI-owned spring; nonzero only on FOCUSED RECT cmds
+    const char* text;            // null when type != TEXT; valid until next vxui_frame
     int32_t     text_len;
     uint16_t    font;
     uint16_t    font_px;
@@ -120,6 +121,7 @@ struct vxui_ctx
     uint32_t active_menu_focus_id = 0;   // Clay id of focused row this frame, 0 = none
 
     uint32_t focused_row_ids[VXUI_MAX_MENUS] = {};   // per-frame, count = focused_row_count
+    float    focus_offsets  [VXUI_MAX_MENUS] = {};   // parallel to focused_row_ids
     int      focused_row_count               = 0;
     uint32_t pressed_row_ids[VXUI_MAX_MENUS] = {};   // per-frame, count = pressed_row_count
     int      pressed_row_count               = 0;

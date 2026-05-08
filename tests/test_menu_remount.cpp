@@ -5,6 +5,12 @@
 
 static uint8_t s_clay_mem[16 * 1024 * 1024];
 
+static uint32_t row_id( const char* menu, const char* label )
+{
+    Clay_String cs = { false, (int32_t) strlen( label ), label };
+    return Clay__HashString( cs, vxui_hash( menu ) ).id;
+}
+
 static vxui_ctx make_ctx()
 {
     vxui_ctx ctx = {};
@@ -94,7 +100,7 @@ UTEST(menu_remount, no_snap_when_continuously_active) {
     ASSERT_NEAR( ctx.menu_focus_spring[0].z, prev_z, 1e-3f );
 }
 
-UTEST(menu_remount, focus_rect_appears_at_correct_row_after_remount) {
+UTEST(menu_remount, focus_offset_snaps_to_zero_after_remount) {
     vxui_ctx ctx = make_ctx();
 
     emit_menu( &ctx, 0 );
@@ -105,10 +111,11 @@ UTEST(menu_remount, focus_rect_appears_at_correct_row_after_remount) {
     emit_menu( &ctx, 0 );
     vxui_draw_list dl = ctx.draw_list;
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
-    // Focus rect should be at row 1 (Quit), spring snapped not animating.
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y,
-                 vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 1e-3f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    const vxui_draw_cmd* quit = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Quit" ) );
+    ASSERT_TRUE( quit != nullptr );
+    ASSERT_TRUE( ( quit->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_NEAR( quit->focus_offset_y, 0.0f, 1e-3f );
 }
 
 UTEST(menu_remount, two_menus_independent_remount_state) {

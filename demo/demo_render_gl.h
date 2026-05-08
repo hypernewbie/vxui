@@ -258,16 +258,22 @@ static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, const vxui_draw_list
     int rect_n = vxui_draw_count( dl, VXUI_DRAW_RECT );
     if ( rect_n <= 0 ) return;
 
-    // TODO: per-rect colour from ctx (or id introspection). Phase 3 keeps the
-    // Phase 1 hack: last rect = focus, rest = row.
     float row_colour  [4] = { 0.15f, 0.15f, 0.18f, 1.0f };
     float focus_colour[4] = { 0.30f, 0.55f, 0.85f, 1.0f };
+    float press_colour[4] = { 0.45f, 0.70f, 1.00f, 1.0f };
 
     for ( int i = 0; i < rect_n; i++ )
     {
         const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
-        const float* col = ( i == rect_n - 1 ) ? focus_colour : row_colour;
-        vxui_gl_push_rect_dcall( fdl, c->rect.x, c->rect.y, c->rect.z, c->rect.w, w, h, col );
+        vxui_gl_push_rect_dcall( fdl, c->rect.x, c->rect.y, c->rect.z, c->rect.w, w, h, row_colour );
+    }
+
+    for ( int i = 0; i < rect_n; i++ )
+    {
+        const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
+        if ( !( c->state & VXUI_DRAW_FOCUSED ) ) continue;
+        const float* col = ( c->state & VXUI_DRAW_PRESSED ) ? press_colour : focus_colour;
+        vxui_gl_push_rect_dcall( fdl, c->rect.x, c->rect.y + c->focus_offset_y, c->rect.z, c->rect.w, w, h, col );
     }
 }
 

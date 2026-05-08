@@ -18,12 +18,6 @@ static uint32_t row_id( const char* menu, const char* label )
     return Clay__HashString( cs, vxui_hash( menu ) ).id;
 }
 
-static uint32_t focus_id( const char* menu )
-{
-    Clay_String cs = CLAY_STRING( "focus" );
-    return Clay__HashString( cs, vxui_hash( menu ) ).id;
-}
-
 UTEST(menu_in_div, rows_offset_by_div_padding) {
     vxui_ctx ctx = make_ctx();
 
@@ -43,14 +37,14 @@ UTEST(menu_in_div, rows_offset_by_div_padding) {
     vxui_div_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.x, 50.0f, 1e-3f );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 30.0f, 1e-3f );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.x, 50.0f, 1e-3f );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, 30.0f + (float) VXUI_ROW_HEIGHT, 1e-3f );
 }
 
-UTEST(menu_in_div, focus_rect_attaches_correctly_in_div) {
+UTEST(menu_in_div, focused_row_positioned_correctly_in_div) {
     vxui_ctx ctx = make_ctx();
 
     vxui_div_cfg outer = {};
@@ -69,10 +63,12 @@ UTEST(menu_in_div, focus_rect_attaches_correctly_in_div) {
     vxui_div_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
-    ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->id, focus_id( "m" ) );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.x, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.x, 1e-3f );
-    ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 2 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 1e-3f );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    const vxui_draw_cmd* play = vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Play" ) );
+    ASSERT_TRUE( play != nullptr );
+    ASSERT_TRUE( ( play->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_NEAR( play->rect.x, 100.0f, 1e-3f );
+    ASSERT_NEAR( play->rect.y, 80.0f,  1e-3f );
 }
 
 static const vxui_draw_cmd* find_id( const vxui_draw_list& dl, uint32_t id )
@@ -102,14 +98,14 @@ UTEST(menu_in_div, two_menus_stack_in_column_div_with_gap) {
     vxui_div_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 4 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
 
     const vxui_draw_cmd* a = find_id( dl, row_id( "top",    "A" ) );
     const vxui_draw_cmd* b = find_id( dl, row_id( "bottom", "B" ) );
     ASSERT_TRUE( a != nullptr );
     ASSERT_TRUE( b != nullptr );
-    ASSERT_TRUE( find_id( dl, focus_id( "top"    ) ) != nullptr );
-    ASSERT_TRUE( find_id( dl, focus_id( "bottom" ) ) != nullptr );
+    ASSERT_TRUE( ( a->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_TRUE( ( b->state & VXUI_DRAW_FOCUSED ) != 0 );
 
     ASSERT_NEAR( a->rect.y, 0.0f,                            1e-3f );
     ASSERT_NEAR( b->rect.y, (float) VXUI_ROW_HEIGHT + 16.0f, 1e-3f );
@@ -140,7 +136,7 @@ UTEST(menu_in_div, menu_in_nested_divs_accumulates_padding) {
     vxui_div_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.x, 25.0f, 1e-3f );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y, 17.0f, 1e-3f );
 }
@@ -162,7 +158,7 @@ UTEST(menu_in_div, menu_inside_row_div_still_stacks_vertically) {
     vxui_div_end( &ctx );
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 3 );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.x, vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.x,                            1e-3f );
     ASSERT_NEAR( vxui_draw_nth( dl, VXUI_DRAW_RECT, 1 )->rect.y, vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 )->rect.y + (float) VXUI_ROW_HEIGHT,  1e-3f );
 }
