@@ -236,8 +236,8 @@ UTEST(render_data, no_resolver_render_block_zero) {
         ASSERT_EQ( r.texture_id,       (uint32_t) 0 );
         ASSERT_EQ( r.flags,            (uint32_t) 0 );
         ASSERT_EQ( r.outline_thickness, 0.0f );
-        ASSERT_EQ( r.colour[0],         0.0f );
-        ASSERT_EQ( r.params[7],         0.0f );
+        ASSERT_EQ( r.colour.x,   0.0f );
+        ASSERT_EQ( r.params[7], 0.0f );
     }
 }
 
@@ -332,9 +332,9 @@ UTEST(render_data, resolver_output_appears_in_packet_unchanged) {
             out->texture_id       = 42;
             out->flags            = 7;
             out->outline_thickness = 3.14f;
-            out->colour[0]        = 0.11f;
-            out->outline_colour[3] = 0.99f;
-            out->uv[2]            = 0.75f;
+            out->colour.x         = 0.11f;
+            out->outline_colour.w = 0.99f;
+            out->uv.z             = 0.75f;
             out->params[7]        = 0.5f;
         },
         nullptr );
@@ -353,9 +353,9 @@ UTEST(render_data, resolver_output_appears_in_packet_unchanged) {
     ASSERT_EQ  ( c->render.texture_id,       (uint32_t) 42 );
     ASSERT_EQ  ( c->render.flags,            (uint32_t) 7 );
     ASSERT_NEAR( c->render.outline_thickness, 3.14f,  1e-5f );
-    ASSERT_NEAR( c->render.colour[0],         0.11f,  1e-5f );
-    ASSERT_NEAR( c->render.outline_colour[3], 0.99f,  1e-5f );
-    ASSERT_NEAR( c->render.uv[2],             0.75f,  1e-5f );
+    ASSERT_NEAR( c->render.colour.x,         0.11f, 1e-5f );
+    ASSERT_NEAR( c->render.outline_colour.w, 0.99f, 1e-5f );
+    ASSERT_NEAR( c->render.uv.z,             0.75f, 1e-5f );
     ASSERT_NEAR( c->render.params[7],         0.5f,   1e-5f );
 }
 
@@ -419,7 +419,7 @@ UTEST(render_data, text_cmd_render_zero_when_resolver_skips_text) {
         []( const vxui_draw_cmd* c, vxui_render_data* out, void* )
         {
             if ( c->type != VXUI_DRAW_RECT ) return;
-            out->colour[0] = 1.0f;
+            out->colour.x = 1.0f;
         },
         nullptr );
 
@@ -436,8 +436,8 @@ UTEST(render_data, text_cmd_render_zero_when_resolver_skips_text) {
     {
         const vxui_render_data& r = vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->render;
         ASSERT_EQ( r.material_id, (uint32_t) 0 );
-        ASSERT_EQ( r.colour[0],    0.0f );
-        ASSERT_EQ( r.params[7],    0.0f );
+        ASSERT_EQ( r.colour.x,    0.0f );
+        ASSERT_EQ( r.params[7],   0.0f );
     }
 }
 

@@ -75,15 +75,15 @@ struct vxui_div_cfg
 
 struct vxui_render_data
 {
-    uint32_t material_id;
-    uint32_t texture_id;
-    uint32_t flags;
-    float    outline_thickness;
+    uint32_t  material_id;
+    uint32_t  texture_id;
+    uint32_t  flags;
+    float     outline_thickness;
 
-    float colour        [ 4 ];
-    float outline_colour[ 4 ];
-    float uv            [ 4 ];
-    float params        [ 8 ];
+    glm::vec4 colour;
+    glm::vec4 outline_colour;
+    glm::vec4 uv;
+    float     params[ 8 ];
 };
 
 struct vxui_draw_cmd

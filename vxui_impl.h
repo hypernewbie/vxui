@@ -147,7 +147,7 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
     for ( int i = 0; i < count; i++ )
     {
         vxui_draw_cmd& c = ctx->draw_buf[i];
-        c.render = {};
+        memset( &c.render, 0, sizeof( c.render ) );
         if ( ctx->render_data_fn )
             ctx->render_data_fn( &c, &c.render, ctx->render_data_userdata );
     }

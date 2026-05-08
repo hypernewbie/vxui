@@ -221,7 +221,7 @@ void vxui_gl_init( vxui_ctx* ctx )
 // Push a quad into VEFC's drawlist as a PASS_RECT dcall. Verts are normalized
 // 0..1 with y up (matches vs_draw_text). VXUI rects come in as pixel y-down.
 static void vxui_gl_push_rect_dcall( ve_fontcache_drawlist* dl, float x, float y, float w, float h,
-                                     float fb_w, float fb_h, const float colour[4] )
+                                     float fb_w, float fb_h, const glm::vec4& colour )
 {
     float x0 = x / fb_w;
     float x1 = ( x + w ) / fb_w;
@@ -246,10 +246,10 @@ static void vxui_gl_push_rect_dcall( ve_fontcache_drawlist* dl, float x, float y
     dcall.pass        = VXUI_GL_PASS_RECT;
     dcall.start_index = idx_start;
     dcall.end_index   = (uint32_t) dl->indices.size();
-    dcall.colour[0] = colour[0];
-    dcall.colour[1] = colour[1];
-    dcall.colour[2] = colour[2];
-    dcall.colour[3] = colour[3];
+    dcall.colour[0]   = colour.x;
+    dcall.colour[1]   = colour.y;
+    dcall.colour[2]   = colour.z;
+    dcall.colour[3]   = colour.w;
     dl->dcalls.push_back( dcall );
 }
 

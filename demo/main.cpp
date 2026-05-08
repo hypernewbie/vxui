@@ -38,17 +38,9 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
 {
     if ( c->type != VXUI_DRAW_RECT ) return;
 
-    if ( c->state & VXUI_DRAW_PRESSED )
-    {
-        out->colour[0] = 0.45f; out->colour[1] = 0.70f; out->colour[2] = 1.00f; out->colour[3] = 1.0f;
-        return;
-    }
-    if ( c->state & VXUI_DRAW_FOCUSED )
-    {
-        out->colour[0] = 0.30f; out->colour[1] = 0.55f; out->colour[2] = 0.85f; out->colour[3] = 1.0f;
-        return;
-    }
-    out->colour[0] = 0.15f; out->colour[1] = 0.15f; out->colour[2] = 0.18f; out->colour[3] = 1.0f;
+    if ( c->state & VXUI_DRAW_PRESSED )  { out->colour = { 0.45f, 0.70f, 1.00f, 1.0f }; return; }
+    if ( c->state & VXUI_DRAW_FOCUSED )  { out->colour = { 0.30f, 0.55f, 0.85f, 1.0f }; return; }
+    out->colour = { 0.15f, 0.15f, 0.18f, 1.0f };
 }
 
 int main( int /*argc*/, char** /*argv*/ )
