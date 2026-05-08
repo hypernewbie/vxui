@@ -126,6 +126,23 @@ if(VXUI_BUILD_TESTS)
     target_link_libraries(test_vefc_backend PRIVATE vxui)
     add_test(NAME test_vefc_backend COMMAND test_vefc_backend)
 
+    if(VXUI_BUILD_DEMO)
+        add_executable(test_vefc_backend_gl tests/test_vefc_backend_gl.cpp)
+        target_include_directories(test_vefc_backend_gl PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/vefc/demo/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/demo
+        )
+        target_link_libraries(test_vefc_backend_gl PRIVATE vxui glfw)
+        if(WIN32)
+            target_link_libraries(test_vefc_backend_gl PRIVATE opengl32)
+        elseif(APPLE)
+            target_link_libraries(test_vefc_backend_gl PRIVATE OpenGL::GL)
+        elseif(UNIX)
+            target_link_libraries(test_vefc_backend_gl PRIVATE OpenGL::GL)
+        endif()
+        add_test(NAME test_vefc_backend_gl COMMAND test_vefc_backend_gl)
+    endif()
+
     add_executable(test_plot tests/test_plot.cpp)
     target_link_libraries(test_plot PRIVATE vxui)
     add_test(NAME test_plot COMMAND test_plot WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
