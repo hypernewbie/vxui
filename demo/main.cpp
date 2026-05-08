@@ -81,6 +81,20 @@ int main( int /*argc*/, char** /*argv*/ )
 
     vxui_gl_init( &ctx );
 
+    static const struct { int key; const char* action; } s_keymap[] = {
+        { GLFW_KEY_UP,     "up"      },
+        { GLFW_KEY_W,      "up"      },
+        { GLFW_KEY_DOWN,   "down"    },
+        { GLFW_KEY_S,      "down"    },
+        { GLFW_KEY_LEFT,   "left"    },
+        { GLFW_KEY_A,      "left"    },
+        { GLFW_KEY_RIGHT,  "right"   },
+        { GLFW_KEY_D,      "right"   },
+        { GLFW_KEY_ENTER,  "confirm" },
+        { GLFW_KEY_SPACE,  "confirm" },
+        { GLFW_KEY_ESCAPE, "cancel"  },
+    };
+
     int frame = 0;
     while ( !glfwWindowShouldClose( window ) )
     {
@@ -92,11 +106,16 @@ int main( int /*argc*/, char** /*argv*/ )
         glClear     ( GL_COLOR_BUFFER_BIT );
 
         vxui_frame( &ctx, 1.0f / 60.0f, (float) fb_w, (float) fb_h );
+
+        for ( auto& m : s_keymap )
+            if ( glfwGetKey( window, m.key ) == GLFW_PRESS )
+                vxui_input( &ctx, m.action );
+
         if ( vxui_menu( &ctx, "main" ) )
         {
-            vxui_menu_action( &ctx, "Play" );
-            vxui_menu_action( &ctx, "Options" );
-            vxui_menu_action( &ctx, "Quit" );
+            if ( vxui_menu_action( &ctx, "Play"    ) ) printf( "Play fired\n" );
+            if ( vxui_menu_action( &ctx, "Options" ) ) printf( "Options fired\n" );
+            if ( vxui_menu_action( &ctx, "Quit"    ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
             vxui_menu_end( &ctx );
         }
         vxui_draw_list dl = vxui_render( &ctx );
