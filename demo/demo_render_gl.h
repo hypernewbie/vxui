@@ -22,6 +22,14 @@ uint32_t vxui_gl_create_chevron_texture();
 
 #define VXUI_GL_PASS_RECT          8
 #define VXUI_GL_PASS_RECT_TEXTURED 9
+#define VXUI_GL_PASS_CRT           10
+#define VXUI_GL_MAX_MATERIAL_DCALLS 64
+
+struct vxui_gl_material_data
+{
+    float    params[8];
+    uint32_t flags;
+};
 
 struct vxui_gl_state
 {
@@ -31,8 +39,12 @@ struct vxui_gl_state
     GLuint shader_draw_text     = 0;
     GLuint shader_rect          = 0;
     GLuint shader_rect_textured = 0;
+    GLuint shader_crt           = 0;
     GLuint fbo[2]               = { 0, 0 };
     GLuint fbo_texture[2]       = { 0, 0 };
+
+    vxui_gl_material_data material_data[VXUI_GL_MAX_MATERIAL_DCALLS] = {};
+    int                   material_data_count                         = 0;
 };
 
 // VEFC text shaders — byte-identical to vefc/demo/demo.cpp.
@@ -131,6 +143,33 @@ uniform sampler2D src_texture;
 void main( void ) {
     float a = texture( src_texture, uv ).x;
     fragc = vec4( colour.xyz, colour.a * a );
+}
+)";
+
+static const char* s_vxui_gl_crt_fs = R"(#version 330 core
+in vec2 uv;
+out vec4 fragc;
+uniform vec4 colour;
+uniform vec4 mparams;
+uniform uint mflags;
+void main( void ) {
+    vec2 p = uv * 2.0 - 1.0;
+    if ( ( mflags & 2u ) != 0u ) p *= 1.0 + mparams.z * dot( p, p );
+    if ( abs( p.x ) > 1.0 || abs( p.y ) > 1.0 ) discard;
+    vec2 puv = ( p + 1.0 ) * 0.5;
+
+    float r = colour.r;
+    float g = colour.g;
+    float b = colour.b;
+    if ( ( mflags & 2u ) != 0u ) {
+        r *= 1.0 - mparams.w;
+        b *= 1.0 + mparams.w;
+    }
+
+    float scan = 0.5 + 0.5 * sin( puv.y * 800.0 + mparams.x * 6.0 );
+    float v    = ( ( mflags & 1u ) != 0u ) ? mix( 1.0, scan, mparams.y ) : 1.0;
+
+    fragc = vec4( r * v, g * v, b * v, colour.a );
 }
 )";
 
@@ -251,6 +290,7 @@ void vxui_gl_init( vxui_ctx* ctx )
     gl->shader_draw_text     = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_vefc_fs_draw_text    );
     gl->shader_rect          = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_rect_fs              );
     gl->shader_rect_textured = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_rect_textured_fs     );
+    gl->shader_crt           = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_crt_fs               );
 
     glGenVertexArrays( 1, &gl->vao );
     vxui_gl_setup_fbo( gl );
@@ -313,14 +353,52 @@ static void vxui_gl_push_textured_quad( ve_fontcache_drawlist* dl, float x0, flo
     dl->dcalls.push_back( dcall );
 }
 
-static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, const vxui_draw_cmd* c, float px, float py, float fb_w, float fb_h )
+static void vxui_gl_push_crt_quad( ve_fontcache_drawlist* dl, vxui_gl_state* gl, float x0, float y0, float x1, float y1, const vxui_render_data& rd )
+{
+    float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;
+
+    uint32_t base = (uint32_t) dl->vertices.size();
+    dl->vertices.push_back( { x0, y0, u0, v0 } );
+    dl->vertices.push_back( { x1, y0, u1, v0 } );
+    dl->vertices.push_back( { x1, y1, u1, v1 } );
+    dl->vertices.push_back( { x0, y1, u0, v1 } );
+
+    uint32_t idx_start = (uint32_t) dl->indices.size();
+    dl->indices.push_back( base + 0 );
+    dl->indices.push_back( base + 1 );
+    dl->indices.push_back( base + 2 );
+    dl->indices.push_back( base + 0 );
+    dl->indices.push_back( base + 2 );
+    dl->indices.push_back( base + 3 );
+
+    assert( gl->material_data_count < VXUI_GL_MAX_MATERIAL_DCALLS );
+    int mat_idx = gl->material_data_count++;
+    memcpy( gl->material_data[mat_idx].params, rd.params, sizeof( rd.params ) );
+    gl->material_data[mat_idx].flags = rd.flags;
+
+    ve_fontcache_draw dcall;
+    dcall.pass        = VXUI_GL_PASS_CRT;
+    dcall.start_index = idx_start;
+    dcall.end_index   = (uint32_t) dl->indices.size();
+    dcall.colour[0]   = rd.colour.x;
+    dcall.colour[1]   = rd.colour.y;
+    dcall.colour[2]   = rd.colour.z;
+    dcall.colour[3]   = rd.colour.w;
+    dcall.region      = (uint32_t) mat_idx;
+    dl->dcalls.push_back( dcall );
+}
+
+static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, const vxui_draw_cmd* c, float px, float py, float fb_w, float fb_h )
 {
     float x0 = px / fb_w;
     float x1 = ( px + c->rect.z ) / fb_w;
     float y0 = 1.0f - py / fb_h;
     float y1 = 1.0f - ( py + c->rect.w ) / fb_h;
 
-    vxui_gl_push_solid_quad( fdl, x0, y0, x1, y1, c->render.colour );
+    if ( c->render.material_id != 0 )
+        vxui_gl_push_crt_quad( fdl, gl, x0, y0, x1, y1, c->render );
+    else
+        vxui_gl_push_solid_quad( fdl, x0, y0, x1, y1, c->render.colour );
 
     if ( c->render.outline_thickness > 0.0f )
     {
@@ -348,7 +426,7 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, const vxui_draw_c
     }
 }
 
-static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, const vxui_draw_list& dl, float w, float h )
+static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, const vxui_draw_list& dl, float w, float h )
 {
     int rect_n = vxui_draw_count( dl, VXUI_DRAW_RECT );
     if ( rect_n <= 0 ) return;
@@ -357,14 +435,14 @@ static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, const vxui_draw_list
     {
         const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
         if ( c->state & VXUI_DRAW_FOCUSED ) continue;
-        vxui_gl_emit_one_rect( fdl, c, c->rect.x, c->rect.y, w, h );
+        vxui_gl_emit_one_rect( fdl, gl, c, c->rect.x, c->rect.y, w, h );
     }
 
     for ( int i = 0; i < rect_n; i++ )
     {
         const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
         if ( !( c->state & VXUI_DRAW_FOCUSED ) ) continue;
-        vxui_gl_emit_one_rect( fdl, c, c->rect.x, c->rect.y + c->focus_offset_y, w, h );
+        vxui_gl_emit_one_rect( fdl, gl, c, c->rect.x, c->rect.y + c->focus_offset_y, w, h );
     }
 }
 
@@ -482,6 +560,20 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glBindTexture( GL_TEXTURE_2D, (GLuint) dcall.region );
             glEnable( GL_FRAMEBUFFER_SRGB );
         }
+        else if ( dcall.pass == VXUI_GL_PASS_CRT )
+        {
+            glUseProgram( gl->shader_crt );
+            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+            glViewport( 0, 0, win_w, win_h );
+            glScissor( 0, 0, win_w, win_h );
+            glUniform4fv( glGetUniformLocation( gl->shader_crt, "colour" ), 1, dcall.colour );
+            int mi = (int) dcall.region;
+            assert( mi >= 0 && mi < gl->material_data_count );
+            glUniform4fv( glGetUniformLocation( gl->shader_crt, "mparams" ), 1, gl->material_data[mi].params );
+            glUniform1ui( glGetUniformLocation( gl->shader_crt, "mflags" ), gl->material_data[mi].flags );
+            glEnable( GL_FRAMEBUFFER_SRGB );
+        }
         if ( dcall.clear_before_draw )
         {
             glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
@@ -508,7 +600,8 @@ void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h )
     vxui_text_state* st = (vxui_text_state*) ctx->text;
     ve_fontcache_drawlist* fdl = ve_fontcache_get_drawlist( &st->cache );
 
-    vxui_gl_emit_rects( fdl, dl, w, h );
+    gl->material_data_count = 0;
+    vxui_gl_emit_rects( fdl, gl, dl, w, h );
     vxui_gl_emit_text ( st, dl, w, h );
     vxui_gl_execute   ( gl, &st->cache, (int) w, (int) h );
 }
@@ -524,6 +617,7 @@ void vxui_gl_shutdown( vxui_ctx* ctx )
     glDeleteProgram( gl->shader_draw_text );
     glDeleteProgram( gl->shader_rect );
     glDeleteProgram( gl->shader_rect_textured );
+    glDeleteProgram( gl->shader_crt );
     glDeleteFramebuffers( 2, gl->fbo );
     glDeleteTextures( 2, gl->fbo_texture );
 

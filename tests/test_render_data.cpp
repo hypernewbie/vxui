@@ -753,6 +753,120 @@ UTEST(render_data, text_cmd_does_not_get_panel_outline) {
     }
 }
 
+UTEST(render_data, resolver_returns_material_id_unchanged) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd*, vxui_render_data* out, void* )
+        {
+            out->material_id = 0xDEAD;
+        },
+        nullptr );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_EQ( c->render.material_id, (uint32_t) 0xDEAD );
+}
+
+UTEST(render_data, resolver_returns_params_unchanged) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd*, vxui_render_data* out, void* )
+        {
+            out->params[0] = 3.14159f;
+            out->params[1] = 2.71828f;
+            out->params[2] = 1.41421f;
+            out->params[3] = 1.61803f;
+            out->params[4] = 0.57721f;
+            out->params[5] = 2.30258f;
+            out->params[6] = 0.69314f;
+            out->params[7] = 1.20205f;
+        },
+        nullptr );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_NEAR( c->render.params[0], 3.14159f, 1e-5f );
+    ASSERT_NEAR( c->render.params[1], 2.71828f, 1e-5f );
+    ASSERT_NEAR( c->render.params[2], 1.41421f, 1e-5f );
+    ASSERT_NEAR( c->render.params[3], 1.61803f, 1e-5f );
+    ASSERT_NEAR( c->render.params[4], 0.57721f, 1e-5f );
+    ASSERT_NEAR( c->render.params[5], 2.30258f, 1e-5f );
+    ASSERT_NEAR( c->render.params[6], 0.69314f, 1e-5f );
+    ASSERT_NEAR( c->render.params[7], 1.20205f, 1e-5f );
+}
+
+UTEST(render_data, resolver_returns_flags_unchanged) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd*, vxui_render_data* out, void* )
+        {
+            out->flags = 0xABCD1234;
+        },
+        nullptr );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_EQ( c->render.flags, (uint32_t) 0xABCD1234 );
+}
+
+UTEST(render_data, material_id_zero_default_no_resolver) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_EQ( c->render.material_id, (uint32_t) 0 );
+}
+
+UTEST(render_data, flags_zero_default_no_resolver) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_EQ( c->render.flags, (uint32_t) 0 );
+}
+
+UTEST(render_data, params_zero_default_no_resolver) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    for ( int i = 0; i < 8; i++ )
+        ASSERT_EQ( c->render.params[i], 0.0f );
+}
+
 UTEST(render_data, outline_thickness_zero_default_no_resolver) {
     vxui_ctx ctx = make_ctx();
 

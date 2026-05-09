@@ -34,10 +34,16 @@ static std::vector< uint8_t > load_file( const char* path )
 
 static uint8_t s_clay_mem[16 * 1024 * 1024];
 
+#define DEMO_MATERIAL_CRT            1
+#define DEMO_MATERIAL_FLAG_SCANLINES 1
+#define DEMO_MATERIAL_FLAG_CURVE     2
+
 struct demo_resolver_state
 {
-    uint32_t panel_id          = 0;
+    uint32_t panel_id           = 0;
+    uint32_t frame_id           = 0;
     uint32_t focus_icon_texture = 0;
+    float    time_seconds       = 0;
 };
 
 static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, void* ud )
@@ -47,8 +53,20 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
 
     if ( c->id == st->panel_id )
     {
-        out->colour           = { 0.05f, 0.07f, 0.12f, 1.0f };
-        out->outline_colour   = { 0.30f, 0.70f, 0.95f, 1.0f };
+        out->material_id = DEMO_MATERIAL_CRT;
+        out->flags       = DEMO_MATERIAL_FLAG_SCANLINES | DEMO_MATERIAL_FLAG_CURVE;
+        out->params[0]   = st->time_seconds;
+        out->params[1]   = 0.35f;
+        out->params[2]   = 0.04f;
+        out->params[3]   = 0.005f;
+        out->colour      = { 0.05f, 0.07f, 0.12f, 1.0f };
+        return;
+    }
+
+    if ( c->id == st->frame_id )
+    {
+        out->colour            = { 0.03f, 0.03f, 0.05f, 1.0f };
+        out->outline_colour    = { 0.30f, 0.70f, 0.95f, 1.0f };
         out->outline_thickness = 2.0f;
         return;
     }
@@ -113,8 +131,10 @@ int main( int /*argc*/, char** /*argv*/ )
 
     demo_resolver_state resolver_state;
     {
-        Clay_String cs = { false, (int32_t) strlen( "demo_panel" ), "demo_panel" };
-        resolver_state.panel_id = Clay__HashString( cs, 0 ).id;
+        Clay_String cs_panel = { false, (int32_t) strlen( "demo_panel" ), "demo_panel" };
+        Clay_String cs_frame = { false, (int32_t) strlen( "demo_frame" ), "demo_frame" };
+        resolver_state.panel_id = Clay__HashString( cs_panel, 0 ).id;
+        resolver_state.frame_id = Clay__HashString( cs_frame, 0 ).id;
     }
     resolver_state.focus_icon_texture = vxui_gl_create_chevron_texture();
     vxui_set_render_data_fn( &ctx, demo_render_data, &resolver_state );
@@ -149,7 +169,10 @@ int main( int /*argc*/, char** /*argv*/ )
             if ( glfwGetKey( window, m.key ) == GLFW_PRESS )
                 vxui_input( &ctx, m.action );
 
-        vxui_rect( &ctx, "demo_panel", { .width = { VXUI_FIXED, 240 }, .col = true, .padding = { 8, 8, 8, 8 } } );
+        resolver_state.time_seconds += 1.0f / 60.0f;
+
+        vxui_rect( &ctx, "demo_frame", { .width = { VXUI_FIXED, 256 }, .col = true, .padding = { 4, 4, 4, 4 } } );
+        vxui_rect( &ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .col = true, .padding = { 8, 8, 8, 8 } } );
         if ( vxui_menu( &ctx, "main" ) )
         {
             if ( vxui_menu_action( &ctx, "Play"    ) ) printf( "Play fired\n" );
@@ -157,6 +180,7 @@ int main( int /*argc*/, char** /*argv*/ )
             if ( vxui_menu_action( &ctx, "Quit"    ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
             vxui_menu_end( &ctx );
         }
+        vxui_div_end( &ctx );
         vxui_div_end( &ctx );
         vxui_draw_list dl = vxui_render( &ctx );
         vxui_gl_render( &ctx, dl, (float) fb_w, (float) fb_h );
