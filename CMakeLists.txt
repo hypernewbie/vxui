@@ -15,6 +15,11 @@ option(VXUI_BUILD_TESTS "Build the VXUI tests" ON)
 if(POLICY CMP0077)
     cmake_policy(SET CMP0077 NEW)
 endif()
+if(POLICY CMP0141)
+    cmake_policy(SET CMP0141 NEW)
+endif()
+
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded CACHE STRING "" FORCE)
 
 FetchContent_Declare(
     harfbuzz
