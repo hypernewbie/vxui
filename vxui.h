@@ -162,6 +162,7 @@ void           vxui_frame   ( vxui_ctx* ctx, float dt, float w = 0, float h = 0 
 vxui_draw_list vxui_render  ( vxui_ctx* ctx );
 void           vxui_div     ( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg = {} );
 void           vxui_div_end ( vxui_ctx* ctx );
+void           vxui_rect    ( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg = {} );
 void           vxui_root    ( vxui_ctx* ctx, const char* id, float x, float y );
 void           vxui_root_end( vxui_ctx* ctx );
 

@@ -588,4 +588,186 @@ UTEST(render_data, same_label_two_menus_only_focused_one_has_bit) {
     ASSERT_EQ  ( r_same->state & VXUI_DRAW_FOCUSED, (uint8_t) 0 );
 }
 
+static uint32_t elem_id( const char* name )
+{
+    Clay_String cs = { false, (int32_t) strlen( name ), name };
+    return Clay__HashString( cs, 0 ).id;
+}
+
+UTEST(render_data, rect_primitive_emits_rect_cmd) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+}
+
+UTEST(render_data, rect_primitive_state_zero) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_EQ( c->state, (uint8_t) 0 );
+}
+
+UTEST(render_data, rect_wrapping_menu_emits_both) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_TRUE( vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) ) != nullptr );
+    ASSERT_TRUE( vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "m", "Play" ) ) != nullptr );
+}
+
+UTEST(render_data, resolver_returns_outline_colour_unchanged) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd*, vxui_render_data* out, void* )
+        {
+            out->outline_colour = { 0.3f, 0.7f, 0.95f, 1.0f };
+        },
+        nullptr );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_NEAR( c->render.outline_colour.x, 0.3f,  1e-5f );
+    ASSERT_NEAR( c->render.outline_colour.y, 0.7f,  1e-5f );
+    ASSERT_NEAR( c->render.outline_colour.z, 0.95f, 1e-5f );
+    ASSERT_NEAR( c->render.outline_colour.w, 1.0f,  1e-5f );
+}
+
+UTEST(render_data, resolver_returns_outline_thickness_unchanged) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd*, vxui_render_data* out, void* )
+        {
+            out->outline_thickness = 2.5f;
+        },
+        nullptr );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_NEAR( c->render.outline_thickness, 2.5f, 1e-5f );
+}
+
+UTEST(render_data, resolver_returns_texture_id_unchanged) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd*, vxui_render_data* out, void* )
+        {
+            out->texture_id = 77;
+        },
+        nullptr );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_EQ( c->render.texture_id, (uint32_t) 77 );
+}
+
+UTEST(render_data, resolver_returns_uv_unchanged) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd*, vxui_render_data* out, void* )
+        {
+            out->uv = { 0.1f, 0.2f, 0.9f, 0.8f };
+        },
+        nullptr );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_NEAR( c->render.uv.x, 0.1f, 1e-5f );
+    ASSERT_NEAR( c->render.uv.y, 0.2f, 1e-5f );
+    ASSERT_NEAR( c->render.uv.z, 0.9f, 1e-5f );
+    ASSERT_NEAR( c->render.uv.w, 0.8f, 1e-5f );
+}
+
+UTEST(render_data, text_cmd_does_not_get_panel_outline) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_set_render_data_fn( &ctx,
+        []( const vxui_draw_cmd* c, vxui_render_data* out, void* )
+        {
+            if ( c->type != VXUI_DRAW_RECT ) return;
+            out->outline_thickness = 2.0f;
+            out->outline_colour = { 1.0f, 1.0f, 1.0f, 1.0f };
+        },
+        nullptr );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_action( &ctx, "Play" );
+        vxui_menu_end( &ctx );
+    }
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    int n = vxui_draw_count( dl, VXUI_DRAW_TEXT );
+    for ( int i = 0; i < n; i++ )
+    {
+        const vxui_render_data& r = vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->render;
+        ASSERT_EQ( r.outline_thickness, 0.0f );
+        ASSERT_EQ( r.outline_colour.x,  0.0f );
+    }
+}
+
+UTEST(render_data, outline_thickness_zero_default_no_resolver) {
+    vxui_ctx ctx = make_ctx();
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_rect( &ctx, "panel" );
+    vxui_div_end( &ctx );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, elem_id( "panel" ) );
+    ASSERT_TRUE( c != nullptr );
+    ASSERT_EQ( c->render.outline_thickness, 0.0f );
+    ASSERT_EQ( c->render.outline_colour.x,  0.0f );
+    ASSERT_EQ( c->render.outline_colour.y,  0.0f );
+    ASSERT_EQ( c->render.outline_colour.z,  0.0f );
+    ASSERT_EQ( c->render.outline_colour.w,  0.0f );
+}
+
 UTEST_MAIN();

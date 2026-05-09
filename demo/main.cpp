@@ -34,12 +34,33 @@ static std::vector< uint8_t > load_file( const char* path )
 
 static uint8_t s_clay_mem[16 * 1024 * 1024];
 
-static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, void* /*ud*/ )
+struct demo_resolver_state
 {
+    uint32_t panel_id          = 0;
+    uint32_t focus_icon_texture = 0;
+};
+
+static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, void* ud )
+{
+    demo_resolver_state* st = (demo_resolver_state*) ud;
     if ( c->type != VXUI_DRAW_RECT ) return;
 
-    if ( c->state & VXUI_DRAW_PRESSED )  { out->colour = { 0.45f, 0.70f, 1.00f, 1.0f }; return; }
-    if ( c->state & VXUI_DRAW_FOCUSED )  { out->colour = { 0.30f, 0.55f, 0.85f, 1.0f }; return; }
+    if ( c->id == st->panel_id )
+    {
+        out->colour           = { 0.05f, 0.07f, 0.12f, 1.0f };
+        out->outline_colour   = { 0.30f, 0.70f, 0.95f, 1.0f };
+        out->outline_thickness = 2.0f;
+        return;
+    }
+
+    if ( c->state & VXUI_DRAW_PRESSED ) { out->colour = { 0.45f, 0.70f, 1.00f, 1.0f }; return; }
+    if ( c->state & VXUI_DRAW_FOCUSED )
+    {
+        out->colour     = { 0.30f, 0.55f, 0.85f, 1.0f };
+        out->texture_id = st->focus_icon_texture;
+        out->uv         = { 0.0f, 0.0f, 1.0f, 1.0f };
+        return;
+    }
     out->colour = { 0.15f, 0.15f, 0.18f, 1.0f };
 }
 
@@ -89,7 +110,14 @@ int main( int /*argc*/, char** /*argv*/ )
     vxui_load_font( &ctx, font_bytes.data(), font_bytes.size(), (float) VXUI_FONT_SIZE_DEFAULT );
 
     vxui_gl_init( &ctx );
-    vxui_set_render_data_fn( &ctx, demo_render_data, nullptr );
+
+    demo_resolver_state resolver_state;
+    {
+        Clay_String cs = { false, (int32_t) strlen( "demo_panel" ), "demo_panel" };
+        resolver_state.panel_id = Clay__HashString( cs, 0 ).id;
+    }
+    resolver_state.focus_icon_texture = vxui_gl_create_chevron_texture();
+    vxui_set_render_data_fn( &ctx, demo_render_data, &resolver_state );
 
     static const struct { int key; const char* action; } s_keymap[] = {
         { GLFW_KEY_UP,     "up"      },
@@ -121,6 +149,7 @@ int main( int /*argc*/, char** /*argv*/ )
             if ( glfwGetKey( window, m.key ) == GLFW_PRESS )
                 vxui_input( &ctx, m.action );
 
+        vxui_rect( &ctx, "demo_panel", { .width = { VXUI_FIXED, 240 }, .col = true, .padding = { 8, 8, 8, 8 } } );
         if ( vxui_menu( &ctx, "main" ) )
         {
             if ( vxui_menu_action( &ctx, "Play"    ) ) printf( "Play fired\n" );
@@ -128,6 +157,7 @@ int main( int /*argc*/, char** /*argv*/ )
             if ( vxui_menu_action( &ctx, "Quit"    ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
             vxui_menu_end( &ctx );
         }
+        vxui_div_end( &ctx );
         vxui_draw_list dl = vxui_render( &ctx );
         vxui_gl_render( &ctx, dl, (float) fb_w, (float) fb_h );
 

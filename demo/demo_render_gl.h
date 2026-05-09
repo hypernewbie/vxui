@@ -7,9 +7,10 @@
 #include "vxui.h"
 #include <glad/glad.h>
 
-void vxui_gl_init    ( vxui_ctx* ctx );
-void vxui_gl_render  ( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h );
-void vxui_gl_shutdown( vxui_ctx* ctx );
+void     vxui_gl_init    ( vxui_ctx* ctx );
+void     vxui_gl_render  ( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h );
+void     vxui_gl_shutdown( vxui_ctx* ctx );
+uint32_t vxui_gl_create_chevron_texture();
 
 #endif // VXUI_DEMO_RENDER_GL_H
 
@@ -19,18 +20,19 @@ void vxui_gl_shutdown( vxui_ctx* ctx );
 #include <cassert>
 #include "ve_fontcache.h"
 
-// VXUI extension to VEFC's dcall.pass namespace. Solid colour quad on screen.
-#define VXUI_GL_PASS_RECT 8
+#define VXUI_GL_PASS_RECT          8
+#define VXUI_GL_PASS_RECT_TEXTURED 9
 
 struct vxui_gl_state
 {
-    GLuint vao                 = 0;
-    GLuint shader_render_glyph = 0;
-    GLuint shader_blit_atlas   = 0;
-    GLuint shader_draw_text    = 0;
-    GLuint shader_rect         = 0;
-    GLuint fbo[2]              = { 0, 0 };
-    GLuint fbo_texture[2]      = { 0, 0 };
+    GLuint vao                  = 0;
+    GLuint shader_render_glyph  = 0;
+    GLuint shader_blit_atlas    = 0;
+    GLuint shader_draw_text     = 0;
+    GLuint shader_rect          = 0;
+    GLuint shader_rect_textured = 0;
+    GLuint fbo[2]               = { 0, 0 };
+    GLuint fbo_texture[2]       = { 0, 0 };
 };
 
 // VEFC text shaders — byte-identical to vefc/demo/demo.cpp.
@@ -121,6 +123,17 @@ void main( void ) {
 }
 )";
 
+static const char* s_vxui_gl_rect_textured_fs = R"(#version 330 core
+in vec2 uv;
+out vec4 fragc;
+uniform vec4      colour;
+uniform sampler2D src_texture;
+void main( void ) {
+    float a = texture( src_texture, uv ).x;
+    fragc = vec4( colour.xyz, colour.a * a );
+}
+)";
+
 static void vxui_gl_check_error( const char* tag )
 {
 #ifdef VXUI_DEBUG
@@ -201,6 +214,30 @@ static void vxui_gl_setup_fbo( vxui_gl_state* gl )
     glBindFramebuffer( GL_FRAMEBUFFER, 0 );
 }
 
+uint32_t vxui_gl_create_chevron_texture()
+{
+    uint8_t pixels[32 * 32] = {};
+    for ( int y = 0; y < 32; y++ )
+    {
+        int tip_x = 22 - ( y < 16 ? y : 31 - y );
+        int base_x = tip_x - 6;
+        if ( base_x < 0 ) base_x = 0;
+        for ( int x = base_x; x <= tip_x && x < 32; x++ )
+            pixels[y * 32 + x] = 255;
+    }
+
+    GLuint tex = 0;
+    glGenTextures( 1, &tex );
+    glBindTexture( GL_TEXTURE_2D, tex );
+    glTexImage2D( GL_TEXTURE_2D, 0, GL_R8, 32, 32, 0, GL_RED, GL_UNSIGNED_BYTE, pixels );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+    glBindTexture( GL_TEXTURE_2D, 0 );
+    return (uint32_t) tex;
+}
+
 void vxui_gl_init( vxui_ctx* ctx )
 {
     assert( ctx );
@@ -209,25 +246,18 @@ void vxui_gl_init( vxui_ctx* ctx )
     vxui_gl_state* gl = new vxui_gl_state();
     ctx->renderer = gl;
 
-    gl->shader_render_glyph = vxui_gl_compile( s_vxui_gl_vefc_vs_shared,    s_vxui_gl_vefc_fs_render_glyph );
-    gl->shader_blit_atlas   = vxui_gl_compile( s_vxui_gl_vefc_vs_shared,    s_vxui_gl_vefc_fs_blit_atlas   );
-    gl->shader_draw_text    = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_vefc_fs_draw_text    );
-    gl->shader_rect         = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_rect_fs              );
+    gl->shader_render_glyph  = vxui_gl_compile( s_vxui_gl_vefc_vs_shared,    s_vxui_gl_vefc_fs_render_glyph );
+    gl->shader_blit_atlas    = vxui_gl_compile( s_vxui_gl_vefc_vs_shared,    s_vxui_gl_vefc_fs_blit_atlas   );
+    gl->shader_draw_text     = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_vefc_fs_draw_text    );
+    gl->shader_rect          = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_rect_fs              );
+    gl->shader_rect_textured = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_rect_textured_fs     );
 
     glGenVertexArrays( 1, &gl->vao );
     vxui_gl_setup_fbo( gl );
 }
 
-// Push a quad into VEFC's drawlist as a PASS_RECT dcall. Verts are normalized
-// 0..1 with y up (matches vs_draw_text). VXUI rects come in as pixel y-down.
-static void vxui_gl_push_rect_dcall( ve_fontcache_drawlist* dl, float x, float y, float w, float h,
-                                     float fb_w, float fb_h, const glm::vec4& colour )
+static void vxui_gl_push_solid_quad( ve_fontcache_drawlist* dl, float x0, float y0, float x1, float y1, const glm::vec4& colour )
 {
-    float x0 = x / fb_w;
-    float x1 = ( x + w ) / fb_w;
-    float y0 = 1.0f - y / fb_h;
-    float y1 = 1.0f - ( y + h ) / fb_h;
-
     uint32_t base = (uint32_t) dl->vertices.size();
     dl->vertices.push_back( { x0, y0, 0.0f, 0.0f } );
     dl->vertices.push_back( { x1, y0, 0.0f, 0.0f } );
@@ -253,6 +283,71 @@ static void vxui_gl_push_rect_dcall( ve_fontcache_drawlist* dl, float x, float y
     dl->dcalls.push_back( dcall );
 }
 
+static void vxui_gl_push_textured_quad( ve_fontcache_drawlist* dl, float x0, float y0, float x1, float y1, const glm::vec4& uv, uint32_t texture_id, const glm::vec4& colour )
+{
+    float u0 = uv.x, v0 = uv.y, u1 = uv.z, v1 = uv.w;
+
+    uint32_t base = (uint32_t) dl->vertices.size();
+    dl->vertices.push_back( { x0, y0, u0, v0 } );
+    dl->vertices.push_back( { x1, y0, u1, v0 } );
+    dl->vertices.push_back( { x1, y1, u1, v1 } );
+    dl->vertices.push_back( { x0, y1, u0, v1 } );
+
+    uint32_t idx_start = (uint32_t) dl->indices.size();
+    dl->indices.push_back( base + 0 );
+    dl->indices.push_back( base + 1 );
+    dl->indices.push_back( base + 2 );
+    dl->indices.push_back( base + 0 );
+    dl->indices.push_back( base + 2 );
+    dl->indices.push_back( base + 3 );
+
+    ve_fontcache_draw dcall;
+    dcall.pass        = VXUI_GL_PASS_RECT_TEXTURED;
+    dcall.start_index = idx_start;
+    dcall.end_index   = (uint32_t) dl->indices.size();
+    dcall.colour[0]   = colour.x;
+    dcall.colour[1]   = colour.y;
+    dcall.colour[2]   = colour.z;
+    dcall.colour[3]   = colour.w;
+    dcall.region      = texture_id;
+    dl->dcalls.push_back( dcall );
+}
+
+static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, const vxui_draw_cmd* c, float px, float py, float fb_w, float fb_h )
+{
+    float x0 = px / fb_w;
+    float x1 = ( px + c->rect.z ) / fb_w;
+    float y0 = 1.0f - py / fb_h;
+    float y1 = 1.0f - ( py + c->rect.w ) / fb_h;
+
+    vxui_gl_push_solid_quad( fdl, x0, y0, x1, y1, c->render.colour );
+
+    if ( c->render.outline_thickness > 0.0f )
+    {
+        float t = c->render.outline_thickness;
+        float tx = t / fb_w;
+        float ty = t / fb_h;
+        const glm::vec4& oc = c->render.outline_colour;
+        vxui_gl_push_solid_quad( fdl, x0,      y0,      x1,      y0 + ty, oc );
+        vxui_gl_push_solid_quad( fdl, x0,      y1 - ty, x1,      y1,      oc );
+        vxui_gl_push_solid_quad( fdl, x0,      y0 + ty, x0 + tx, y1 - ty, oc );
+        vxui_gl_push_solid_quad( fdl, x1 - tx, y0 + ty, x1,      y1 - ty, oc );
+    }
+
+    if ( c->render.texture_id != 0 )
+    {
+        float icon_h = c->rect.w;
+        float icon_w = icon_h;
+        float icon_px = px + c->rect.z - icon_w - 6.0f;
+        float icon_py = py;
+        float ix0 = icon_px / fb_w;
+        float ix1 = ( icon_px + icon_w ) / fb_w;
+        float iy0 = 1.0f - icon_py / fb_h;
+        float iy1 = 1.0f - ( icon_py + icon_h ) / fb_h;
+        vxui_gl_push_textured_quad( fdl, ix0, iy0, ix1, iy1, c->render.uv, c->render.texture_id, c->render.colour );
+    }
+}
+
 static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, const vxui_draw_list& dl, float w, float h )
 {
     int rect_n = vxui_draw_count( dl, VXUI_DRAW_RECT );
@@ -262,14 +357,14 @@ static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, const vxui_draw_list
     {
         const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
         if ( c->state & VXUI_DRAW_FOCUSED ) continue;
-        vxui_gl_push_rect_dcall( fdl, c->rect.x, c->rect.y, c->rect.z, c->rect.w, w, h, c->render.colour );
+        vxui_gl_emit_one_rect( fdl, c, c->rect.x, c->rect.y, w, h );
     }
 
     for ( int i = 0; i < rect_n; i++ )
     {
         const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
         if ( !( c->state & VXUI_DRAW_FOCUSED ) ) continue;
-        vxui_gl_push_rect_dcall( fdl, c->rect.x, c->rect.y + c->focus_offset_y, c->rect.z, c->rect.w, w, h, c->render.colour );
+        vxui_gl_emit_one_rect( fdl, c, c->rect.x, c->rect.y + c->focus_offset_y, w, h );
     }
 }
 
@@ -372,7 +467,20 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glViewport( 0, 0, win_w, win_h );
             glScissor( 0, 0, win_w, win_h );
             glUniform4fv( glGetUniformLocation( gl->shader_rect, "colour" ), 1, dcall.colour );
-            glEnable( GL_FRAMEBUFFER_SRGB );   // match text path so linear colours stay consistent
+            glEnable( GL_FRAMEBUFFER_SRGB );
+        }
+        else if ( dcall.pass == VXUI_GL_PASS_RECT_TEXTURED )
+        {
+            glUseProgram( gl->shader_rect_textured );
+            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+            glViewport( 0, 0, win_w, win_h );
+            glScissor( 0, 0, win_w, win_h );
+            glUniform4fv( glGetUniformLocation( gl->shader_rect_textured, "colour" ), 1, dcall.colour );
+            glUniform1i( glGetUniformLocation( gl->shader_rect_textured, "src_texture" ), 0 );
+            glActiveTexture( GL_TEXTURE0 );
+            glBindTexture( GL_TEXTURE_2D, (GLuint) dcall.region );
+            glEnable( GL_FRAMEBUFFER_SRGB );
         }
         if ( dcall.clear_before_draw )
         {
@@ -415,6 +523,7 @@ void vxui_gl_shutdown( vxui_ctx* ctx )
     glDeleteProgram( gl->shader_blit_atlas );
     glDeleteProgram( gl->shader_draw_text );
     glDeleteProgram( gl->shader_rect );
+    glDeleteProgram( gl->shader_rect_textured );
     glDeleteFramebuffers( 2, gl->fbo );
     glDeleteTextures( 2, gl->fbo_texture );
 

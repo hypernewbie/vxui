@@ -228,6 +228,26 @@ void vxui_div_end( vxui_ctx* ctx )
     Clay__CloseElement();
 }
 
+void vxui_rect( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg )
+{
+    assert( ctx );
+
+    Clay_String clay_id = { false, (int32_t) strlen( id ), id };
+    Clay__OpenElementWithId( Clay__HashString( clay_id, 0 ) );
+
+    Clay_ElementDeclaration decl = {};
+    decl.layout.sizing.width     = vxui_sizing_to_clay( cfg.width );
+    decl.layout.sizing.height    = vxui_sizing_to_clay( cfg.height );
+    decl.layout.layoutDirection  = cfg.col ? CLAY_TOP_TO_BOTTOM : CLAY_LEFT_TO_RIGHT;
+    decl.layout.padding          = { cfg.padding[0], cfg.padding[1], cfg.padding[2], cfg.padding[3] };
+    decl.layout.childGap         = cfg.gap;
+    decl.layout.childAlignment.x = vxui_align_x_to_clay( cfg.align_x );
+    decl.layout.childAlignment.y = vxui_align_y_to_clay( cfg.align_y );
+    decl.backgroundColor         = { 0, 0, 0, 1 };  // alpha > 0 forces RECTANGLE emit
+
+    Clay__ConfigureOpenElement( decl );
+}
+
 void vxui_root( vxui_ctx* ctx, const char* id, float x, float y )
 {
     assert( ctx );
