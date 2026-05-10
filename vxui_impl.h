@@ -11,7 +11,7 @@
 
 static void vxui_clay_error( Clay_ErrorData e )
 {
-    (void) e;
+    fprintf( stderr, "clay error: type=%d %.*s\n", (int) e.errorType, (int) e.errorText.length, e.errorText.chars );
     assert( !"clay error" );
 }
 
