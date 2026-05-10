@@ -81,6 +81,7 @@ static void demo_main_menu( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* win
     if ( vxui_menu_action( ctx, "Unlocks"      ) ) demo_push( s, "unlocks" );
     if ( vxui_menu_action( ctx, "Extras"       ) ) demo_push( s, "extras" );
     if ( vxui_menu_action( ctx, "Quit"         ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
+    if ( vxui_menu_cancelled( ctx )              ) glfwSetWindowShouldClose( window, GLFW_TRUE );
     vxui_menu_end( ctx );
 }
 
@@ -249,6 +250,7 @@ int main( int /*argc*/, char** /*argv*/ )
         if ( screen_state.splash )
         {
             if ( ( ctx.input & ~ctx.prev_input & VXUI_INPUT_CONFIRM ) != 0 ) screen_state.splash = false;
+            if ( ( ctx.input & ~ctx.prev_input & VXUI_INPUT_CANCEL ) != 0 ) glfwSetWindowShouldClose( window, GLFW_TRUE );
             vxui_render( &ctx );
         }
         else
