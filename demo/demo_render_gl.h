@@ -33,6 +33,7 @@ uint32_t vxui_gl_create_chevron_texture();
 #define DEMO_GL_PASS_RECT_TEXTURED 9
 #define DEMO_GL_PASS_CRT           10
 #define DEMO_GL_PASS_ROUND         11
+#define DEMO_GL_PASS_OUTLINE       12
 #define DEMO_GL_MAX_MATERIAL_DCALLS 64
 
 struct vxui_gl_material_data
@@ -51,6 +52,7 @@ struct vxui_gl_state
     GLuint shader_rect_textured = 0;
     GLuint shader_crt           = 0;
     GLuint shader_round         = 0;
+    GLuint shader_outline       = 0;
     GLuint fbo[2]               = { 0, 0 };
     GLuint fbo_texture[2]       = { 0, 0 };
 
@@ -202,6 +204,27 @@ void main( void ) {
 }
 )";
 
+// SDF inside-the-rect outline. mparams = { thickness_px, width_px, height_px, softness_px }.
+// d_box is signed distance to the box edge (negative inside). Visible band lives
+// in d_box ∈ [-t, 0] with smoothstep edges of width softness.
+static const char* s_vxui_gl_outline_fs = R"(#version 330 core
+in vec2 uv;
+out vec4 fragc;
+uniform vec4 colour;
+uniform vec4 mparams;
+void main( void ) {
+    vec2  half_size = vec2( mparams.y, mparams.z ) * 0.5;
+    vec2  p_px      = ( uv * 2.0 - 1.0 ) * half_size;
+    vec2  q         = abs( p_px ) - half_size;
+    float d         = length( max( q, vec2( 0.0 ) ) ) + min( max( q.x, q.y ), 0.0 );
+    float t         = mparams.x;
+    float s         = mparams.w;
+    float a_outer   = smoothstep( -t - s, -t + s, d );
+    float a_inner   = 1.0 - smoothstep( -s, s, d );
+    fragc = vec4( colour.xyz, colour.a * a_outer * a_inner );
+}
+)";
+
 static void vxui_gl_check_error( const char* tag )
 {
 #ifdef VXUI_DEBUG
@@ -321,6 +344,7 @@ void vxui_gl_init( vxui_ctx* ctx )
     gl->shader_rect_textured = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_rect_textured_fs     );
     gl->shader_crt           = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_crt_fs               );
     gl->shader_round         = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_round_fs             );
+    gl->shader_outline       = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_outline_fs           );
 
     glGenVertexArrays( 1, &gl->vao );
     vxui_gl_setup_fbo( gl );
@@ -459,14 +483,13 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
 
     if ( c->render.outline_thickness > 0.0f )
     {
-        float t = c->render.outline_thickness;
-        float tx = t / fb_w;
-        float ty = t / fb_h;
-        const glm::vec4& oc = c->render.outline_colour;
-        vxui_gl_push_solid_quad( fdl, x0,      y0,      x1,      y0 + ty, oc );
-        vxui_gl_push_solid_quad( fdl, x0,      y1 - ty, x1,      y1,      oc );
-        vxui_gl_push_solid_quad( fdl, x0,      y0 + ty, x0 + tx, y1 - ty, oc );
-        vxui_gl_push_solid_quad( fdl, x1 - tx, y0 + ty, x1,      y1 - ty, oc );
+        float mp[8] = {};
+        mp[0] = c->render.outline_thickness;
+        mp[1] = c->rect.z;
+        mp[2] = c->rect.w;
+        mp[3] = 1.0f;     // softness; demo-fixed, not a render_data field
+        vxui_gl_push_material_quad( fdl, gl, DEMO_GL_PASS_OUTLINE, x0, y0, x1, y1,
+                                    mp, 0u, c->render.outline_colour );
     }
 
     if ( c->render.texture_id != 0 )
@@ -644,6 +667,19 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glUniform4fv( glGetUniformLocation( gl->shader_round, "mparams" ), 1, gl->material_data[mi].params );
             glEnable( GL_FRAMEBUFFER_SRGB );
         }
+        else if ( dcall.pass == DEMO_GL_PASS_OUTLINE )
+        {
+            glUseProgram( gl->shader_outline );
+            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+            glViewport( 0, 0, win_w, win_h );
+            glScissor( 0, 0, win_w, win_h );
+            glUniform4fv( glGetUniformLocation( gl->shader_outline, "colour" ), 1, dcall.colour );
+            int mi = (int) dcall.region;
+            assert( mi >= 0 && mi < gl->material_data_count );
+            glUniform4fv( glGetUniformLocation( gl->shader_outline, "mparams" ), 1, gl->material_data[mi].params );
+            glEnable( GL_FRAMEBUFFER_SRGB );
+        }
         if ( dcall.clear_before_draw )
         {
             glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
@@ -689,6 +725,7 @@ void vxui_gl_shutdown( vxui_ctx* ctx )
     glDeleteProgram( gl->shader_rect_textured );
     glDeleteProgram( gl->shader_crt );
     glDeleteProgram( gl->shader_round );
+    glDeleteProgram( gl->shader_outline );
     glDeleteFramebuffers( 2, gl->fbo );
     glDeleteTextures( 2, gl->fbo_texture );
 
