@@ -133,7 +133,6 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         return;
     }
 
-    // Menu rows: rounded buttons. Caller-side material params: corner radius, edge softness.
     out->material_id = DEMO_MATERIAL_ROUND;
     out->params[0]   = 8.0f;
     out->params[1]   = 1.5f;
@@ -146,7 +145,23 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         out->uv         = { 0.0f, 0.0f, 1.0f, 1.0f };
         return;
     }
-    if ( c->state & VXUI_DRAW_HOVERED ) { out->colour = { 0.22f, 0.22f, 0.27f, 1.0f }; return; }
+    if ( c->state & VXUI_DRAW_HOVERED ) { out->colour = { 0.25f, 0.25f, 0.30f, 1.0f }; return; }
+
+    if ( c->row_index >= 0 && c->focused_row_index >= 0 )
+    {
+        int d = c->row_index - c->focused_row_index;
+        if ( d < 0 ) d = -d;
+        static const glm::vec4 s_ramp[4] = {
+            { 0.30f, 0.55f, 0.85f, 1.0f },
+            { 0.22f, 0.24f, 0.30f, 1.0f },
+            { 0.17f, 0.18f, 0.22f, 1.0f },
+            { 0.13f, 0.14f, 0.16f, 1.0f },
+        };
+        int idx = d > 3 ? 3 : d;
+        out->colour = s_ramp[idx];
+        return;
+    }
+
     out->colour = { 0.15f, 0.15f, 0.18f, 1.0f };
 }
 
