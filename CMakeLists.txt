@@ -135,6 +135,10 @@ if(VXUI_BUILD_TESTS)
     target_link_libraries(test_mouse PRIVATE vxui)
     add_test(NAME test_mouse COMMAND test_mouse)
 
+    add_executable(test_menu_stack tests/test_menu_stack.cpp)
+    target_link_libraries(test_menu_stack PRIVATE vxui)
+    add_test(NAME test_menu_stack COMMAND test_menu_stack)
+
     add_executable(test_vefc_backend tests/test_vefc_backend.cpp)
     target_link_libraries(test_vefc_backend PRIVATE vxui)
     add_test(NAME test_vefc_backend COMMAND test_vefc_backend)

@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <vector>
 #include <glad/glad.h>
@@ -38,6 +39,8 @@ static uint8_t s_clay_mem[16 * 1024 * 1024];
 #define DEMO_MATERIAL_FLAG_SCANLINES 1
 #define DEMO_MATERIAL_FLAG_CURVE     2
 
+#define DEMO_MAX_STACK 8
+
 struct demo_resolver_state
 {
     uint32_t panel_id           = 0;
@@ -45,6 +48,53 @@ struct demo_resolver_state
     uint32_t focus_icon_texture = 0;
     float    time_seconds       = 0;
 };
+
+struct demo_screen_state
+{
+    const char* stack[DEMO_MAX_STACK] = { "main" };
+    int         depth                 = 1;
+
+    float       volume     = 0.6f;
+    int         resolution = 1;
+    int         vsync      = 1;
+};
+
+static void demo_push( demo_screen_state* s, const char* name )
+{
+    assert( s && s->depth < DEMO_MAX_STACK );
+    s->stack[s->depth++] = name;
+}
+
+static void demo_pop( demo_screen_state* s )
+{
+    assert( s && s->depth >= 1 );
+    if ( s->depth > 1 ) s->depth--;
+}
+
+static const char* s_demo_resolutions[] = { "1280x720", "1920x1080", "2560x1440" };
+static const char* s_demo_on_off[]      = { "Off", "On" };
+
+static void demo_main_menu( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window )
+{
+    if ( !vxui_menu( ctx, "main" ) ) return;
+    if ( vxui_menu_action( ctx, "Play"    ) ) printf( "Play fired\n" );
+    if ( vxui_menu_action( ctx, "Options" ) ) demo_push( s, "options" );
+    if ( vxui_menu_action( ctx, "Quit"    ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
+    vxui_menu_end( ctx );
+}
+
+static void demo_options_menu( vxui_ctx* ctx, demo_screen_state* s )
+{
+    if ( !vxui_menu( ctx, "options" ) ) return;
+    vxui_menu_section( ctx, "AUDIO" );
+    vxui_menu_slider ( ctx, "Master Volume", &s->volume );
+    vxui_menu_section( ctx, "DISPLAY" );
+    vxui_menu_option ( ctx, "Resolution", &s->resolution, s_demo_resolutions, 3 );
+    vxui_menu_option ( ctx, "Vsync",      &s->vsync,      s_demo_on_off,      2 );
+    if ( vxui_menu_action( ctx, "Back" ) ) demo_pop( s );
+    if ( vxui_menu_cancelled( ctx ) )      demo_pop( s );
+    vxui_menu_end( ctx );
+}
 
 static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, void* ud )
 {
@@ -130,6 +180,7 @@ int main( int /*argc*/, char** /*argv*/ )
 
     vxui_gl_init( &ctx );
 
+    demo_screen_state   screen_state;
     demo_resolver_state resolver_state;
     {
         Clay_String cs_panel = { false, (int32_t) strlen( "demo_panel" ), "demo_panel" };
@@ -181,13 +232,9 @@ int main( int /*argc*/, char** /*argv*/ )
 
         vxui_rect( &ctx, "demo_frame", { .width = { VXUI_FIXED, 256 }, .col = true, .padding = { 4, 4, 4, 4 } } );
         vxui_rect( &ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .col = true, .padding = { 8, 8, 8, 8 } } );
-        if ( vxui_menu( &ctx, "main" ) )
-        {
-            if ( vxui_menu_action( &ctx, "Play"    ) ) printf( "Play fired\n" );
-            if ( vxui_menu_action( &ctx, "Options" ) ) printf( "Options fired\n" );
-            if ( vxui_menu_action( &ctx, "Quit"    ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
-            vxui_menu_end( &ctx );
-        }
+        const char* active = screen_state.stack[screen_state.depth - 1];
+        if      ( strcmp( active, "main"    ) == 0 ) demo_main_menu   ( &ctx, &screen_state, window );
+        else if ( strcmp( active, "options" ) == 0 ) demo_options_menu( &ctx, &screen_state );
         vxui_div_end( &ctx );
         vxui_div_end( &ctx );
         vxui_draw_list dl = vxui_render( &ctx );
