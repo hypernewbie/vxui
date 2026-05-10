@@ -55,16 +55,18 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
     assert( ctx );
     assert( ctx->active_menu == -1 );   // mismatched menu_begin/end from last frame
     assert( !ctx->frame_active && "vxui_frame without intervening vxui_render" );
-    ctx->prev_input        = ctx->input;
-    ctx->prev_active_mask  = ctx->menu_active_mask;
-    ctx->input             = 0;
-    ctx->menu_active_mask  = 0;
-    ctx->dt                = dt;
-    ctx->frame_active      = true;
-    ctx->inputs_committed  = false;
-    ctx->text_offset       = 0;
-    ctx->focused_row_count = 0;
-    ctx->pressed_row_count = 0;
+    ctx->prev_input          = ctx->input;
+    ctx->prev_active_mask    = ctx->menu_active_mask;
+    ctx->prev_mouse_buttons  = ctx->mouse_buttons;
+    ctx->input               = 0;
+    ctx->menu_active_mask    = 0;
+    ctx->mouse_buttons       = 0;
+    ctx->dt                  = dt;
+    ctx->frame_active        = true;
+    ctx->inputs_committed    = false;
+    ctx->text_offset         = 0;
+    ctx->focused_row_count   = 0;
+    ctx->pressed_row_count   = 0;
     if ( ctx->clay )
     {
         Clay_SetCurrentContext( (Clay_Context*) ctx->clay );
@@ -142,6 +144,44 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         {
             if ( c.id == ctx->pressed_row_ids[j] ) { c.state |= VXUI_DRAW_PRESSED; break; }
         }
+    }
+
+    // Mouse hit test runs in two passes so press_row_id is settled before
+    // PRESSED stamping. Pass 1 finds the deepest rect under the cursor; the
+    // edge logic latches press/click; pass 2 stamps HOVERED on every containing
+    // rect (truth, not topmost) and PRESSED on the press rect when the cursor
+    // is still over it.
+    ctx->mouse_click_row_id = 0;
+    uint32_t under_cursor_id = 0;
+    for ( int i = 0; i < count; i++ )
+    {
+        vxui_draw_cmd& c = ctx->draw_buf[i];
+        if ( c.type != VXUI_DRAW_RECT ) continue;
+        bool inside = ctx->mouse_pos.x >= c.rect.x && ctx->mouse_pos.x <= c.rect.x + c.rect.z
+                   && ctx->mouse_pos.y >= c.rect.y && ctx->mouse_pos.y <= c.rect.y + c.rect.w;
+        if ( inside ) under_cursor_id = c.id;     // last (topmost) wins for click target
+    }
+
+    bool btn_now  = ( ctx->mouse_buttons      & VXUI_MOUSE_LEFT ) != 0;
+    bool btn_prev = ( ctx->prev_mouse_buttons & VXUI_MOUSE_LEFT ) != 0;
+    if ( btn_now && !btn_prev )
+        ctx->mouse_press_row_id = under_cursor_id;
+    if ( !btn_now && btn_prev )
+    {
+        if ( ctx->mouse_press_row_id != 0 && under_cursor_id == ctx->mouse_press_row_id )
+            ctx->mouse_click_row_id = ctx->mouse_press_row_id;
+        ctx->mouse_press_row_id = 0;
+    }
+
+    for ( int i = 0; i < count; i++ )
+    {
+        vxui_draw_cmd& c = ctx->draw_buf[i];
+        if ( c.type != VXUI_DRAW_RECT ) continue;
+        bool inside = ctx->mouse_pos.x >= c.rect.x && ctx->mouse_pos.x <= c.rect.x + c.rect.z
+                   && ctx->mouse_pos.y >= c.rect.y && ctx->mouse_pos.y <= c.rect.y + c.rect.w;
+        if ( !inside ) continue;
+        c.state |= VXUI_DRAW_HOVERED;
+        if ( c.id == ctx->mouse_press_row_id ) c.state |= VXUI_DRAW_PRESSED;
     }
 
     for ( int i = 0; i < count; i++ )
@@ -380,6 +420,13 @@ bool vxui_input_repeated( vxui_ctx* ctx, const char* action )
     return false;
 }
 
+void vxui_mouse( vxui_ctx* ctx, float x, float y, uint32_t buttons )
+{
+    assert( ctx );
+    ctx->mouse_pos     = { x, y };
+    ctx->mouse_buttons = buttons;
+}
+
 static int vxui_menu_get( vxui_ctx* ctx, const char* name )
 {
     uint32_t id = vxui_hash( name );
@@ -534,6 +581,12 @@ static bool vxui_menu_row_interactive( vxui_ctx* ctx, const char* label )
     uint32_t&   current = m.y;
     uint32_t    row     = ctx->active_menu_row++;
 
+    // Mouse click on this row jumps focus before any other resolution.
+    // Consumption of mouse_click_row_id happens in vxui_menu_action so the fire
+    // signal can also be derived from the same id without a second compute.
+    if ( ctx->mouse_click_row_id == row_id )
+        current = row;
+
     // Promote focus to first interactive row when current is stuck on a leading skip row.
     if ( current < row
          && ( ctx->active_menu_skip & ( 1u << current ) )
@@ -550,10 +603,17 @@ bool vxui_menu_action( vxui_ctx* ctx, const char* label )
 {
     assert( ctx && ctx->active_menu >= 0 );
     if ( !vxui_menu_row_interactive( ctx, label ) ) return false;
-    if ( ( ctx->input & VXUI_INPUT_CONFIRM ) && ctx->pressed_row_count < VXUI_MAX_MENUS )
+
+    bool kbd_held   = ( ctx->input & VXUI_INPUT_CONFIRM ) != 0;
+    bool kbd_fire   = ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CONFIRM ) != 0;
+    bool mouse_fire = ( ctx->mouse_click_row_id == ctx->active_menu_focus_id );
+    if ( mouse_fire ) ctx->mouse_click_row_id = 0;
+
+    if ( ( kbd_held || mouse_fire ) && ctx->pressed_row_count < VXUI_MAX_MENUS )
         ctx->pressed_row_ids[ctx->pressed_row_count++] = ctx->active_menu_focus_id;
-    // Edge-triggered: holding confirm fires once, not every frame.
-    return ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CONFIRM ) != 0;
+
+    // Edge-triggered: holding confirm or holding the mouse button fires once, not every frame.
+    return kbd_fire || mouse_fire;
 }
 
 bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char** options, int count )

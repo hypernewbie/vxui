@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <cfloat>
 #include <cstdint>
 #include <glm/glm.hpp>
 
@@ -43,6 +44,9 @@ enum vxui_input_action : uint32_t
     VXUI_INPUT_CONFIRM = 1 << 4,
     VXUI_INPUT_CANCEL  = 1 << 5,
 };
+
+#define VXUI_MOUSE_LEFT  0x01
+#define VXUI_MOUSE_RIGHT 0x02
 
 #define VXUI_FIT     0
 #define VXUI_GROW    1
@@ -125,6 +129,12 @@ struct vxui_ctx
     void*    text             = nullptr;// vxui_text_state*, lazy on first vxui_load_font
     void*    renderer         = nullptr;// owned by sibling render module
 
+    glm::vec2 mouse_pos          = { FLT_MAX, FLT_MAX };  // off-screen sentinel = no mouse
+    uint32_t  mouse_buttons      = 0;    // bitfield of VXUI_MOUSE_*, cleared each vxui_frame
+    uint32_t  prev_mouse_buttons = 0;    // mouse_buttons from the previous frame
+    uint32_t  mouse_press_row_id = 0;    // RECT id pressed under cursor, persists until release
+    uint32_t  mouse_click_row_id = 0;    // RECT id activated by button-up over same rect, one-frame carry
+
     glm::uvec4  menu_state       [VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows, skip_mask }
     glm::vec4   menu_focus_spring[VXUI_MAX_MENUS] = {}; // { offset_y, velocity_y, prev_row, _ }, prev_row -1 = unset
     int         menu_scroll_top  [VXUI_MAX_MENUS] = {}; // topmost visible row index when max_visible > 0
@@ -172,6 +182,7 @@ void vxui_input            ( vxui_ctx* ctx, const char* action, bool pressed = t
 bool vxui_input_pressed    ( vxui_ctx* ctx, const char* action );
 bool vxui_input_just_pressed( vxui_ctx* ctx, const char* action );
 bool vxui_input_repeated    ( vxui_ctx* ctx, const char* action );
+void vxui_mouse            ( vxui_ctx* ctx, float x, float y, uint32_t buttons );
 
 bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true, int max_visible = 0 );
 

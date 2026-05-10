@@ -79,6 +79,7 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         out->uv         = { 0.0f, 0.0f, 1.0f, 1.0f };
         return;
     }
+    if ( c->state & VXUI_DRAW_HOVERED ) { out->colour = { 0.22f, 0.22f, 0.27f, 1.0f }; return; }
     out->colour = { 0.15f, 0.15f, 0.18f, 1.0f };
 }
 
@@ -168,6 +169,13 @@ int main( int /*argc*/, char** /*argv*/ )
         for ( auto& m : s_keymap )
             if ( glfwGetKey( window, m.key ) == GLFW_PRESS )
                 vxui_input( &ctx, m.action );
+
+        double mx = 0, my = 0;
+        glfwGetCursorPos( window, &mx, &my );
+        uint32_t mb = 0;
+        if ( glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_LEFT  ) == GLFW_PRESS ) mb |= VXUI_MOUSE_LEFT;
+        if ( glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_RIGHT ) == GLFW_PRESS ) mb |= VXUI_MOUSE_RIGHT;
+        vxui_mouse( &ctx, (float) mx, (float) my, mb );
 
         resolver_state.time_seconds += 1.0f / 60.0f;
 
