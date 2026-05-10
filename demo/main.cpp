@@ -47,12 +47,13 @@ struct demo_resolver_state
 
 struct demo_screen_state
 {
-    const char* stack[DEMO_MAX_STACK] = { "main" };
-    int         depth                 = 1;
+    bool         splash                = true;
+    const char*  stack[DEMO_MAX_STACK] = { "main" };
+    int          depth                 = 1;
 
-    float       volume     = 0.6f;
-    int         resolution = 1;
-    int         vsync      = 1;
+    float        volume     = 0.6f;
+    int          resolution = 1;
+    int          vsync      = 1;
 };
 
 static void demo_push( demo_screen_state* s, const char* name )
@@ -231,24 +232,26 @@ int main( int /*argc*/, char** /*argv*/ )
 
         resolver_state.time_seconds += 1.0f / 60.0f;
 
-        vxui_rect( &ctx, "demo_frame", { .width = { VXUI_FIXED, 256 }, .col = true, .padding = { 4, 4, 4, 4 } } );
-        vxui_rect( &ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .col = true, .padding = { 8, 8, 8, 8 } } );
-        const char* active = screen_state.stack[screen_state.depth - 1];
-        if      ( strcmp( active, "main"    ) == 0 ) demo_main_menu   ( &ctx, &screen_state, window );
-        else if ( strcmp( active, "options" ) == 0 ) demo_options_menu( &ctx, &screen_state );
-        vxui_div_end( &ctx );
-        vxui_div_end( &ctx );
-        vxui_draw_list dl = vxui_render( &ctx );
-        vxui_gl_render( &ctx, dl, (float) fb_w, (float) fb_h );
-
-        if ( ( frame % 60 ) == 0 )
+        if ( screen_state.splash )
         {
-            printf( "frame %d: %d rects, %d texts\n",
-                    frame,
-                    vxui_draw_count( dl, VXUI_DRAW_RECT ),
-                    vxui_draw_count( dl, VXUI_DRAW_TEXT ) );
-            fflush( stdout );
+            if ( ( ctx.input & ~ctx.prev_input & VXUI_INPUT_CONFIRM ) != 0 ) screen_state.splash = false;
+            vxui_render( &ctx );
         }
+        else
+        {
+            vxui_rect( &ctx, "demo_frame", { .width = { VXUI_FIXED, 256 }, .col = true, .padding = { 4, 4, 4, 4 } } );
+            vxui_rect( &ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .col = true, .padding = { 8, 8, 8, 8 } } );
+            const char* active = screen_state.stack[screen_state.depth - 1];
+            if ( strcmp( active, "main" ) == 0 )
+                demo_main_menu( &ctx, &screen_state, window );
+            else if ( strcmp( active, "options" ) == 0 )
+                demo_options_menu( &ctx, &screen_state );
+            vxui_div_end( &ctx );
+            vxui_div_end( &ctx );
+            vxui_draw_list dl = vxui_render( &ctx );
+            vxui_gl_render( &ctx, dl, (float) fb_w, (float) fb_h );
+        }
+
         frame++;
 
         glfwSwapBuffers( window );
