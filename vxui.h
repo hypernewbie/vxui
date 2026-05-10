@@ -101,6 +101,8 @@ struct vxui_draw_cmd
     int32_t          text_len;
     uint16_t         font;
     uint16_t         font_px;
+    int              row_index;          // -1 for non-menu rects and text cmds
+    int              focused_row_index;  // -1 for non-menu rects and text cmds; snapshot of menu's current_row
     vxui_render_data render;
 };
 
@@ -151,6 +153,11 @@ struct vxui_ctx
     int      focused_row_count               = 0;
     uint32_t pressed_row_ids[VXUI_MAX_MENUS] = {};   // per-frame, count = pressed_row_count
     int      pressed_row_count               = 0;
+
+    uint32_t frame_row_ids             [VXUI_MAX_MENUS * VXUI_MAX_MENU_ROWS] = {};
+    int      frame_row_indices         [VXUI_MAX_MENUS * VXUI_MAX_MENU_ROWS] = {};
+    int      frame_row_focused_indices [VXUI_MAX_MENUS * VXUI_MAX_MENU_ROWS] = {};
+    int      frame_row_count                                                 = 0;
 
     vxui_draw_cmd  draw_buf[VXUI_MAX_DRAW_CMDS] = {};
     vxui_draw_list draw_list                     = {};

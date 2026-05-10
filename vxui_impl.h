@@ -67,6 +67,7 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
     ctx->text_offset         = 0;
     ctx->focused_row_count   = 0;
     ctx->pressed_row_count   = 0;
+    ctx->frame_row_count     = 0;
     if ( ctx->clay )
     {
         Clay_SetCurrentContext( (Clay_Context*) ctx->clay );
@@ -112,6 +113,8 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             out.text_len       = 0;
             out.font           = 0;
             out.font_px        = 0;
+            out.row_index      = -1;
+            out.focused_row_index = -1;
         }
         else if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT )
         {
@@ -126,6 +129,8 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             out.text_len       = t.stringContents.length;
             out.font           = t.fontId;
             out.font_px        = t.fontSize;
+            out.row_index      = -1;
+            out.focused_row_index = -1;
         }
     }
 
@@ -143,6 +148,19 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         for ( int j = 0; j < ctx->pressed_row_count; j++ )
         {
             if ( c.id == ctx->pressed_row_ids[j] ) { c.state |= VXUI_DRAW_PRESSED; break; }
+        }
+    }
+
+    for ( int i = 0; i < count; i++ )
+    {
+        vxui_draw_cmd& c = ctx->draw_buf[i];
+        if ( c.type != VXUI_DRAW_RECT ) continue;
+        for ( int j = 0; j < ctx->frame_row_count; j++ )
+        {
+            if ( c.id != ctx->frame_row_ids[j] ) continue;
+            c.row_index         = ctx->frame_row_indices[j];
+            c.focused_row_index = ctx->frame_row_focused_indices[j];
+            break;
         }
     }
 
@@ -550,6 +568,12 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label )
     for ( int i = 0; i < ctx->active_menu_row; i++ )
         assert( ctx->active_menu_row_ids[i] != eid.id && "duplicate label in same menu" );
     ctx->active_menu_row_ids[ctx->active_menu_row] = eid.id;
+
+    assert( ctx->frame_row_count < VXUI_MAX_MENUS * VXUI_MAX_MENU_ROWS );
+    int fr = ctx->frame_row_count++;
+    ctx->frame_row_ids            [fr] = eid.id;
+    ctx->frame_row_indices        [fr] = ctx->active_menu_row;
+    ctx->frame_row_focused_indices[fr] = (int) ctx->menu_state[ctx->active_menu].y;
 
     Clay__OpenElementWithId( eid );
 
