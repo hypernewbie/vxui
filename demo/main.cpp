@@ -74,9 +74,13 @@ static const char* s_demo_on_off[]      = { "Off", "On" };
 static void demo_main_menu( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window )
 {
     if ( !vxui_menu( ctx, "main" ) ) return;
-    if ( vxui_menu_action( ctx, "Play"    ) ) printf( "Play fired\n" );
-    if ( vxui_menu_action( ctx, "Options" ) ) demo_push( s, "options" );
-    if ( vxui_menu_action( ctx, "Quit"    ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
+    if ( vxui_menu_action( ctx, "Play"         ) ) printf( "Play fired\n" );
+    if ( vxui_menu_action( ctx, "Missions"     ) ) printf( "Missions fired\n" );
+    if ( vxui_menu_action( ctx, "Stage Select" ) ) printf( "Stage Select fired\n" );
+    if ( vxui_menu_action( ctx, "Options"      ) ) demo_push( s, "options" );
+    if ( vxui_menu_action( ctx, "Unlocks"      ) ) printf( "Unlocks fired\n" );
+    if ( vxui_menu_action( ctx, "Extras"       ) ) printf( "Extras fired\n" );
+    if ( vxui_menu_action( ctx, "Quit"         ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
     vxui_menu_end( ctx );
 }
 
