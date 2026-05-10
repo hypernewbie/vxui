@@ -75,11 +75,11 @@ static void demo_main_menu( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* win
 {
     if ( !vxui_menu( ctx, "main" ) ) return;
     if ( vxui_menu_action( ctx, "Play"         ) ) printf( "Play fired\n" );
-    if ( vxui_menu_action( ctx, "Missions"     ) ) printf( "Missions fired\n" );
-    if ( vxui_menu_action( ctx, "Stage Select" ) ) printf( "Stage Select fired\n" );
+    if ( vxui_menu_action( ctx, "Missions"     ) ) demo_push( s, "missions" );
+    if ( vxui_menu_action( ctx, "Stage Select" ) ) demo_push( s, "stageselect" );
     if ( vxui_menu_action( ctx, "Options"      ) ) demo_push( s, "options" );
-    if ( vxui_menu_action( ctx, "Unlocks"      ) ) printf( "Unlocks fired\n" );
-    if ( vxui_menu_action( ctx, "Extras"       ) ) printf( "Extras fired\n" );
+    if ( vxui_menu_action( ctx, "Unlocks"      ) ) demo_push( s, "unlocks" );
+    if ( vxui_menu_action( ctx, "Extras"       ) ) demo_push( s, "extras" );
     if ( vxui_menu_action( ctx, "Quit"         ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
     vxui_menu_end( ctx );
 }
@@ -92,6 +92,16 @@ static void demo_options_menu( vxui_ctx* ctx, demo_screen_state* s )
     vxui_menu_section( ctx, "DISPLAY" );
     vxui_menu_option ( ctx, "Resolution", &s->resolution, s_demo_resolutions, 3 );
     vxui_menu_option ( ctx, "Vsync",      &s->vsync,      s_demo_on_off,      2 );
+    if ( vxui_menu_action( ctx, "Back" ) ) demo_pop( s );
+    if ( vxui_menu_cancelled( ctx ) )      demo_pop( s );
+    vxui_menu_end( ctx );
+}
+
+static void demo_todo_menu( vxui_ctx* ctx, demo_screen_state* s, const char* name )
+{
+    if ( !vxui_menu( ctx, name ) ) return;
+    vxui_menu_section( ctx, name );
+    vxui_menu_label  ( ctx, "todo" );
     if ( vxui_menu_action( ctx, "Back" ) ) demo_pop( s );
     if ( vxui_menu_cancelled( ctx ) )      demo_pop( s );
     vxui_menu_end( ctx );
@@ -250,6 +260,14 @@ int main( int /*argc*/, char** /*argv*/ )
                 demo_main_menu( &ctx, &screen_state, window );
             else if ( strcmp( active, "options" ) == 0 )
                 demo_options_menu( &ctx, &screen_state );
+            else if ( strcmp( active, "missions" ) == 0 )
+                demo_todo_menu( &ctx, &screen_state, "missions" );
+            else if ( strcmp( active, "stageselect" ) == 0 )
+                demo_todo_menu( &ctx, &screen_state, "stageselect" );
+            else if ( strcmp( active, "unlocks" ) == 0 )
+                demo_todo_menu( &ctx, &screen_state, "unlocks" );
+            else if ( strcmp( active, "extras" ) == 0 )
+                demo_todo_menu( &ctx, &screen_state, "extras" );
             vxui_div_end( &ctx );
             vxui_div_end( &ctx );
             vxui_draw_list dl = vxui_render( &ctx );
