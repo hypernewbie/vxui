@@ -544,6 +544,8 @@ static void vxui_gl_emit_text( vxui_text_state* st, const vxui_draw_list& dl, fl
         ve_font_id font = ( c->font != 0 ) ? (ve_font_id) c->font : st->default_font;
         if ( font < 0 || c->text_len <= 0 ) continue;
 
+        ve_fontcache_set_font_size( &st->cache, font, (float) c->font_px );
+
         std::u8string text( (const char8_t*) c->text, (size_t) c->text_len );
         float posx = c->rect.x * inv_w;
         float posy = 1.0f - ( c->rect.y + c->font_px ) * inv_h;   // VEFC pen = baseline, y-up

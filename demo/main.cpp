@@ -266,7 +266,12 @@ int main( int /*argc*/, char** /*argv*/ )
         {
             if ( ( ctx.input & ~ctx.prev_input & VXUI_INPUT_CONFIRM ) != 0 ) screen_state.splash = false;
             if ( ( ctx.input & ~ctx.prev_input & VXUI_INPUT_CANCEL ) != 0 ) glfwSetWindowShouldClose( window, GLFW_TRUE );
-            vxui_render( &ctx );
+            vxui_div ( &ctx, "splash_root", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .gap = 12, .align_x = 1, .align_y = 1 } );
+            vxui_text( &ctx, "splash_title",  "VXUI DEMO",            64 );
+            vxui_text( &ctx, "splash_prompt", "Press Enter to Start", 24 );
+            vxui_div_end( &ctx );
+            vxui_draw_list dl = vxui_render( &ctx );
+            vxui_gl_render( &ctx, dl, (float) fb_w, (float) fb_h );
         }
         else
         {

@@ -143,6 +143,10 @@ if(VXUI_BUILD_TESTS)
     target_link_libraries(test_row_index PRIVATE vxui)
     add_test(NAME test_row_index COMMAND test_row_index)
 
+    add_executable(test_text tests/test_text.cpp)
+    target_link_libraries(test_text PRIVATE vxui)
+    add_test(NAME test_text COMMAND test_text)
+
     add_executable(test_vefc_backend tests/test_vefc_backend.cpp)
     target_link_libraries(test_vefc_backend PRIVATE vxui)
     add_test(NAME test_vefc_backend COMMAND test_vefc_backend)

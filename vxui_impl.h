@@ -306,6 +306,31 @@ void vxui_rect( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg )
     Clay__ConfigureOpenElement( decl );
 }
 
+void vxui_text( vxui_ctx* ctx, const char* id, const char* label, uint16_t font_px )
+{
+    assert( ctx );
+    if ( font_px == 0 ) font_px = (uint16_t) VXUI_FONT_SIZE_DEFAULT;
+
+    Clay_String clay_id = { false, (int32_t) strlen( id ), id };
+    Clay__OpenElementWithId( Clay__HashString( clay_id, 0 ) );
+
+    Clay_ElementDeclaration decl = {};
+    decl.layout.sizing.width     = CLAY_SIZING_FIT( 0 );
+    decl.layout.sizing.height    = CLAY_SIZING_FIT( 0 );
+
+    Clay__ConfigureOpenElement( decl );
+
+    int         label_len = (int) strlen( label );
+    const char* stable    = vxui_text_alloc( ctx, label, label_len );
+    if ( stable )
+    {
+        Clay_String text_str = { false, (int32_t) label_len, stable };
+        CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontSize = font_px } ) );
+    }
+
+    Clay__CloseElement();
+}
+
 void vxui_root( vxui_ctx* ctx, const char* id, float x, float y )
 {
     assert( ctx );
@@ -760,6 +785,8 @@ static Clay_Dimensions vxui_measure_text( Clay_StringSlice s, Clay_TextElementCo
     vxui_text_state* st = (vxui_text_state*) ctx->text;
     int font_id = ( cfg->fontId != 0 ) ? (int) cfg->fontId : st->default_font;
     if ( font_id < 0 ) return { 0, 0 };
+
+    ve_fontcache_set_font_size( &st->cache, font_id, (float) cfg->fontSize );
 
     std::u8string text( (const char8_t*) s.chars, (size_t) s.length );
     ve_fontcache_vec2 m = ve_fontcache_measure_text( &st->cache, font_id, text, 1.0f, 1.0f, true );
