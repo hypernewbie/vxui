@@ -7,6 +7,14 @@
 #include "vxui.h"
 #include <glad/glad.h>
 
+// Demo-renderer material contract. Caller writes one of these into
+// vxui_render_data.material_id; the renderer dispatches accordingly.
+#define DEMO_MATERIAL_CRT            1     // params: { time, intensity, curvature, aberration }
+#define DEMO_MATERIAL_ROUND          2     // params: { radius_px, softness_px, _, _ }
+
+#define DEMO_MATERIAL_FLAG_SCANLINES 1     // CRT: enable scanlines
+#define DEMO_MATERIAL_FLAG_CURVE     2     // CRT: enable barrel curve
+
 void     vxui_gl_init    ( vxui_ctx* ctx );
 void     vxui_gl_render  ( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h );
 void     vxui_gl_shutdown( vxui_ctx* ctx );
@@ -20,10 +28,12 @@ uint32_t vxui_gl_create_chevron_texture();
 #include <cassert>
 #include "ve_fontcache.h"
 
-#define VXUI_GL_PASS_RECT          8
-#define VXUI_GL_PASS_RECT_TEXTURED 9
-#define VXUI_GL_PASS_CRT           10
-#define VXUI_GL_MAX_MATERIAL_DCALLS 64
+// Pass IDs share VEFC's dcall.pass uint32_t namespace; values >= 8 are demo-owned.
+#define DEMO_GL_PASS_RECT          8
+#define DEMO_GL_PASS_RECT_TEXTURED 9
+#define DEMO_GL_PASS_CRT           10
+#define DEMO_GL_PASS_ROUND         11
+#define DEMO_GL_MAX_MATERIAL_DCALLS 64
 
 struct vxui_gl_material_data
 {
@@ -40,10 +50,11 @@ struct vxui_gl_state
     GLuint shader_rect          = 0;
     GLuint shader_rect_textured = 0;
     GLuint shader_crt           = 0;
+    GLuint shader_round         = 0;
     GLuint fbo[2]               = { 0, 0 };
     GLuint fbo_texture[2]       = { 0, 0 };
 
-    vxui_gl_material_data material_data[VXUI_GL_MAX_MATERIAL_DCALLS] = {};
+    vxui_gl_material_data material_data[DEMO_GL_MAX_MATERIAL_DCALLS] = {};
     int                   material_data_count                         = 0;
 };
 
@@ -173,6 +184,24 @@ void main( void ) {
 }
 )";
 
+// SDF rounded box. mparams = { radius_px, width_px, height_px, softness_px }.
+// d = sdRoundBox(p_px, halfsize - r) - r  (Inigo Quilez 2D rounded box SDF).
+static const char* s_vxui_gl_round_fs = R"(#version 330 core
+in vec2 uv;
+out vec4 fragc;
+uniform vec4 colour;
+uniform vec4 mparams;
+void main( void ) {
+    vec2  half_size = vec2( mparams.y, mparams.z ) * 0.5;
+    vec2  p_px      = ( uv * 2.0 - 1.0 ) * half_size;
+    float r         = mparams.x;
+    vec2  q         = abs( p_px ) - half_size + vec2( r );
+    float d         = length( max( q, vec2( 0.0 ) ) ) + min( max( q.x, q.y ), 0.0 ) - r;
+    float a         = 1.0 - smoothstep( 0.0, mparams.w, d );
+    fragc = vec4( colour.xyz, colour.a * a );
+}
+)";
+
 static void vxui_gl_check_error( const char* tag )
 {
 #ifdef VXUI_DEBUG
@@ -291,6 +320,7 @@ void vxui_gl_init( vxui_ctx* ctx )
     gl->shader_rect          = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_rect_fs              );
     gl->shader_rect_textured = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_rect_textured_fs     );
     gl->shader_crt           = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_crt_fs               );
+    gl->shader_round         = vxui_gl_compile( s_vxui_gl_vefc_vs_draw_text, s_vxui_gl_round_fs             );
 
     glGenVertexArrays( 1, &gl->vao );
     vxui_gl_setup_fbo( gl );
@@ -313,7 +343,7 @@ static void vxui_gl_push_solid_quad( ve_fontcache_drawlist* dl, float x0, float 
     dl->indices.push_back( base + 3 );
 
     ve_fontcache_draw dcall;
-    dcall.pass        = VXUI_GL_PASS_RECT;
+    dcall.pass        = DEMO_GL_PASS_RECT;
     dcall.start_index = idx_start;
     dcall.end_index   = (uint32_t) dl->indices.size();
     dcall.colour[0]   = colour.x;
@@ -342,7 +372,7 @@ static void vxui_gl_push_textured_quad( ve_fontcache_drawlist* dl, float x0, flo
     dl->indices.push_back( base + 3 );
 
     ve_fontcache_draw dcall;
-    dcall.pass        = VXUI_GL_PASS_RECT_TEXTURED;
+    dcall.pass        = DEMO_GL_PASS_RECT_TEXTURED;
     dcall.start_index = idx_start;
     dcall.end_index   = (uint32_t) dl->indices.size();
     dcall.colour[0]   = colour.x;
@@ -353,15 +383,18 @@ static void vxui_gl_push_textured_quad( ve_fontcache_drawlist* dl, float x0, flo
     dl->dcalls.push_back( dcall );
 }
 
-static void vxui_gl_push_crt_quad( ve_fontcache_drawlist* dl, vxui_gl_state* gl, float x0, float y0, float x1, float y1, const vxui_render_data& rd )
+// Material-driven push: single quad, dcall.region indexes into material_data[].
+// All material passes share this shape; only pass id and material_data semantics differ.
+static void vxui_gl_push_material_quad( ve_fontcache_drawlist* dl, vxui_gl_state* gl, uint32_t pass,
+                                        float x0, float y0, float x1, float y1,
+                                        const float params[8], uint32_t flags,
+                                        const glm::vec4& colour )
 {
-    float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;
-
     uint32_t base = (uint32_t) dl->vertices.size();
-    dl->vertices.push_back( { x0, y0, u0, v0 } );
-    dl->vertices.push_back( { x1, y0, u1, v0 } );
-    dl->vertices.push_back( { x1, y1, u1, v1 } );
-    dl->vertices.push_back( { x0, y1, u0, v1 } );
+    dl->vertices.push_back( { x0, y0, 0.0f, 0.0f } );
+    dl->vertices.push_back( { x1, y0, 1.0f, 0.0f } );
+    dl->vertices.push_back( { x1, y1, 1.0f, 1.0f } );
+    dl->vertices.push_back( { x0, y1, 0.0f, 1.0f } );
 
     uint32_t idx_start = (uint32_t) dl->indices.size();
     dl->indices.push_back( base + 0 );
@@ -371,19 +404,19 @@ static void vxui_gl_push_crt_quad( ve_fontcache_drawlist* dl, vxui_gl_state* gl,
     dl->indices.push_back( base + 2 );
     dl->indices.push_back( base + 3 );
 
-    assert( gl->material_data_count < VXUI_GL_MAX_MATERIAL_DCALLS );
+    assert( gl->material_data_count < DEMO_GL_MAX_MATERIAL_DCALLS );
     int mat_idx = gl->material_data_count++;
-    memcpy( gl->material_data[mat_idx].params, rd.params, sizeof( rd.params ) );
-    gl->material_data[mat_idx].flags = rd.flags;
+    memcpy( gl->material_data[mat_idx].params, params, sizeof( gl->material_data[mat_idx].params ) );
+    gl->material_data[mat_idx].flags = flags;
 
     ve_fontcache_draw dcall;
-    dcall.pass        = VXUI_GL_PASS_CRT;
+    dcall.pass        = pass;
     dcall.start_index = idx_start;
     dcall.end_index   = (uint32_t) dl->indices.size();
-    dcall.colour[0]   = rd.colour.x;
-    dcall.colour[1]   = rd.colour.y;
-    dcall.colour[2]   = rd.colour.z;
-    dcall.colour[3]   = rd.colour.w;
+    dcall.colour[0]   = colour.x;
+    dcall.colour[1]   = colour.y;
+    dcall.colour[2]   = colour.z;
+    dcall.colour[3]   = colour.w;
     dcall.region      = (uint32_t) mat_idx;
     dl->dcalls.push_back( dcall );
 }
@@ -395,10 +428,34 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
     float y0 = 1.0f - py / fb_h;
     float y1 = 1.0f - ( py + c->rect.w ) / fb_h;
 
-    if ( c->render.material_id != 0 )
-        vxui_gl_push_crt_quad( fdl, gl, x0, y0, x1, y1, c->render );
-    else
-        vxui_gl_push_solid_quad( fdl, x0, y0, x1, y1, c->render.colour );
+    switch ( c->render.material_id )
+    {
+        case 0:
+            vxui_gl_push_solid_quad( fdl, x0, y0, x1, y1, c->render.colour );
+            break;
+        case DEMO_MATERIAL_CRT:
+            // Caller-supplied params pass through unchanged: time/intensity/curve/aberration.
+            vxui_gl_push_material_quad( fdl, gl, DEMO_GL_PASS_CRT, x0, y0, x1, y1,
+                                        c->render.params, c->render.flags, c->render.colour );
+            break;
+        case DEMO_MATERIAL_ROUND:
+        {
+            // Round material wants pixel-space mparams; rebuild from caller's
+            // params[0]=radius, params[1]=softness plus the cmd's rect size.
+            float mp[8] = {};
+            mp[0] = c->render.params[0];
+            mp[1] = c->rect.z;
+            mp[2] = c->rect.w;
+            mp[3] = c->render.params[1];
+            vxui_gl_push_material_quad( fdl, gl, DEMO_GL_PASS_ROUND, x0, y0, x1, y1,
+                                        mp, c->render.flags, c->render.colour );
+            break;
+        }
+        default:
+            assert( !"unknown material_id" );
+            vxui_gl_push_solid_quad( fdl, x0, y0, x1, y1, c->render.colour );
+            break;
+    }
 
     if ( c->render.outline_thickness > 0.0f )
     {
@@ -537,7 +594,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glUniform4fv( glGetUniformLocation( gl->shader_draw_text, "colour" ), 1, dcall.colour );
             glEnable( GL_FRAMEBUFFER_SRGB );
         }
-        else if ( dcall.pass == VXUI_GL_PASS_RECT )
+        else if ( dcall.pass == DEMO_GL_PASS_RECT )
         {
             glUseProgram( gl->shader_rect );
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
@@ -547,7 +604,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glUniform4fv( glGetUniformLocation( gl->shader_rect, "colour" ), 1, dcall.colour );
             glEnable( GL_FRAMEBUFFER_SRGB );
         }
-        else if ( dcall.pass == VXUI_GL_PASS_RECT_TEXTURED )
+        else if ( dcall.pass == DEMO_GL_PASS_RECT_TEXTURED )
         {
             glUseProgram( gl->shader_rect_textured );
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
@@ -560,7 +617,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glBindTexture( GL_TEXTURE_2D, (GLuint) dcall.region );
             glEnable( GL_FRAMEBUFFER_SRGB );
         }
-        else if ( dcall.pass == VXUI_GL_PASS_CRT )
+        else if ( dcall.pass == DEMO_GL_PASS_CRT )
         {
             glUseProgram( gl->shader_crt );
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
@@ -572,6 +629,19 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             assert( mi >= 0 && mi < gl->material_data_count );
             glUniform4fv( glGetUniformLocation( gl->shader_crt, "mparams" ), 1, gl->material_data[mi].params );
             glUniform1ui( glGetUniformLocation( gl->shader_crt, "mflags" ), gl->material_data[mi].flags );
+            glEnable( GL_FRAMEBUFFER_SRGB );
+        }
+        else if ( dcall.pass == DEMO_GL_PASS_ROUND )
+        {
+            glUseProgram( gl->shader_round );
+            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+            glViewport( 0, 0, win_w, win_h );
+            glScissor( 0, 0, win_w, win_h );
+            glUniform4fv( glGetUniformLocation( gl->shader_round, "colour" ), 1, dcall.colour );
+            int mi = (int) dcall.region;
+            assert( mi >= 0 && mi < gl->material_data_count );
+            glUniform4fv( glGetUniformLocation( gl->shader_round, "mparams" ), 1, gl->material_data[mi].params );
             glEnable( GL_FRAMEBUFFER_SRGB );
         }
         if ( dcall.clear_before_draw )
@@ -618,6 +688,7 @@ void vxui_gl_shutdown( vxui_ctx* ctx )
     glDeleteProgram( gl->shader_rect );
     glDeleteProgram( gl->shader_rect_textured );
     glDeleteProgram( gl->shader_crt );
+    glDeleteProgram( gl->shader_round );
     glDeleteFramebuffers( 2, gl->fbo );
     glDeleteTextures( 2, gl->fbo_texture );
 

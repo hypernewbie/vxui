@@ -35,10 +35,6 @@ static std::vector< uint8_t > load_file( const char* path )
 
 static uint8_t s_clay_mem[16 * 1024 * 1024];
 
-#define DEMO_MATERIAL_CRT            1
-#define DEMO_MATERIAL_FLAG_SCANLINES 1
-#define DEMO_MATERIAL_FLAG_CURVE     2
-
 #define DEMO_MAX_STACK 8
 
 struct demo_resolver_state
@@ -120,6 +116,11 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         out->outline_thickness = 2.0f;
         return;
     }
+
+    // Menu rows: rounded buttons. Caller-side material params: corner radius, edge softness.
+    out->material_id = DEMO_MATERIAL_ROUND;
+    out->params[0]   = 8.0f;
+    out->params[1]   = 1.5f;
 
     if ( c->state & VXUI_DRAW_PRESSED ) { out->colour = { 0.45f, 0.70f, 1.00f, 1.0f }; return; }
     if ( c->state & VXUI_DRAW_FOCUSED )
