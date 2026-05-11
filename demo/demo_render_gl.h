@@ -16,8 +16,14 @@
 #define DEMO_MATERIAL_FLAG_SCANLINES 1     // CRT: enable scanlines
 #define DEMO_MATERIAL_FLAG_CURVE     2     // CRT: enable barrel curve
 
+struct vxui_gl_xform
+{
+    glm::vec2 offset = { 0.0f, 0.0f };
+    float     scale  = 1.0f;
+};
+
 void     vxui_gl_init    ( vxui_ctx* ctx );
-void     vxui_gl_render  ( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h );
+void     vxui_gl_render  ( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf = {} );
 void     vxui_gl_shutdown( vxui_ctx* ctx );
 uint32_t vxui_gl_create_chevron_texture();
 uint32_t vxui_gl_load_image( const char* path );
@@ -517,12 +523,15 @@ static void vxui_gl_push_material_quad( ve_fontcache_drawlist* dl, vxui_gl_state
     dl->dcalls.push_back( dcall );
 }
 
-static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, const vxui_draw_cmd* c, float px, float py, float fb_w, float fb_h )
+static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, const vxui_draw_cmd* c, float px, float py, float fb_w, float fb_h, vxui_gl_xform xf )
 {
+    float sw = c->rect.z * xf.scale;
+    float sh = c->rect.w * xf.scale;
+
     float x0 = px / fb_w;
-    float x1 = ( px + c->rect.z ) / fb_w;
+    float x1 = ( px + sw ) / fb_w;
     float y0 = 1.0f - py / fb_h;
-    float y1 = 1.0f - ( py + c->rect.w ) / fb_h;
+    float y1 = 1.0f - ( py + sh ) / fb_h;
 
     switch ( c->render.material_id )
     {
@@ -539,10 +548,10 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
             // Round material wants pixel-space mparams; rebuild from caller's
             // params[0]=radius, params[1]=softness plus the cmd's rect size.
             float mp[8] = {};
-            mp[0] = c->render.params[0];
-            mp[1] = c->rect.z;
-            mp[2] = c->rect.w;
-            mp[3] = c->render.params[1];
+            mp[0] = c->render.params[0] * xf.scale;
+            mp[1] = sw;
+            mp[2] = sh;
+            mp[3] = c->render.params[1] * xf.scale;
             vxui_gl_push_material_quad( fdl, gl, DEMO_GL_PASS_ROUND, x0, y0, x1, y1,
                                         mp, c->render.flags, c->render.colour );
             break;
@@ -565,10 +574,10 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
     if ( c->render.outline_thickness > 0.0f )
     {
         float mp[8] = {};
-        mp[0] = c->render.outline_thickness;
-        mp[1] = c->rect.z;
-        mp[2] = c->rect.w;
-        mp[3] = 1.0f;     // softness; demo-fixed, not a render_data field
+        mp[0] = c->render.outline_thickness * xf.scale;
+        mp[1] = sw;
+        mp[2] = sh;
+        mp[3] = 1.0f * xf.scale;
         vxui_gl_push_material_quad( fdl, gl, DEMO_GL_PASS_OUTLINE, x0, y0, x1, y1,
                                     mp, 0u, c->render.outline_colour );
     }
@@ -578,9 +587,9 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
         // Left-side marker. The row's left padding reserves space for this so
         // the chevron sits over a clear area rather than over the value text
         // which lives on the right side of option/slider rows.
-        float icon_h = c->rect.w;
-        float icon_w = icon_h;
-        float icon_px = px + 4.0f;
+        float icon_h  = sh;
+        float icon_w  = icon_h;
+        float icon_px = px + 4.0f * xf.scale;
         float icon_py = py;
         float ix0 = icon_px / fb_w;
         float ix1 = ( icon_px + icon_w ) / fb_w;
@@ -590,7 +599,7 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
     }
 }
 
-static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, const vxui_draw_list& dl, float w, float h )
+static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf )
 {
     int rect_n = vxui_draw_count( dl, VXUI_DRAW_RECT );
     if ( rect_n <= 0 ) return;
@@ -599,18 +608,22 @@ static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, c
     {
         const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
         if ( c->state & VXUI_DRAW_FOCUSED ) continue;
-        vxui_gl_emit_one_rect( fdl, gl, c, c->rect.x, c->rect.y, w, h );
+        float px = xf.offset.x + c->rect.x * xf.scale;
+        float py = xf.offset.y + c->rect.y * xf.scale;
+        vxui_gl_emit_one_rect( fdl, gl, c, px, py, w, h, xf );
     }
 
     for ( int i = 0; i < rect_n; i++ )
     {
         const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
         if ( !( c->state & VXUI_DRAW_FOCUSED ) ) continue;
-        vxui_gl_emit_one_rect( fdl, gl, c, c->rect.x, c->rect.y + c->focus_offset_y, w, h );
+        float px = xf.offset.x + c->rect.x * xf.scale;
+        float py = xf.offset.y + ( c->rect.y + c->focus_offset_y ) * xf.scale;
+        vxui_gl_emit_one_rect( fdl, gl, c, px, py, w, h, xf );
     }
 }
 
-static void vxui_gl_emit_text( vxui_text_state* st, const vxui_draw_list& dl, float w, float h )
+static void vxui_gl_emit_text( vxui_text_state* st, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf )
 {
     int text_n = vxui_draw_count( dl, VXUI_DRAW_TEXT );
     if ( text_n <= 0 ) return;
@@ -629,12 +642,15 @@ static void vxui_gl_emit_text( vxui_text_state* st, const vxui_draw_list& dl, fl
         glm::vec4 col = c->render.colour;
         if ( col.a <= 0.0f ) col = { 0.95f, 0.95f, 0.95f, 1.0f };
         float text_colour[4] = { col.r, col.g, col.b, col.a };
+        float font_px = (float) c->font_px * xf.scale;
         ve_fontcache_set_colour   ( &st->cache, text_colour );
-        ve_fontcache_set_font_size( &st->cache, font, (float) c->font_px );
+        ve_fontcache_set_font_size( &st->cache, font, font_px );
 
         std::u8string text( (const char8_t*) c->text, (size_t) c->text_len );
-        float posx = c->rect.x * inv_w;
-        float posy = 1.0f - ( c->rect.y + c->font_px ) * inv_h;   // VEFC pen = baseline, y-up
+        float sx   = xf.offset.x + c->rect.x * xf.scale;
+        float sy   = xf.offset.y + c->rect.y * xf.scale;
+        float posx = sx * inv_w;
+        float posy = 1.0f - ( sy + font_px ) * inv_h;   // VEFC pen = baseline, y-up
         ve_fontcache_draw_text( &st->cache, font, text, posx, posy, inv_w, inv_h );
     }
 }
@@ -798,7 +814,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
     vxui_gl_check_error( "execute" );
 }
 
-void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h )
+void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf )
 {
     assert( ctx && ctx->renderer );
     vxui_gl_state* gl = (vxui_gl_state*) ctx->renderer;
@@ -808,8 +824,8 @@ void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h )
     ve_fontcache_drawlist* fdl = ve_fontcache_get_drawlist( &st->cache );
 
     gl->material_data_count = 0;
-    vxui_gl_emit_rects( fdl, gl, dl, w, h );
-    vxui_gl_emit_text ( st, dl, w, h );
+    vxui_gl_emit_rects( fdl, gl, dl, w, h, xf );
+    vxui_gl_emit_text ( st, dl, w, h, xf );
     vxui_gl_execute   ( gl, &st->cache, (int) w, (int) h );
 }
 
