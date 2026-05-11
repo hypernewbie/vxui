@@ -2,6 +2,7 @@
 #include "../vxui.h"
 #define VXUI_IMPL
 #include "../vxui_impl.h"
+#include <cstring>
 
 static uint8_t s_clay_mem[16 * 1024 * 1024];
 
@@ -10,6 +11,25 @@ static vxui_ctx make_ctx()
     vxui_ctx ctx = {};
     vxui_init( &ctx, 1280, 720, s_clay_mem, sizeof( s_clay_mem ) );
     return ctx;
+}
+
+static uint32_t row_id( const char* menu, const char* label )
+{
+    Clay_String cs = { false, (int32_t) strlen( label ), label };
+    return Clay__HashString( cs, vxui_hash( menu ) ).id;
+}
+
+static bool any_text_contains( const vxui_draw_list& dl, const char* needle )
+{
+    int needle_len = (int) strlen( needle );
+    int n = vxui_draw_count( dl, VXUI_DRAW_TEXT );
+    for ( int i = 0; i < n; i++ )
+    {
+        const vxui_draw_cmd* t = vxui_draw_nth( dl, VXUI_DRAW_TEXT, i );
+        for ( int j = 0; j + needle_len <= t->text_len; j++ )
+            if ( memcmp( t->text + j, needle, needle_len ) == 0 ) return true;
+    }
+    return false;
 }
 
 static bool slider_frame( vxui_ctx* ctx, float* value, uint32_t input )
@@ -285,6 +305,105 @@ UTEST(menu_slider, single_step_covers_full_range) {
 
     step_frame( &ctx, &v, VXUI_INPUT_LEFT,  0.0f, 1.0f, 1.0f );
     ASSERT_NEAR( v, 0.0f, 1e-5f );
+}
+
+/* ---- value display --------------------------------------------------- */
+
+UTEST(menu_slider, value_text_emitted) {
+    vxui_ctx ctx = make_ctx();
+    float v = 0.5f;
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_slider( &ctx, "Volume", &v, 0.0f, 1.0f, 0.1f );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    // Two TEXT cmds per slider row: the label and the value display.
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 2 );
+    ASSERT_TRUE( any_text_contains( dl, "Volume" ) );
+    ASSERT_TRUE( any_text_contains( dl, "50%"    ) );
+}
+
+UTEST(menu_slider, value_text_updates_with_value) {
+    vxui_ctx ctx = make_ctx();
+    float v = 0.5f;
+
+    slider_frame( &ctx, &v, 0 );
+    slider_frame( &ctx, &v, VXUI_INPUT_RIGHT );
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "test" ) )
+    {
+        vxui_menu_slider( &ctx, "Volume", &v, 0.0f, 1.0f, 0.1f );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_NEAR( v, 0.6f, 1e-5f );
+    ASSERT_TRUE ( any_text_contains( dl, "60%" ) );
+    ASSERT_FALSE( any_text_contains( dl, "50%" ) );
+}
+
+UTEST(menu_slider, full_bar_at_max) {
+    vxui_ctx ctx = make_ctx();
+    float v = 1.0f;
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_slider( &ctx, "Volume", &v, 0.0f, 1.0f, 0.1f );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_TRUE( any_text_contains( dl, "##########" ) );
+    ASSERT_TRUE( any_text_contains( dl, "100%"       ) );
+}
+
+UTEST(menu_slider, empty_bar_at_min) {
+    vxui_ctx ctx = make_ctx();
+    float v = 0.0f;
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_slider( &ctx, "Volume", &v, 0.0f, 1.0f, 0.1f );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_TRUE( any_text_contains( dl, "----------" ) );
+    ASSERT_TRUE( any_text_contains( dl, "0%"         ) );
+}
+
+UTEST(menu_slider, row_id_stable_across_value_change) {
+    vxui_ctx ctx = make_ctx();
+    float v = 0.0f;
+
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_slider( &ctx, "Volume", &v, 0.0f, 1.0f, 0.1f );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl_0 = vxui_render( &ctx );
+    uint32_t id_zero = vxui_draw_nth( dl_0, VXUI_DRAW_RECT, 0 )->id;
+
+    v = 1.0f;
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    if ( vxui_menu( &ctx, "m" ) )
+    {
+        vxui_menu_slider( &ctx, "Volume", &v, 0.0f, 1.0f, 0.1f );
+        vxui_menu_end( &ctx );
+    }
+    vxui_draw_list dl_1 = vxui_render( &ctx );
+    uint32_t id_full = vxui_draw_nth( dl_1, VXUI_DRAW_RECT, 0 )->id;
+
+    ASSERT_EQ( id_zero, id_full );
+    ASSERT_EQ( id_zero, row_id( "m", "Volume" ) );
 }
 
 UTEST_MAIN();

@@ -147,6 +147,7 @@ struct vxui_ctx
     int      active_menu_row      = 0;   // current row being declared
     uint32_t active_menu_skip     = 0;   // bitmask, accumulated during declaration
     uint32_t active_menu_focus_id = 0;   // Clay id of focused row this frame, 0 = none
+    bool     active_menu_fill     = false;// rows fill the menu column width (set by vxui_menu)
 
     uint32_t focused_row_ids[VXUI_MAX_MENUS] = {};   // per-frame, count = focused_row_count
     float    focus_offsets  [VXUI_MAX_MENUS] = {};   // parallel to focused_row_ids
@@ -192,7 +193,7 @@ bool vxui_input_just_pressed( vxui_ctx* ctx, const char* action );
 bool vxui_input_repeated    ( vxui_ctx* ctx, const char* action );
 void vxui_mouse            ( vxui_ctx* ctx, float x, float y, uint32_t buttons );
 
-bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true, int max_visible = 0 );
+bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true, int max_visible = 0, bool fill = false );
 
 int                  vxui_draw_count ( const vxui_draw_list& dl, uint8_t type );
 const vxui_draw_cmd* vxui_draw_nth   ( const vxui_draw_list& dl, uint8_t type, int n );

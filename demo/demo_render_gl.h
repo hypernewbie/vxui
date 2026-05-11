@@ -575,9 +575,12 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
 
     if ( c->render.texture_id != 0 && c->render.material_id != DEMO_MATERIAL_IMAGE )
     {
+        // Left-side marker. The row's left padding reserves space for this so
+        // the chevron sits over a clear area rather than over the value text
+        // which lives on the right side of option/slider rows.
         float icon_h = c->rect.w;
         float icon_w = icon_h;
-        float icon_px = px + c->rect.z - icon_w - 6.0f;
+        float icon_px = px + 4.0f;
         float icon_py = py;
         float ix0 = icon_px / fb_w;
         float ix1 = ( icon_px + icon_w ) / fb_w;

@@ -212,7 +212,8 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
             out->colour = { pulse, pulse * 0.95f, pulse * 0.8f, 1.0f };
             return;
         }
-        out->colour = { 0.95f, 0.95f, 0.95f, 1.0f };
+        // Pale blue-white reads as "panel readout" against the cyan accents.
+        out->colour = { 0.85f, 0.92f, 1.00f, 1.0f };
         return;
     }
 
@@ -263,28 +264,32 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
     }
 
     out->material_id = DEMO_MATERIAL_ROUND;
-    out->params[0]   = 6.0f;
+    out->params[0]   = 4.0f;
     out->params[1]   = 1.0f;
 
-    if ( c->state & VXUI_DRAW_PRESSED ) { out->colour = { 0.45f, 0.70f, 1.00f, 0.95f }; return; }
+    if ( c->state & VXUI_DRAW_PRESSED ) { out->colour = { 0.55f, 0.95f, 1.00f, 0.95f }; return; }
     if ( c->state & VXUI_DRAW_FOCUSED )
     {
-        out->colour     = { 0.20f, 0.45f, 0.80f, 0.85f };
-        out->texture_id = st->focus_icon_texture;
-        out->uv         = { 0.0f, 0.0f, 1.0f, 1.0f };
+        out->colour            = { 0.10f, 0.40f, 0.85f, 0.85f };
+        out->outline_colour    = { 0.55f, 0.95f, 1.00f, 1.00f };
+        out->outline_thickness = 2.0f;
+        out->texture_id        = st->focus_icon_texture;
+        out->uv                = { 0.0f, 0.0f, 1.0f, 1.0f };
         return;
     }
-    if ( c->state & VXUI_DRAW_HOVERED ) { out->colour = { 0.20f, 0.22f, 0.28f, 0.85f }; return; }
+    if ( c->state & VXUI_DRAW_HOVERED ) { out->colour = { 0.16f, 0.24f, 0.36f, 0.80f }; return; }
 
     if ( c->row_index >= 0 && c->focused_row_index >= 0 )
     {
+        // Distance-from-focus ramp: closer rows brighter, further rows fade
+        // toward the BG image so the column reads as a stack of glowing strips.
         int d = c->row_index - c->focused_row_index;
         if ( d < 0 ) d = -d;
         static const glm::vec4 s_ramp[4] = {
-            { 0.20f, 0.45f, 0.80f, 0.85f },
-            { 0.14f, 0.18f, 0.26f, 0.75f },
-            { 0.10f, 0.13f, 0.18f, 0.65f },
-            { 0.07f, 0.09f, 0.13f, 0.55f },
+            { 0.10f, 0.40f, 0.85f, 0.85f },
+            { 0.06f, 0.18f, 0.34f, 0.70f },
+            { 0.04f, 0.11f, 0.22f, 0.55f },
+            { 0.03f, 0.07f, 0.14f, 0.40f },
         };
         int idx = d > 3 ? 3 : d;
         out->colour = s_ramp[idx];
@@ -335,7 +340,7 @@ static void demo_splash( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window
 
 static void demo_main_menu( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window )
 {
-    if ( !vxui_menu( ctx, "main" ) ) return;
+    if ( !vxui_menu( ctx, "main", true, 0, true ) ) return;
     if ( vxui_menu_action( ctx, "Start"        ) ) printf( "Start fired\n" );
     if ( vxui_menu_action( ctx, "Operations"   ) ) demo_push( s, "operations" );
     if ( vxui_menu_action( ctx, "Stage Select" ) ) demo_push( s, "stageselect" );
@@ -356,7 +361,7 @@ static void demo_operations_menu( vxui_ctx* ctx, demo_screen_state* s )
     vxui_div ( ctx, "ops_row", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .gap = 6 } );
 
         vxui_div ( ctx, "ops_left", { .width = { VXUI_FIXED, 240 }, .height = { VXUI_GROW, 0 }, .col = true } );
-        if ( vxui_menu( ctx, "operations", true, 9 ) )
+        if ( vxui_menu( ctx, "operations", true, 9, true ) )
         {
             for ( int i = 0; i < DEMO_MISSION_COUNT; i++ )
             {
@@ -410,7 +415,7 @@ static void demo_stage_select( vxui_ctx* ctx, demo_screen_state* s )
     vxui_div ( ctx, "stg_row", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .gap = 6 } );
 
         vxui_div ( ctx, "stg_left", { .width = { VXUI_FIXED, 240 }, .height = { VXUI_GROW, 0 }, .col = true } );
-        if ( vxui_menu( ctx, "stageselect" ) )
+        if ( vxui_menu( ctx, "stageselect", true, 0, true ) )
         {
             for ( int i = 0; i < DEMO_SECTOR_COUNT; i++ )
                 if ( vxui_menu_action( ctx, s_demo_sectors[i].name ) ) printf( "select: %s\n", s_demo_sectors[i].name );
@@ -430,7 +435,7 @@ static void demo_stage_select( vxui_ctx* ctx, demo_screen_state* s )
 
 static void demo_settings_hub( vxui_ctx* ctx, demo_screen_state* s )
 {
-    if ( !vxui_menu( ctx, "settings" ) ) return;
+    if ( !vxui_menu( ctx, "settings", true, 0, true ) ) return;
     if ( vxui_menu_action( ctx, "Gameplay"     ) ) demo_push( s, "settings_gameplay" );
     if ( vxui_menu_action( ctx, "Display"      ) ) demo_push( s, "settings_display"  );
     if ( vxui_menu_action( ctx, "Video Filter" ) ) demo_push( s, "settings_video"    );
@@ -444,7 +449,7 @@ static void demo_settings_hub( vxui_ctx* ctx, demo_screen_state* s )
 
 static void demo_settings_gameplay( vxui_ctx* ctx, demo_screen_state* s )
 {
-    if ( !vxui_menu( ctx, "settings_gameplay" ) ) return;
+    if ( !vxui_menu( ctx, "settings_gameplay", true, 0, true ) ) return;
     vxui_menu_option( ctx, "Ruleset",         &s->ruleset,    s_demo_rulesets,   3 );
     vxui_menu_option( ctx, "Ship Speed",      &s->ship_speed, s_demo_ship_speed, 3 );
     vxui_menu_option( ctx, "Score Tips",      &s->score_tips, s_demo_off_on,     2 );
@@ -455,7 +460,7 @@ static void demo_settings_gameplay( vxui_ctx* ctx, demo_screen_state* s )
 
 static void demo_settings_display( vxui_ctx* ctx, demo_screen_state* s )
 {
-    if ( !vxui_menu( ctx, "settings_display" ) ) return;
+    if ( !vxui_menu( ctx, "settings_display", true, 0, true ) ) return;
     vxui_menu_option( ctx, "Window Mode", &s->window_mode, s_demo_window_mode, 3 );
     vxui_menu_option( ctx, "Resolution",  &s->resolution,  s_demo_resolution,  3 );
     vxui_menu_option( ctx, "VSync",       &s->vsync,       s_demo_vsync,       3 );
@@ -468,7 +473,7 @@ static void demo_settings_display( vxui_ctx* ctx, demo_screen_state* s )
 
 static void demo_settings_video( vxui_ctx* ctx, demo_screen_state* s )
 {
-    if ( !vxui_menu( ctx, "settings_video" ) ) return;
+    if ( !vxui_menu( ctx, "settings_video", true, 0, true ) ) return;
     vxui_menu_option( ctx, "Rotation", &s->rotation, s_demo_rotation, 3 );
     vxui_menu_option( ctx, "Scaling",  &s->scaling,  s_demo_scaling,  3 );
     vxui_menu_option( ctx, "Filter",   &s->filter,   s_demo_filter,   4 );
@@ -480,7 +485,7 @@ static void demo_settings_video( vxui_ctx* ctx, demo_screen_state* s )
 
 static void demo_settings_audio( vxui_ctx* ctx, demo_screen_state* s )
 {
-    if ( !vxui_menu( ctx, "settings_audio" ) ) return;
+    if ( !vxui_menu( ctx, "settings_audio", true, 0, true ) ) return;
     vxui_menu_slider( ctx, "Master Volume", &s->master_volume );
     vxui_menu_slider( ctx, "Music Volume",  &s->music_volume  );
     vxui_menu_slider( ctx, "SFX Volume",    &s->sfx_volume    );
@@ -492,7 +497,7 @@ static void demo_settings_audio( vxui_ctx* ctx, demo_screen_state* s )
 
 static void demo_settings_controls( vxui_ctx* ctx, demo_screen_state* s )
 {
-    if ( !vxui_menu( ctx, "settings_controls" ) ) return;
+    if ( !vxui_menu( ctx, "settings_controls", true, 0, true ) ) return;
     vxui_menu_option( ctx, "Controller",   &s->controller,  s_demo_controller, 3 );
     if ( vxui_menu_action( ctx, "Rebind Controls" ) ) printf( "Rebind\n" );
     if ( vxui_menu_action( ctx, "Reset Controls"  ) ) printf( "Reset\n"  );
@@ -504,7 +509,7 @@ static void demo_settings_controls( vxui_ctx* ctx, demo_screen_state* s )
 
 static void demo_settings_assist( vxui_ctx* ctx, demo_screen_state* s )
 {
-    if ( !vxui_menu( ctx, "settings_assist" ) ) return;
+    if ( !vxui_menu( ctx, "settings_assist", true, 0, true ) ) return;
     vxui_menu_option( ctx, "Freeplay",       &s->freeplay,      s_demo_off_on, 2 );
     vxui_menu_option( ctx, "Infinite Ammo",  &s->infinite_ammo, s_demo_off_on, 2 );
     vxui_menu_option( ctx, "Reduce Bullets", &s->reduce_bullet, s_demo_off_on, 2 );
@@ -517,7 +522,7 @@ static void demo_settings_assist( vxui_ctx* ctx, demo_screen_state* s )
 
 static void demo_archives_menu( vxui_ctx* ctx, demo_screen_state* s )
 {
-    if ( !vxui_menu( ctx, "archives" ) ) return;
+    if ( !vxui_menu( ctx, "archives", true, 0, true ) ) return;
     if ( vxui_menu_action( ctx, "Combat Records"    ) ) printf( "Records\n"   );
     if ( vxui_menu_action( ctx, "Ship Database"     ) ) printf( "Ships\n"     );
     if ( vxui_menu_action( ctx, "Enemy Index"       ) ) printf( "Enemies\n"   );
@@ -530,7 +535,7 @@ static void demo_archives_menu( vxui_ctx* ctx, demo_screen_state* s )
 
 static void demo_extras_menu( vxui_ctx* ctx, demo_screen_state* s )
 {
-    if ( !vxui_menu( ctx, "extras" ) ) return;
+    if ( !vxui_menu( ctx, "extras", true, 0, true ) ) return;
     if ( vxui_menu_action( ctx, "Credits"         ) ) printf( "Credits\n"     );
     if ( vxui_menu_action( ctx, "Attract Loop"    ) ) printf( "Attract\n"     );
     if ( vxui_menu_action( ctx, "Diagnostics"     ) ) printf( "Diagnostics\n" );

@@ -504,7 +504,7 @@ static uint32_t vxui_menu_next_row( uint32_t from, uint32_t num_rows,
     return from;
 }
 
-bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible )
+bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible, bool fill )
 {
     assert( ctx );
     assert( ctx->active_menu == -1 );   // no nested menus
@@ -516,6 +516,7 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible )
     ctx->active_menu_row      = 0;
     ctx->active_menu_skip     = 0;
     ctx->active_menu_focus_id = 0;
+    ctx->active_menu_fill     = fill;
 
     // Snap focus spring on remount so reappearing menus don't animate from a stale offset.
     bool is_remount = ( ctx->prev_active_mask & ( 1u << idx ) ) == 0;
@@ -567,7 +568,7 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible )
 
     Clay_ElementDeclaration decl = {};
     decl.layout.layoutDirection  = CLAY_TOP_TO_BOTTOM;
-    decl.layout.sizing.width     = CLAY_SIZING_FIT( 0 );
+    decl.layout.sizing.width     = fill ? CLAY_SIZING_GROW( 0 ) : CLAY_SIZING_FIT( 0 );
     decl.layout.sizing.height    = max_visible > 0
                                    ? CLAY_SIZING_FIXED( (float) ( max_visible * VXUI_ROW_HEIGHT ) )
                                    : CLAY_SIZING_FIT( 0 );
@@ -582,9 +583,10 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible )
     return true;
 }
 
-static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label )
+static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, const char* value = nullptr )
 {
     // Composite id: menu hash as seed so same label in different menus doesn't collide.
+    // Identity uses label only -- value text can change every frame without remounting focus.
     int              label_len = (int) strlen( label );
     Clay_String      cs        = { false, (int32_t) label_len, label };
     Clay_ElementId   eid       = Clay__HashString( cs, ctx->menu_state[ctx->active_menu].x );
@@ -600,21 +602,58 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label )
     ctx->frame_row_indices        [fr] = ctx->active_menu_row;
     ctx->frame_row_focused_indices[fr] = (int) ctx->menu_state[ctx->active_menu].y;
 
+    bool fill      = ctx->active_menu_fill;
+    bool has_value = value && *value;
+    int  value_len = has_value ? (int) strlen( value ) : 0;
+
     Clay__OpenElementWithId( eid );
 
-    Clay_ElementDeclaration decl        = {};
-    decl.layout.sizing.width            = CLAY_SIZING_FIT( 0 );
-    decl.layout.sizing.height           = CLAY_SIZING_FIXED( VXUI_ROW_HEIGHT );
-    decl.backgroundColor                = { 0, 0, 0, 1 };  // alpha > 0 forces RECTANGLE emit
+    Clay_ElementDeclaration decl = {};
+    decl.layout.sizing.width     = fill ? CLAY_SIZING_GROW( 0 ) : CLAY_SIZING_FIT( 0 );
+    decl.layout.sizing.height    = CLAY_SIZING_FIXED( VXUI_ROW_HEIGHT );
+    decl.layout.layoutDirection  = CLAY_LEFT_TO_RIGHT;
+    decl.layout.childAlignment.y = CLAY_ALIGN_Y_CENTER;
+    decl.layout.childGap         = has_value ? 8 : 0;
+    // Fill rows get padding so the renderer has room to overlay a focus marker
+    // on the left and the value text breathes on the right. FIT rows keep zero
+    // padding so tests that compare rect.z to text width stay valid.
+    if ( fill )
+        decl.layout.padding = { 36, 12, 0, 0 };
+    decl.backgroundColor         = { 0, 0, 0, 1 };  // alpha > 0 forces RECTANGLE emit
 
     Clay__ConfigureOpenElement( decl );
 
     // Copy label into per-frame buffer so the Clay_String pointer stays valid through Clay_EndLayout.
-    const char* stable = vxui_text_alloc( ctx, label, label_len );
-    if ( stable )
+    const char* stable_label = vxui_text_alloc( ctx, label, label_len );
+    if ( stable_label )
     {
-        Clay_String text_str = { false, (int32_t) label_len, stable };
+        Clay_String text_str = { false, (int32_t) label_len, stable_label };
         CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontSize = (uint16_t) VXUI_FONT_SIZE_DEFAULT } ) );
+    }
+
+    // Optional value text. In fill rows a grow-spacer pushes it to the right
+    // edge; in FIT rows it sits next to the label with childGap of 8.
+    if ( has_value )
+    {
+        if ( fill )
+        {
+            Clay_ElementId spacer_eid = Clay__HashString( CLAY_STRING( "spacer" ), eid.id );
+            Clay__OpenElementWithId( spacer_eid );
+
+            Clay_ElementDeclaration spacer = {};
+            spacer.layout.sizing.width     = CLAY_SIZING_GROW( 0 );
+            spacer.layout.sizing.height    = CLAY_SIZING_FIXED( VXUI_ROW_HEIGHT );
+
+            Clay__ConfigureOpenElement( spacer );
+            Clay__CloseElement();
+        }
+
+        const char* stable_value = vxui_text_alloc( ctx, value, value_len );
+        if ( stable_value )
+        {
+            Clay_String text_str = { false, (int32_t) value_len, stable_value };
+            CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontSize = (uint16_t) VXUI_FONT_SIZE_DEFAULT } ) );
+        }
     }
 
     Clay__CloseElement();
@@ -622,9 +661,9 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label )
     return eid.id;
 }
 
-static bool vxui_menu_row_interactive( vxui_ctx* ctx, const char* label )
+static bool vxui_menu_row_interactive( vxui_ctx* ctx, const char* label, const char* value = nullptr )
 {
-    uint32_t row_id = vxui_menu_open_row( ctx, label );
+    uint32_t row_id = vxui_menu_open_row( ctx, label, value );
 
     glm::uvec4& m       = ctx->menu_state[ctx->active_menu];
     uint32_t&   current = m.y;
@@ -669,7 +708,12 @@ bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char*
 {
     assert( ctx && ctx->active_menu >= 0 );
     assert( index && options && count > 0 );
-    if ( !vxui_menu_row_interactive( ctx, label ) ) return false;
+
+    int  safe_idx = ( *index < 0 ) ? 0 : ( *index >= count ? count - 1 : *index );
+    char value_buf[64];
+    snprintf( value_buf, sizeof( value_buf ), "< %s >", options[safe_idx] );
+
+    if ( !vxui_menu_row_interactive( ctx, label, value_buf ) ) return false;
     // TODO: PRESSED state on confirm-held mirror, see vxui_menu_action.
 
     int prev = *index;
@@ -688,7 +732,18 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
 {
     assert( ctx && ctx->active_menu >= 0 );
     assert( value && mn < mx && step > 0.0f );
-    if ( !vxui_menu_row_interactive( ctx, label ) ) return false;
+
+    // Visible bar + percentage: 10 cells filled by t = (value - mn) / (mx - mn).
+    // Not a slider widget -- a readable summary that sits on the right of the row.
+    float t      = glm::clamp( ( *value - mn ) / ( mx - mn ), 0.0f, 1.0f );
+    int   filled = (int) ( t * 10.0f + 0.5f );
+    char  bar[11];
+    for ( int i = 0; i < 10; i++ ) bar[i] = i < filled ? '#' : '-';
+    bar[10] = 0;
+    char value_buf[32];
+    snprintf( value_buf, sizeof( value_buf ), "[%s] %d%%", bar, (int) ( t * 100.0f + 0.5f ) );
+
+    if ( !vxui_menu_row_interactive( ctx, label, value_buf ) ) return false;
     // TODO: PRESSED state on confirm-held mirror, see vxui_menu_action.
 
     float prev = *value;
