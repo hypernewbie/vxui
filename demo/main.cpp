@@ -98,6 +98,12 @@ static const demo_sector s_demo_sectors[] = {
 };
 #define DEMO_SECTOR_COUNT ( (int) ( sizeof( s_demo_sectors ) / sizeof( s_demo_sectors[0] ) ) )
 
+// Short sector identifiers for ops_preview header. Always fit in 158px content at 22px font.
+static const char* s_sector_short[] = {
+    "Debris Belt", "Signal Array", "Glass Reactor",
+    "Helix Foundry", "Null Cathedral", "Boss Rush",
+};
+
 struct demo_assets
 {
     uint32_t bg         = 0;
@@ -179,6 +185,10 @@ struct demo_resolver_state
     uint32_t        version_id          = 0;
     uint32_t        focus_icon_texture  = 0;
     uint32_t        ops_icon[DEMO_MISSION_COUNT] = {};  // texture per ops row; 0 = none
+    uint32_t        ops_thumb_id        = 0;
+    uint32_t        ops_thumb_texture   = 0;
+    uint32_t        stg_thumb_id        = 0;
+    uint32_t        stg_thumb_texture   = 0;
     float           time_seconds        = 0;
     const demo_assets* assets           = nullptr;
     const demo_screen_state* screen     = nullptr;
@@ -242,6 +252,22 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         out->material_id = DEMO_MATERIAL_IMAGE;
         out->texture_id  = st->assets->border;
         out->colour      = { 0.55f, 0.95f, 1.00f, 1.0f };
+        return;
+    }
+
+    if ( ( c->id == st->ops_thumb_id && st->ops_thumb_texture != 0 ) ||
+         ( c->id == st->stg_thumb_id && st->stg_thumb_texture != 0 ) )
+    {
+        // Center-crop the square mission image into the portrait rect.
+        // crop_x clips equal amounts from both sides so the image fills
+        // the rect without stretching.
+        float crop_x = 0.0f;
+        if ( c->rect.z < c->rect.w )
+            crop_x = ( 1.0f - c->rect.z / c->rect.w ) * 0.5f;
+        out->material_id = DEMO_MATERIAL_IMAGE;
+        out->texture_id  = ( c->id == st->ops_thumb_id ) ? st->ops_thumb_texture : st->stg_thumb_texture;
+        out->uv          = { crop_x, 0.0f, 1.0f - crop_x, 1.0f };
+        out->colour      = { 1.0f, 1.0f, 1.0f, 1.0f };
         return;
     }
 
@@ -386,27 +412,18 @@ static void demo_operations_menu( vxui_ctx* ctx, demo_screen_state* s )
         }
         vxui_div_end( ctx );
 
-        vxui_rect( ctx, "ops_preview", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 6, 6, 6, 6 }, .gap = 4 } );
+        vxui_rect( ctx, "ops_preview", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 6, 6, 6, 6 }, .gap = 8 } );
 
-            vxui_rect( ctx, "ops_thumb", { .width = { VXUI_GROW, 0 }, .height = { VXUI_FIXED, 140 } } );
+            vxui_rect( ctx, "ops_thumb", { .width = { VXUI_GROW, 0 }, .height = { VXUI_FIXED, 200 } } );
             vxui_div_end( ctx );
 
-            vxui_text( ctx, "ops_sector",   sel.status == DEMO_MISSION_LOCKED ? "?????" : sel.name, 22 );
+            vxui_text( ctx, "ops_sector", sel.status == DEMO_MISSION_LOCKED ? "?????" : s_sector_short[sel.sector], 22 );
 
-            char meta[64];
             const char* tag = sel.status == DEMO_MISSION_LOCKED  ? "LOCKED"
                             : sel.status == DEMO_MISSION_APLUS   ? "PERFECT"
                             : sel.status == DEMO_MISSION_CLEARED ? "CLEARED"
                                                                  : "OPEN";
-            snprintf( meta, sizeof( meta ), "STATUS  %s", tag );
-            vxui_text( ctx, "ops_status", meta, 16 );
-
-            vxui_div ( ctx, "ops_desc_pad", { .height = { VXUI_FIXED, 6 } } );
-            vxui_div_end( ctx );
-
-            const char* desc = sel.status == DEMO_MISSION_LOCKED ? "Locked. Clear earlier sorties to reveal this objective."
-                                                                 : sel.description;
-            vxui_text( ctx, "ops_desc", desc, 14 );
+            vxui_text( ctx, "ops_status", tag, 22 );
 
         vxui_div_end( ctx );
 
@@ -425,16 +442,20 @@ static void demo_stage_select( vxui_ctx* ctx, demo_screen_state* s )
         if ( vxui_menu( ctx, "stageselect", true, 0, true ) )
         {
             for ( int i = 0; i < DEMO_SECTOR_COUNT; i++ )
-                if ( vxui_menu_action( ctx, s_demo_sectors[i].name ) ) printf( "select: %s\n", s_demo_sectors[i].name );
+                if ( vxui_menu_action( ctx, s_sector_short[i] ) ) printf( "select: %s\n", s_sector_short[i] );
             if ( vxui_menu_cancelled( ctx ) ) demo_pop( s );
             vxui_menu_end( ctx );
         }
         vxui_div_end( ctx );
 
-        vxui_rect( ctx, "stg_preview", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 6, 6, 6, 6 }, .gap = 4 } );
-            vxui_rect( ctx, "stg_thumb", { .width = { VXUI_GROW, 0 }, .height = { VXUI_FIXED, 140 } } );
+        vxui_rect( ctx, "stg_preview", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 6, 6, 6, 6 }, .gap = 8 } );
+            vxui_rect( ctx, "stg_thumb", { .width = { VXUI_GROW, 0 }, .height = { VXUI_FIXED, 200 } } );
             vxui_div_end( ctx );
-            vxui_text( ctx, "stg_tag", sel.tagline, 16 );
+            vxui_text( ctx, "stg_sector", s_sector_short[focused], 22 );
+            vxui_text( ctx, "stg_status", sel.status == DEMO_MISSION_LOCKED  ? "LOCKED"
+                                        : sel.status == DEMO_MISSION_APLUS   ? "PERFECT"
+                                        : sel.status == DEMO_MISSION_CLEARED ? "CLEARED"
+                                                                             : "OPEN", 22 );
         vxui_div_end( ctx );
 
     vxui_div_end( ctx );
@@ -648,6 +669,8 @@ int main( int /*argc*/, char** /*argv*/ )
     resolver_state.logo_id            = demo_id( "demo_logo"     );
     resolver_state.splash_prompt_id   = Clay__HashNumber( 0, demo_id( "splash_prompt" ) ).id;
     resolver_state.focus_icon_texture = vxui_gl_create_chevron_texture();
+    resolver_state.ops_thumb_id       = demo_id( "ops_thumb" );
+    resolver_state.stg_thumb_id       = demo_id( "stg_thumb" );
     resolver_state.assets             = &assets;
     resolver_state.screen             = &screen_state;
     for ( int i = 0; i < DEMO_MISSION_COUNT; i++ )
@@ -720,6 +743,25 @@ int main( int /*argc*/, char** /*argv*/ )
                     vxui_rect( &ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 14, 14, 14, 14 }, .gap = 6 } );
                         demo_dispatch_screen( &ctx, &screen_state, window );
                     vxui_div_end( &ctx );
+
+                    const char* screen_top = screen_state.depth > 0 ? screen_state.stack[screen_state.depth - 1] : "";
+                    if ( strcmp( screen_top, "operations" ) == 0 )
+                    {
+                        int f = demo_menu_focused( &ctx, "operations" );
+                        if ( f < 0 || f >= DEMO_MISSION_COUNT ) f = 0;
+                        resolver_state.ops_thumb_texture = demo_mission_thumb( &assets, s_demo_missions[f].sector );
+                    }
+                    else
+                        resolver_state.ops_thumb_texture = 0;
+
+                    if ( strcmp( screen_top, "stageselect" ) == 0 )
+                    {
+                        int f = demo_menu_focused( &ctx, "stageselect" );
+                        if ( f < 0 || f >= DEMO_SECTOR_COUNT ) f = 0;
+                        resolver_state.stg_thumb_texture = demo_mission_thumb( &assets, f );
+                    }
+                    else
+                        resolver_state.stg_thumb_texture = 0;
                 }
 
             vxui_div_end( &ctx );
