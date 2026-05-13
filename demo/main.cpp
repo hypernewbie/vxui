@@ -100,12 +100,14 @@ static const demo_sector s_demo_sectors[] = {
 
 struct demo_assets
 {
-    uint32_t bg                  = 0;
-    uint32_t logo                = 0;
-    uint32_t border              = 0;
-    uint32_t chevron             = 0;
-    uint32_t ship[3]             = {};
-    uint32_t mission[8]          = {};
+    uint32_t bg         = 0;
+    uint32_t logo       = 0;
+    uint32_t border     = 0;
+    uint32_t chevron    = 0;
+    uint32_t lock       = 0;
+    uint32_t warning    = 0;
+    uint32_t ship[3]    = {};
+    uint32_t mission[8] = {};
 };
 
 static uint32_t demo_mission_thumb( const demo_assets* a, int sector )
@@ -176,6 +178,7 @@ struct demo_resolver_state
     uint32_t        splash_prompt_id    = 0;
     uint32_t        version_id          = 0;
     uint32_t        focus_icon_texture  = 0;
+    uint32_t        ops_icon[DEMO_MISSION_COUNT] = {};  // texture per ops row; 0 = none
     float           time_seconds        = 0;
     const demo_assets* assets           = nullptr;
     const demo_screen_state* screen     = nullptr;
@@ -293,6 +296,12 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         };
         int idx = d > 3 ? 3 : d;
         out->colour = s_ramp[idx];
+
+        const demo_screen_state* s = st->screen;
+        bool on_ops = s && s->depth > 0 && strcmp( s->stack[s->depth - 1], "operations" ) == 0;
+        if ( on_ops && c->row_index < DEMO_MISSION_COUNT && st->ops_icon[c->row_index] != 0 )
+            out->texture_id = st->ops_icon[c->row_index];
+
         return;
     }
 
@@ -366,9 +375,7 @@ static void demo_operations_menu( vxui_ctx* ctx, demo_screen_state* s )
             for ( int i = 0; i < DEMO_MISSION_COUNT; i++ )
             {
                 const demo_mission& m = s_demo_missions[i];
-                char row_label[64];
-                snprintf( row_label, sizeof( row_label ), "%02d  %s", i + 1, m.name );
-                if ( vxui_menu_action( ctx, row_label ) )
+                if ( vxui_menu_action( ctx, m.name ) )
                 {
                     if ( m.status == DEMO_MISSION_LOCKED ) printf( "locked: %s\n", m.name );
                     else                                   printf( "launch: %s\n", m.name );
@@ -615,8 +622,10 @@ int main( int /*argc*/, char** /*argv*/ )
         std::filesystem::path a = src_dir / "assets";
         assets.bg         = vxui_gl_load_image( ( a / "ui" / "vxui_bg.png"                ).string().c_str() );
         assets.logo       = vxui_gl_load_image( ( a / "ui" / "vxui_logo_clean_alpha.png"  ).string().c_str() );
-        assets.border     = vxui_gl_load_image( ( a / "ui" / "ui_border_alpha.png"        ).string().c_str() );
-        assets.chevron    = vxui_gl_load_image( ( a / "ui" / "ui_chevron_alpha.png"       ).string().c_str() );
+        assets.border     = vxui_gl_load_image( ( a / "ui" / "ui_border_alpha.png"       ).string().c_str() );
+        assets.chevron    = vxui_gl_load_image( ( a / "ui" / "ui_chevron_alpha.png"      ).string().c_str() );
+        assets.lock       = vxui_gl_load_image( ( a / "ui" / "ui_lock_alpha.png"         ).string().c_str() );
+        assets.warning    = vxui_gl_load_image( ( a / "ui" / "ui_warning.png"            ).string().c_str() );
         assets.ship[0]    = vxui_gl_load_image( ( a / "ships" / "ship_interceptor_alpha.png"  ).string().c_str() );
         assets.ship[1]    = vxui_gl_load_image( ( a / "ships" / "ship_strike_craft_alpha.png" ).string().c_str() );
         assets.ship[2]    = vxui_gl_load_image( ( a / "ships" / "ship_experimental_alpha.png" ).string().c_str() );
@@ -641,6 +650,12 @@ int main( int /*argc*/, char** /*argv*/ )
     resolver_state.focus_icon_texture = vxui_gl_create_chevron_texture();
     resolver_state.assets             = &assets;
     resolver_state.screen             = &screen_state;
+    for ( int i = 0; i < DEMO_MISSION_COUNT; i++ )
+    {
+        if      ( s_demo_missions[i].status == DEMO_MISSION_LOCKED ) resolver_state.ops_icon[i] = assets.lock;
+        else if ( s_demo_missions[i].status == DEMO_MISSION_OPEN   ) resolver_state.ops_icon[i] = assets.warning;
+        else                                                          resolver_state.ops_icon[i] = 0;
+    }
     vxui_set_render_data_fn( &ctx, demo_render_data, &resolver_state );
 
     static const struct { int key; const char* action; } s_keymap[] = {

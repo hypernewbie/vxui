@@ -359,8 +359,8 @@ UTEST(menu_slider, full_bar_at_max) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_TRUE( any_text_contains( dl, "##########" ) );
-    ASSERT_TRUE( any_text_contains( dl, "100%"       ) );
+    ASSERT_TRUE( any_text_contains( dl, "########" ) );
+    ASSERT_TRUE( any_text_contains( dl, "100%"     ) );
 }
 
 UTEST(menu_slider, empty_bar_at_min) {
@@ -375,8 +375,8 @@ UTEST(menu_slider, empty_bar_at_min) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_TRUE( any_text_contains( dl, "----------" ) );
-    ASSERT_TRUE( any_text_contains( dl, "0%"         ) );
+    ASSERT_TRUE( any_text_contains( dl, "--------" ) );
+    ASSERT_TRUE( any_text_contains( dl, "0%"       ) );
 }
 
 UTEST(menu_slider, row_id_stable_across_value_change) {

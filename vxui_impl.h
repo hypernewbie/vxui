@@ -733,13 +733,13 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
     assert( ctx && ctx->active_menu >= 0 );
     assert( value && mn < mx && step > 0.0f );
 
-    // Visible bar + percentage: 10 cells filled by t = (value - mn) / (mx - mn).
+    // Visible bar + percentage: 8 cells filled by t = (value - mn) / (mx - mn).
     // Not a slider widget -- a readable summary that sits on the right of the row.
     float t      = glm::clamp( ( *value - mn ) / ( mx - mn ), 0.0f, 1.0f );
-    int   filled = (int) ( t * 10.0f + 0.5f );
-    char  bar[11];
-    for ( int i = 0; i < 10; i++ ) bar[i] = i < filled ? '#' : '-';
-    bar[10] = 0;
+    int   filled = (int) ( t * 8.0f + 0.5f );
+    char  bar[9];
+    for ( int i = 0; i < 8; i++ ) bar[i] = i < filled ? '#' : '-';
+    bar[8] = 0;
     char value_buf[32];
     snprintf( value_buf, sizeof( value_buf ), "[%s] %d%%", bar, (int) ( t * 100.0f + 0.5f ) );
 
