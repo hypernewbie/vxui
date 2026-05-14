@@ -3,6 +3,7 @@
 #define CLAY_IMPLEMENTATION
 #include "clay/clay.h"
 #include "vxui_impl_util.h"
+#include <cstdio>
 #include <cstring>
 #include <vector>
 #include <hb.h>
@@ -55,19 +56,19 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
     assert( ctx );
     assert( ctx->active_menu == -1 );   // mismatched menu_begin/end from last frame
     assert( !ctx->frame_active && "vxui_frame without intervening vxui_render" );
-    ctx->prev_input          = ctx->input;
-    ctx->prev_active_mask    = ctx->menu_active_mask;
-    ctx->prev_mouse_buttons  = ctx->mouse_buttons;
-    ctx->input               = 0;
-    ctx->menu_active_mask    = 0;
-    ctx->mouse_buttons       = 0;
-    ctx->dt                  = dt;
-    ctx->frame_active        = true;
-    ctx->inputs_committed    = false;
-    ctx->text_offset         = 0;
-    ctx->focused_row_count   = 0;
-    ctx->pressed_row_count   = 0;
-    ctx->frame_row_count     = 0;
+    ctx->prev_input             = ctx->input;
+    ctx->prev_active_mask       = ctx->menu_active_mask;
+    ctx->prev_mouse_buttons     = ctx->mouse_buttons;
+    ctx->input                  = 0;
+    ctx->menu_active_mask       = 0;
+    ctx->mouse_buttons          = 0;
+    ctx->dt                     = dt;
+    ctx->frame_active           = true;
+    ctx->inputs_committed       = false;
+    ctx->text_offset            = 0;
+    ctx->focused_row_count      = 0;
+    ctx->pressed_row_count      = 0;
+    ctx->frame_row_count        = 0;
     if ( ctx->clay )
     {
         Clay_SetCurrentContext( (Clay_Context*) ctx->clay );
@@ -354,6 +355,20 @@ void vxui_root_end( vxui_ctx* ctx )
     assert( ctx );
     Clay__CloseElement();
 }
+
+static Clay_ElementId vxui_clay_id( const char* id )
+{
+    assert( id );
+    Clay_String clay_id = { false, (int32_t) strlen( id ), id };
+    return Clay__HashString( clay_id, 0 );
+}
+
+uint32_t vxui_id( const char* id )
+{
+    return vxui_clay_id( id ).id;
+}
+
+
 
 bool vxui_page( vxui_ctx* ctx, const char* name )
 {

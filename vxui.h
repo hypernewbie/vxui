@@ -184,6 +184,8 @@ void           vxui_rect    ( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg = 
 void           vxui_text    ( vxui_ctx* ctx, const char* id, const char* label, uint16_t font_px = 0 );
 void           vxui_root    ( vxui_ctx* ctx, const char* id, float x, float y );
 void           vxui_root_end( vxui_ctx* ctx );
+uint32_t       vxui_id      ( const char* id );
+
 
 bool vxui_page             ( vxui_ctx* ctx, const char* name );
 void vxui_switch           ( vxui_ctx* ctx, const char* name );
