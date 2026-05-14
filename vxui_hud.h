@@ -74,6 +74,8 @@ glm::vec4 vxui_hud_tile          ( int tex_w, int tex_h, int tile_w, int tile_h,
 glm::vec4 vxui_hud_tile1d        ( int tex_sz, int tile_sz, int idx );
 void      vxui_hud_meter         ( vxui_hud* hud, const char* id, uint32_t texture_id, float t, float w, float h, bool vertical = false, bool reverse = false, glm::vec4 uv = { 0.0f, 0.0f, 1.0f, 1.0f } );
 void      vxui_hud_resource_stock( vxui_hud* hud, const char* id, uint32_t texture_id, int count, float w, float h, uint8_t layout, glm::vec4 uv, float gap = 0.0f );
+void      vxui_hud_image         ( vxui_hud* hud, const char* id, uint32_t texture_id, float w, float h, glm::vec4 uv = { 0.0f, 0.0f, 1.0f, 1.0f } );
+void      vxui_hud_wallpaper     ( vxui_hud* hud, const char* id, uint32_t texture_id, glm::vec4 uv = { 0.0f, 0.0f, 1.0f, 1.0f } );
 bool      vxui_hud_resolve       ( const vxui_hud* hud, const vxui_draw_cmd* cmd, vxui_render_data* out );
 
 #ifdef VXUI_HUD_IMPL
@@ -259,6 +261,19 @@ void vxui_hud_resource_stock( vxui_hud* hud, const char* id, uint32_t texture_id
     }
 
     hud->y += bh;
+}
+
+void vxui_hud_image( vxui_hud* hud, const char* id, uint32_t texture_id, float w, float h, glm::vec4 uv )
+{
+    assert( hud && id && w > 0.0f && h > 0.0f );
+    vxui_hud_rect_at( hud, id, hud->x, hud->y, w, h, texture_id, uv );
+    hud->y += h;
+}
+
+void vxui_hud_wallpaper( vxui_hud* hud, const char* id, uint32_t texture_id, glm::vec4 uv )
+{
+    assert( hud && id );
+    vxui_hud_rect_at( hud, id, 0.0f, 0.0f, hud->w, hud->h, texture_id, uv );
 }
 
 bool vxui_hud_resolve( const vxui_hud* hud, const vxui_draw_cmd* cmd, vxui_render_data* out )

@@ -400,4 +400,110 @@ UTEST(hud, meter_records_texture_for_both_rects) {
     ASSERT_EQ( out.uv.w, 0.8f );
 }
 
+// ===== image =============================================================
+
+UTEST(hud, image_emits_rect_at_cursor) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_pos( &hud, 100, 200 );
+    vxui_hud_image( &hud, "icon", 5, 64, 64 );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "icon" ) );
+    ASSERT_NE( c, nullptr );
+    ASSERT_EQ( c->rect.x, 100.0f );
+    ASSERT_EQ( c->rect.y, 200.0f );
+    ASSERT_EQ( c->rect.z, 64.0f );
+    ASSERT_EQ( c->rect.w, 64.0f );
+}
+
+UTEST(hud, image_advances_y_by_height) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_pos( &hud, 0, 10 );
+    vxui_hud_image( &hud, "a", 0, 32, 20 );
+
+    ASSERT_EQ( hud.y, 30.0f );
+    vxui_render( &ctx );
+}
+
+UTEST(hud, image_resolve_sets_metadata) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_colour( &hud, { 0.2f, 0.4f, 0.6f, 1.0f } );
+    vxui_hud_image( &hud, "tex", 99, 32, 32, { 0.0f, 0.5f, 0.5f, 1.0f } );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "tex" ) );
+    ASSERT_NE( c, nullptr );
+
+    vxui_render_data out = {};
+    ASSERT_EQ( vxui_hud_resolve( &hud, c, &out ), true );
+    ASSERT_EQ( out.texture_id, (uint32_t) 99 );
+    ASSERT_EQ( out.uv.y, 0.5f );
+    ASSERT_EQ( out.colour.r, 0.2f );
+}
+
+// ===== wallpaper =========================================================
+
+UTEST(hud, wallpaper_emits_full_hud_rect) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_wallpaper( &hud, "bg", 3, { 0.0f, 0.0f, 1.0f, 1.0f } );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bg" ) );
+    ASSERT_NE( c, nullptr );
+    ASSERT_EQ( c->rect.x, 0.0f );
+    ASSERT_EQ( c->rect.y, 0.0f );
+    ASSERT_EQ( c->rect.z, 960.0f );
+    ASSERT_EQ( c->rect.w, 540.0f );
+}
+
+UTEST(hud, wallpaper_does_not_advance_cursor) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_pos( &hud, 80, 40 );
+    vxui_hud_wallpaper( &hud, "bg", 0 );
+    ASSERT_EQ( hud.x, 80.0f );
+    ASSERT_EQ( hud.y, 40.0f );
+
+    vxui_render( &ctx );
+}
+
+UTEST(hud, wallpaper_resolve_sets_texture) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_wallpaper( &hud, "wp", 42, { 0.25f, 0.5f, 0.75f, 1.0f } );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "wp" ) );
+    ASSERT_NE( c, nullptr );
+
+    vxui_render_data out = {};
+    ASSERT_EQ( vxui_hud_resolve( &hud, c, &out ), true );
+    ASSERT_EQ( out.texture_id, (uint32_t) 42 );
+    ASSERT_EQ( out.uv.x, 0.25f );
+    ASSERT_EQ( out.uv.z, 0.75f );
+}
+
 UTEST_MAIN();
