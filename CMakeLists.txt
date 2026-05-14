@@ -135,6 +135,10 @@ if(VXUI_BUILD_TESTS)
     target_link_libraries(test_mouse PRIVATE vxui)
     add_test(NAME test_mouse COMMAND test_mouse)
 
+    add_executable(test_hud tests/test_hud.cpp)
+    target_link_libraries(test_hud PRIVATE vxui)
+    add_test(NAME test_hud COMMAND test_hud)
+
     add_executable(test_menu_stack tests/test_menu_stack.cpp)
     target_link_libraries(test_menu_stack PRIVATE vxui)
     add_test(NAME test_menu_stack COMMAND test_menu_stack)
