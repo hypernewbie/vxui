@@ -26,7 +26,6 @@
 #include <glm/glm.hpp>
 
 #define VXUI_HUD_MAX_ITEMS      256
-#define VXUI_HUD_MAX_TEXT_BYTES 4096
 
 #define VXUI_HUD_STOCK_ROW     0
 #define VXUI_HUD_STOCK_COL     1
@@ -57,10 +56,7 @@ struct vxui_hud
     int16_t      z       = 0;
 
     vxui_hud_item items[VXUI_HUD_MAX_ITEMS] = {};
-    int            item_count               = 0;
-
-    char text_buf[VXUI_HUD_MAX_TEXT_BYTES] = {};
-    int  text_offset                       = 0;
+    int           item_count                = 0;
 };
 
 void      vxui_hud_begin         ( vxui_hud* hud, vxui_ctx* ctx, float w, float h );
@@ -76,6 +72,8 @@ void      vxui_hud_meter         ( vxui_hud* hud, const char* id, uint32_t textu
 void      vxui_hud_resource_stock( vxui_hud* hud, const char* id, uint32_t texture_id, int count, float w, float h, uint8_t layout, glm::vec4 uv, float gap = 0.0f );
 void      vxui_hud_image         ( vxui_hud* hud, const char* id, uint32_t texture_id, float w, float h, glm::vec4 uv = { 0.0f, 0.0f, 1.0f, 1.0f } );
 void      vxui_hud_wallpaper     ( vxui_hud* hud, const char* id, uint32_t texture_id, glm::vec4 uv = { 0.0f, 0.0f, 1.0f, 1.0f } );
+void      vxui_hud_text          ( vxui_hud* hud, const char* id, const char* text );
+void      vxui_hud_text_box      ( vxui_hud* hud, const char* id, const char* text, float w, float h, uint8_t align_x = 1, uint8_t align_y = 1 );
 bool      vxui_hud_resolve       ( const vxui_hud* hud, const vxui_draw_cmd* cmd, vxui_render_data* out );
 
 #ifdef VXUI_HUD_IMPL
@@ -133,8 +131,7 @@ void vxui_hud_begin( vxui_hud* hud, vxui_ctx* ctx, float w, float h )
     hud->font        = 0;
     hud->font_px     = VXUI_FONT_SIZE_DEFAULT;
     hud->z           = 0;
-    hud->item_count  = 0;
-    hud->text_offset = 0;
+    hud->item_count = 0;
 }
 
 void vxui_hud_set_pos( vxui_hud* hud, float x, float y )
@@ -274,6 +271,94 @@ void vxui_hud_wallpaper( vxui_hud* hud, const char* id, uint32_t texture_id, glm
 {
     assert( hud && id );
     vxui_hud_rect_at( hud, id, 0.0f, 0.0f, hud->w, hud->h, texture_id, uv );
+}
+
+static Clay_LayoutAlignmentX vxui_hud_align_x( uint8_t a )
+{
+    if ( a == 1 ) return CLAY_ALIGN_X_CENTER;
+    if ( a == 2 ) return CLAY_ALIGN_X_RIGHT;
+    return CLAY_ALIGN_X_LEFT;
+}
+
+static Clay_LayoutAlignmentY vxui_hud_align_y( uint8_t a )
+{
+    if ( a == 1 ) return CLAY_ALIGN_Y_CENTER;
+    if ( a == 2 ) return CLAY_ALIGN_Y_BOTTOM;
+    return CLAY_ALIGN_Y_TOP;
+}
+
+void vxui_hud_text( vxui_hud* hud, const char* id, const char* text )
+{
+    assert( hud && id && text );
+
+    Clay_ElementId eid = vxui_hud_clay_id( id );
+    Clay__OpenElementWithId( eid );
+
+    Clay_ElementDeclaration decl       = {};
+    decl.layout.sizing.width           = CLAY_SIZING_FIT( 0 );
+    decl.layout.sizing.height          = CLAY_SIZING_FIT( 0 );
+    decl.floating.attachTo             = CLAY_ATTACH_TO_ROOT;
+    decl.floating.attachPoints.element = CLAY_ATTACH_POINT_LEFT_TOP;
+    decl.floating.attachPoints.parent  = CLAY_ATTACH_POINT_LEFT_TOP;
+    decl.floating.offset               = { hud->x, hud->y };
+    decl.floating.zIndex               = hud->z;
+
+    Clay__ConfigureOpenElement( decl );
+
+    int         text_len = (int) strlen( text );
+    const char* stable   = vxui_text_push( text, text_len );
+    if ( stable )
+    {
+        Clay_String text_str = { false, (int32_t) text_len, stable };
+        CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontId = hud->font, .fontSize = hud->font_px } ) );
+    }
+
+    Clay__CloseElement();
+
+    // Clay double-hashes text cmds: text element id = HashNumber( 0, parent.id ),
+    // then line cmd id = HashNumber( lineIndex, textElement.id ).
+    uint32_t text_elem_id = Clay__HashNumber( 0, eid.id ).id;
+    uint32_t text_cmd_id  = Clay__HashNumber( 0, text_elem_id ).id;
+    vxui_hud_record( hud, text_cmd_id, 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
+
+    hud->y += hud->font_px;
+}
+
+void vxui_hud_text_box( vxui_hud* hud, const char* id, const char* text, float w, float h, uint8_t align_x, uint8_t align_y )
+{
+    assert( hud && id && text && w > 0.0f && h > 0.0f );
+
+    Clay_ElementId eid = vxui_hud_clay_id( id );
+    Clay__OpenElementWithId( eid );
+
+    Clay_ElementDeclaration decl       = {};
+    decl.layout.sizing.width           = CLAY_SIZING_FIXED( w );
+    decl.layout.sizing.height          = CLAY_SIZING_FIXED( h );
+    decl.layout.childAlignment.x       = vxui_hud_align_x( align_x );
+    decl.layout.childAlignment.y       = vxui_hud_align_y( align_y );
+    decl.floating.attachTo             = CLAY_ATTACH_TO_ROOT;
+    decl.floating.attachPoints.element = CLAY_ATTACH_POINT_LEFT_TOP;
+    decl.floating.attachPoints.parent  = CLAY_ATTACH_POINT_LEFT_TOP;
+    decl.floating.offset               = { hud->x, hud->y };
+    decl.floating.zIndex               = hud->z;
+
+    Clay__ConfigureOpenElement( decl );
+
+    int         text_len = (int) strlen( text );
+    const char* stable   = vxui_text_push( text, text_len );
+    if ( stable )
+    {
+        Clay_String text_str = { false, (int32_t) text_len, stable };
+        CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontId = hud->font, .fontSize = hud->font_px } ) );
+    }
+
+    Clay__CloseElement();
+
+    uint32_t text_elem_id = Clay__HashNumber( 0, eid.id ).id;
+    uint32_t text_cmd_id  = Clay__HashNumber( 0, text_elem_id ).id;
+    vxui_hud_record( hud, text_cmd_id, 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
+
+    hud->y += h;
 }
 
 bool vxui_hud_resolve( const vxui_hud* hud, const vxui_draw_cmd* cmd, vxui_render_data* out )

@@ -67,7 +67,7 @@ struct vxui_div_cfg
 };
 
 #define VXUI_MAX_DRAW_CMDS  512
-#define VXUI_MAX_TEXT_BYTES 8192
+#define VXUI_MAX_TEXT_BYTES 16384
 
 #define VXUI_DRAW_RECT 0
 #define VXUI_DRAW_TEXT 1
@@ -162,9 +162,6 @@ struct vxui_ctx
 
     vxui_draw_cmd  draw_buf[VXUI_MAX_DRAW_CMDS] = {};
     vxui_draw_list draw_list                     = {};
-
-    char text_buf[VXUI_MAX_TEXT_BYTES] = {};  // per-frame label storage; reset in vxui_frame
-    int  text_offset                    = 0;
 
     vxui_render_data_fn render_data_fn       = nullptr;
     void*               render_data_userdata = nullptr;

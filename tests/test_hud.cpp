@@ -24,7 +24,6 @@ UTEST(hud, begin_resets_state) {
     hud.x       = 99.0f;
     hud.colour  = { 0.5f, 0.5f, 0.5f, 0.5f };
     hud.item_count = 42;
-    hud.text_offset = 100;
 
     vxui_hud_begin( &hud, &ctx, 960, 540 );
 
@@ -40,7 +39,6 @@ UTEST(hud, begin_resets_state) {
     ASSERT_EQ( hud.font_px, (uint16_t) VXUI_FONT_SIZE_DEFAULT );
     ASSERT_EQ( hud.z, 0 );
     ASSERT_EQ( hud.item_count, 0 );
-    ASSERT_EQ( hud.text_offset, 0 );
 
     vxui_render( &ctx );
 }
@@ -504,6 +502,153 @@ UTEST(hud, wallpaper_resolve_sets_texture) {
     ASSERT_EQ( out.texture_id, (uint32_t) 42 );
     ASSERT_EQ( out.uv.x, 0.25f );
     ASSERT_EQ( out.uv.z, 0.75f );
+}
+
+// ===== text ==============================================================
+
+UTEST(hud, text_emits_text_cmd) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_text( &hud, "label", "HELLO" );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 1 );
+    const vxui_draw_cmd* t = vxui_draw_nth( dl, VXUI_DRAW_TEXT, 0 );
+    ASSERT_NE( t, nullptr );
+    ASSERT_EQ( t->text_len, 5 );
+    ASSERT_EQ( strncmp( t->text, "HELLO", 5 ), 0 );
+}
+
+UTEST(hud, text_advances_y_by_font_px) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_pos( &hud, 0, 100 );
+    vxui_hud_set_font( &hud, 0, 20 );
+    vxui_hud_text( &hud, "a", "x" );
+
+    ASSERT_EQ( hud.y, 120.0f );
+    vxui_render( &ctx );
+}
+
+UTEST(hud, two_text_calls_stack_vertically) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_pos( &hud, 50, 50 );
+    vxui_hud_set_font( &hud, 0, 16 );
+    vxui_hud_text( &hud, "first",  "1" );
+    vxui_hud_text( &hud, "second", "2" );
+
+    ASSERT_EQ( hud.y, 50.0f + 32.0f );
+    vxui_render( &ctx );
+}
+
+UTEST(hud, text_resolve_sets_colour) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_colour( &hud, { 0.3f, 0.6f, 0.9f, 1.0f } );
+    vxui_hud_text( &hud, "msg", "TEST" );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* t = vxui_draw_nth( dl, VXUI_DRAW_TEXT, 0 );
+    ASSERT_NE( t, nullptr );
+
+    vxui_render_data out = {};
+    ASSERT_EQ( vxui_hud_resolve( &hud, t, &out ), true );
+    ASSERT_EQ( out.colour.r, 0.3f );
+    ASSERT_EQ( out.colour.g, 0.6f );
+    ASSERT_EQ( out.colour.b, 0.9f );
+}
+
+// ===== text_box ==========================================================
+
+UTEST(hud, text_box_emits_text_cmd) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_text_box( &hud, "box", "X", 200, 40 );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 1 );
+}
+
+UTEST(hud, text_box_advances_by_box_height) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_pos( &hud, 0, 100 );
+    vxui_hud_text_box( &hud, "box", "X", 200, 60 );
+
+    ASSERT_EQ( hud.y, 160.0f );
+    vxui_render( &ctx );
+}
+
+UTEST(hud, text_box_centered_inside_rect) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_pos( &hud, 100, 200 );
+    vxui_hud_text_box( &hud, "box", "X", 200, 40 );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    // With no font loaded, text measures to 0x0. Center align puts the text
+    // command at the geometric center of the (w, h) box.
+    const vxui_draw_cmd* t = vxui_draw_nth( dl, VXUI_DRAW_TEXT, 0 );
+    ASSERT_NE( t, nullptr );
+    ASSERT_EQ( t->rect.x, 200.0f );  // 100 + 200/2
+    ASSERT_EQ( t->rect.y, 220.0f );  // 200 + 40/2
+}
+
+UTEST(hud, text_box_left_align) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_pos( &hud, 100, 200 );
+    vxui_hud_text_box( &hud, "box", "X", 200, 40, 0, 0 );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* t = vxui_draw_nth( dl, VXUI_DRAW_TEXT, 0 );
+    ASSERT_NE( t, nullptr );
+    ASSERT_EQ( t->rect.x, 100.0f );
+    ASSERT_EQ( t->rect.y, 200.0f );
+}
+
+UTEST(hud, text_box_resolve_sets_colour) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_colour( &hud, { 0.7f, 0.2f, 0.4f, 1.0f } );
+    vxui_hud_text_box( &hud, "box", "X", 200, 40 );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* t = vxui_draw_nth( dl, VXUI_DRAW_TEXT, 0 );
+    ASSERT_NE( t, nullptr );
+
+    vxui_render_data out = {};
+    ASSERT_EQ( vxui_hud_resolve( &hud, t, &out ), true );
+    ASSERT_EQ( out.colour.r, 0.7f );
+    ASSERT_EQ( out.colour.g, 0.2f );
 }
 
 UTEST_MAIN();

@@ -18,6 +18,19 @@ static void vxui_clay_error( Clay_ErrorData e )
 
 static Clay_Dimensions vxui_measure_text( Clay_StringSlice s, Clay_TextElementConfig* cfg, void* userData );
 
+static char g_vxui_text[VXUI_MAX_TEXT_BYTES];
+static int  g_vxui_text_offset = 0;
+
+static const char* vxui_text_push( const char* src, int len )
+{
+    assert( src && len >= 0 );
+    assert( g_vxui_text_offset + len <= VXUI_MAX_TEXT_BYTES );
+    char* dst = g_vxui_text + g_vxui_text_offset;
+    memcpy( dst, src, len );
+    g_vxui_text_offset += len;
+    return dst;
+}
+
 void vxui_init( vxui_ctx* ctx, float w, float h, void* clay_memory, size_t clay_size )
 {
     assert( ctx && clay_memory && clay_size >= Clay_MinMemorySize() );
@@ -65,7 +78,7 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
     ctx->dt                     = dt;
     ctx->frame_active           = true;
     ctx->inputs_committed       = false;
-    ctx->text_offset            = 0;
+    g_vxui_text_offset = 0;
     ctx->focused_row_count      = 0;
     ctx->pressed_row_count      = 0;
     ctx->frame_row_count        = 0;
@@ -223,18 +236,6 @@ void vxui_set_render_data_fn( vxui_ctx* ctx, vxui_render_data_fn fn, void* userd
     ctx->render_data_userdata = userdata;
 }
 
-// Copies src into ctx->text_buf, returns a stable pointer valid until next vxui_frame.
-// Returns nullptr if the buffer is full.
-static const char* vxui_text_alloc( vxui_ctx* ctx, const char* src, int len )
-{
-    assert( ctx && src && len >= 0 );
-    if ( ctx->text_offset + len > VXUI_MAX_TEXT_BYTES ) return nullptr;
-    char* dst = ctx->text_buf + ctx->text_offset;
-    for ( int i = 0; i < len; i++ ) dst[i] = src[i];
-    ctx->text_offset += len;
-    return dst;
-}
-
 int vxui_draw_count( const vxui_draw_list& dl, uint8_t type )
 {
     int n = 0;
@@ -322,7 +323,7 @@ void vxui_text( vxui_ctx* ctx, const char* id, const char* label, uint16_t font_
     Clay__ConfigureOpenElement( decl );
 
     int         label_len = (int) strlen( label );
-    const char* stable    = vxui_text_alloc( ctx, label, label_len );
+    const char* stable    = vxui_text_push( label, label_len );
     if ( stable )
     {
         Clay_String text_str = { false, (int32_t) label_len, stable };
@@ -639,7 +640,7 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, const char
     Clay__ConfigureOpenElement( decl );
 
     // Copy label into per-frame buffer so the Clay_String pointer stays valid through Clay_EndLayout.
-    const char* stable_label = vxui_text_alloc( ctx, label, label_len );
+    const char* stable_label = vxui_text_push( label, label_len );
     if ( stable_label )
     {
         Clay_String text_str = { false, (int32_t) label_len, stable_label };
@@ -663,7 +664,7 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, const char
             Clay__CloseElement();
         }
 
-        const char* stable_value = vxui_text_alloc( ctx, value, value_len );
+        const char* stable_value = vxui_text_push( value, value_len );
         if ( stable_value )
         {
             Clay_String text_str = { false, (int32_t) value_len, stable_value };
