@@ -811,4 +811,64 @@ UTEST(hud, health_bar_advances_once) {
     vxui_render( &ctx );
 }
 
+UTEST(hud, a1_parity) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+
+    float boss_hp  = 75.0f, boss_max = 100.0f;
+    int   bombs = 2, lives = 3;
+    glm::vec4 uv    = vxui_hud_tile1d( 1024, 128, 32 );
+    glm::vec4 uv_bg = vxui_hud_tile1d( 1024, 128, 30 );
+
+    vxui_hud_set_pos( &hud, 80, 40 );
+    vxui_hud_set_colour( &hud, { 1.0f, 1.0f, 1.0f, 1.0f } );
+    vxui_hud_resource_bar( &hud, "boss_track", 1, 1.0f, 800, 20, uv );
+
+    vxui_hud_set_pos( &hud, 80, 40 );
+    vxui_hud_set_colour( &hud, { 1.0f, 0.4f, 0.47f, 1.0f } );
+    vxui_hud_health_bar( &hud, "boss", 1, boss_hp, boss_max, 800, 20, uv, false );
+
+    vxui_hud_set_pos( &hud, 20, 115 );
+    vxui_hud_set_colour( &hud, { 0.3f, 0.3f, 0.3f, 1.0f } );
+    vxui_hud_resource_stock( &hud, "bombs_bg", 1, 3, 45, 45, VXUI_HUD_STOCK_HEX_COL, uv_bg, 4 );
+
+    vxui_hud_set_pos( &hud, 20, 115 );
+    vxui_hud_set_colour( &hud, { 0.0f, 1.0f, 1.0f, 1.0f } );
+    vxui_hud_resource_stock( &hud, "bombs", 1, bombs, 45, 45, VXUI_HUD_STOCK_HEX_COL, uv, 4 );
+
+    vxui_hud_set_pos( &hud, 15, 60 );
+    vxui_hud_set_colour( &hud, { 1.0f, 1.0f, 1.0f, 1.0f } );
+    vxui_hud_resource_stock( &hud, "lives", 1, lives, 64, 64, VXUI_HUD_STOCK_ROW, uv, 0 );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    const vxui_draw_cmd* track = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "boss_track" ) );
+    ASSERT_NE( track, nullptr );
+    ASSERT_EQ( track->rect.z, 800.0f );
+
+    const vxui_draw_cmd* boss_fill = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "boss.fill" ) );
+    ASSERT_NE( boss_fill, nullptr );
+    ASSERT_EQ( boss_fill->rect.z, 600.0f );   // 75% of 800
+
+    ASSERT_NE( vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bombs_bg.0" ) ), nullptr );
+    ASSERT_NE( vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bombs_bg.1" ) ), nullptr );
+    ASSERT_NE( vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bombs_bg.2" ) ), nullptr );
+
+    ASSERT_NE( vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bombs.0" ) ), nullptr );
+    ASSERT_NE( vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bombs.1" ) ), nullptr );
+    ASSERT_EQ( vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bombs.2" ) ), nullptr );
+
+    const vxui_draw_cmd* l0 = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "lives.0" ) );
+    const vxui_draw_cmd* l1 = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "lives.1" ) );
+    const vxui_draw_cmd* l2 = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "lives.2" ) );
+    ASSERT_NE( l0, nullptr );
+    ASSERT_NE( l1, nullptr );
+    ASSERT_NE( l2, nullptr );
+    ASSERT_EQ( l1->rect.x - l0->rect.x, 64.0f );
+    ASSERT_EQ( l2->rect.x - l1->rect.x, 64.0f );
+}
+
 UTEST_MAIN();
