@@ -14,8 +14,6 @@ static vxui_ctx make_ctx()
     return ctx;
 }
 
-// ===== begin / state =====================================================
-
 UTEST(hud, begin_resets_state) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -91,8 +89,6 @@ UTEST(hud, setters_update_current_state) {
     vxui_render( &ctx );
 }
 
-// ===== tile helpers =======================================================
-
 UTEST(hud, tile_returns_expected_uvs) {
     glm::vec4 uv = vxui_hud_tile( 1024, 128, 32, 32, 2 );
     ASSERT_EQ( uv.x, 64.0f / 1024.0f );
@@ -121,8 +117,6 @@ UTEST(hud, tile1d_returns_expected_uvs) {
 UTEST(hud, id_matches_vxui_id) {
     ASSERT_EQ( vxui_hud_id( "test" ), vxui_id( "test" ) );
 }
-
-// ===== meter ==============================================================
 
 UTEST(hud, meter_emits_track_and_fill) {
     vxui_ctx ctx = make_ctx();
@@ -216,8 +210,6 @@ UTEST(hud, meter_vertical_reverse_fills_from_bottom) {
     ASSERT_EQ( fill->rect.y, track->rect.y + 100.0f );  // offset by h - h*t = 100
     ASSERT_EQ( fill->rect.w, 100.0f );
 }
-
-// ===== stock ==============================================================
 
 UTEST(hud, stock_row_emits_count_slots) {
     vxui_ctx ctx = make_ctx();
@@ -333,8 +325,6 @@ UTEST(hud, stock_zero_count_emits_nothing) {
     ASSERT_EQ( dl.count, 0 );
 }
 
-// ===== resolve ============================================================
-
 UTEST(hud, resolve_sets_texture_uv_colour) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -398,8 +388,6 @@ UTEST(hud, meter_records_texture_for_both_rects) {
     ASSERT_EQ( out.uv.w, 0.8f );
 }
 
-// ===== image =============================================================
-
 UTEST(hud, image_emits_rect_at_cursor) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -452,8 +440,6 @@ UTEST(hud, image_resolve_sets_metadata) {
     ASSERT_EQ( out.colour.r, 0.2f );
 }
 
-// ===== wallpaper =========================================================
-
 UTEST(hud, wallpaper_emits_full_hud_rect) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -503,8 +489,6 @@ UTEST(hud, wallpaper_resolve_sets_texture) {
     ASSERT_EQ( out.uv.x, 0.25f );
     ASSERT_EQ( out.uv.z, 0.75f );
 }
-
-// ===== text ==============================================================
 
 UTEST(hud, text_emits_text_cmd) {
     vxui_ctx ctx = make_ctx();
@@ -570,8 +554,6 @@ UTEST(hud, text_resolve_sets_colour) {
     ASSERT_EQ( out.colour.g, 0.6f );
     ASSERT_EQ( out.colour.b, 0.9f );
 }
-
-// ===== text_box ==========================================================
 
 UTEST(hud, text_box_emits_text_cmd) {
     vxui_ctx ctx = make_ctx();
@@ -650,8 +632,6 @@ UTEST(hud, text_box_resolve_sets_colour) {
     ASSERT_EQ( out.colour.r, 0.7f );
     ASSERT_EQ( out.colour.g, 0.2f );
 }
-
-// ===== resource_bar ======================================================
 
 UTEST(hud, resource_bar_half_width) {
     vxui_ctx ctx = make_ctx();
@@ -747,6 +727,88 @@ UTEST(hud, resource_bar_resolve_sets_texture) {
     ASSERT_EQ( vxui_hud_resolve( &hud, c, &out ), true );
     ASSERT_EQ( out.texture_id, (uint32_t) 77 );
     ASSERT_EQ( out.colour.g, 0.8f );
+}
+
+UTEST(hud, health_bar_half_hp_fill_width) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_health_bar( &hud, "hp", 0, 50.0f, 100.0f, 200, 20, { 0.0f, 0.0f, 1.0f, 1.0f }, false );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "hp.fill" ) );
+    ASSERT_NE( c, nullptr );
+    ASSERT_EQ( c->rect.z, 100.0f );
+}
+
+UTEST(hud, health_bar_zero_max_empty) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_health_bar( &hud, "hp", 0, 50.0f, 0.0f, 200, 20, { 0.0f, 0.0f, 1.0f, 1.0f }, false );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "hp.fill" ) );
+    ASSERT_NE( c, nullptr );
+    ASSERT_EQ( c->rect.z, 0.0f );
+}
+
+UTEST(hud, health_bar_clamps_above_max) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_health_bar( &hud, "hp", 0, 150.0f, 100.0f, 200, 20, { 0.0f, 0.0f, 1.0f, 1.0f }, false );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "hp.fill" ) );
+    ASSERT_NE( c, nullptr );
+    ASSERT_EQ( c->rect.z, 200.0f );
+}
+
+UTEST(hud, health_bar_text_uses_integer_hp) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_health_bar( &hud, "hp", 0, 42.7f, 100.0f, 200, 20, { 0.0f, 0.0f, 1.0f, 1.0f }, true );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 1 );
+    const vxui_draw_cmd* t = vxui_draw_nth( dl, VXUI_DRAW_TEXT, 0 );
+    ASSERT_NE( t, nullptr );
+    ASSERT_EQ( strncmp( t->text, "42", 2 ), 0 );
+}
+
+UTEST(hud, health_bar_without_text_emits_no_text_cmd) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_health_bar( &hud, "hp", 0, 80.0f, 100.0f, 200, 20, { 0.0f, 0.0f, 1.0f, 1.0f }, false );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+    ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 0 );
+}
+
+UTEST(hud, health_bar_advances_once) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_pos( &hud, 0, 50 );
+    vxui_hud_health_bar( &hud, "hp", 0, 80.0f, 100.0f, 200, 20, { 0.0f, 0.0f, 1.0f, 1.0f }, true );
+
+    ASSERT_EQ( hud.y, 70.0f );
+    vxui_render( &ctx );
 }
 
 UTEST_MAIN();
