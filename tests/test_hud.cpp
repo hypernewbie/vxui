@@ -651,4 +651,102 @@ UTEST(hud, text_box_resolve_sets_colour) {
     ASSERT_EQ( out.colour.g, 0.2f );
 }
 
+// ===== resource_bar ======================================================
+
+UTEST(hud, resource_bar_half_width) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_pos( &hud, 30, 50 );
+    vxui_hud_resource_bar( &hud, "bar", 1, 0.5f, 200, 20, { 0.0f, 0.0f, 1.0f, 1.0f } );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bar" ) );
+    ASSERT_NE( c, nullptr );
+    ASSERT_EQ( c->rect.x, 30.0f );
+    ASSERT_EQ( c->rect.y, 50.0f );
+    ASSERT_EQ( c->rect.z, 100.0f );
+    ASSERT_EQ( c->rect.w, 20.0f );
+}
+
+UTEST(hud, resource_bar_clips_uv_right_edge) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_resource_bar( &hud, "bar", 1, 0.5f, 200, 20, { 0.25f, 0.0f, 0.75f, 1.0f } );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bar" ) );
+    ASSERT_NE( c, nullptr );
+
+    vxui_render_data out = {};
+    ASSERT_EQ( vxui_hud_resolve( &hud, c, &out ), true );
+    ASSERT_EQ( out.uv.x, 0.25f );  // left edge unchanged
+    ASSERT_EQ( out.uv.z, 0.5f );   // 0.25 + (0.75-0.25)*0.5
+}
+
+UTEST(hud, resource_bar_clamps_low) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_resource_bar( &hud, "bar", 0, -1.0f, 200, 20, { 0.0f, 0.0f, 1.0f, 1.0f } );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bar" ) );
+    ASSERT_NE( c, nullptr );
+    ASSERT_EQ( c->rect.z, 0.0f );
+}
+
+UTEST(hud, resource_bar_clamps_high) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_resource_bar( &hud, "bar", 0, 2.0f, 200, 20, { 0.0f, 0.0f, 1.0f, 1.0f } );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bar" ) );
+    ASSERT_NE( c, nullptr );
+    ASSERT_EQ( c->rect.z, 200.0f );
+}
+
+UTEST(hud, resource_bar_advances_by_original_height) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_pos( &hud, 0, 40 );
+    vxui_hud_resource_bar( &hud, "bar", 0, 0.3f, 200, 20, { 0.0f, 0.0f, 1.0f, 1.0f } );
+
+    ASSERT_EQ( hud.y, 60.0f );
+    vxui_render( &ctx );
+}
+
+UTEST(hud, resource_bar_resolve_sets_texture) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+
+    vxui_hud hud = {};
+    vxui_hud_begin( &hud, &ctx, 960, 540 );
+    vxui_hud_set_colour( &hud, { 0.5f, 0.8f, 0.2f, 1.0f } );
+    vxui_hud_resource_bar( &hud, "bar", 77, 1.0f, 200, 20, { 0.0f, 0.0f, 1.0f, 1.0f } );
+
+    vxui_draw_list dl = vxui_render( &ctx );
+    const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "bar" ) );
+    ASSERT_NE( c, nullptr );
+
+    vxui_render_data out = {};
+    ASSERT_EQ( vxui_hud_resolve( &hud, c, &out ), true );
+    ASSERT_EQ( out.texture_id, (uint32_t) 77 );
+    ASSERT_EQ( out.colour.g, 0.8f );
+}
+
 UTEST_MAIN();
