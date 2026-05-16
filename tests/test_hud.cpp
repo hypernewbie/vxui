@@ -811,7 +811,7 @@ UTEST(hud, health_bar_advances_once) {
     vxui_render( &ctx );
 }
 
-UTEST(hud, a1_parity) {
+UTEST(hud, full_hud_frame) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
 

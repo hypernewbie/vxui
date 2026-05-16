@@ -13,6 +13,8 @@
 #include "vxui.h"
 #define VXUI_IMPL
 #include "vxui_impl.h"
+#define VXUI_HUD_IMPL
+#include "vxui_hud.h"
 #define VXUI_DEMO_RENDER_GL_IMPL
 #include "demo_render_gl.h"
 
@@ -192,6 +194,7 @@ struct demo_resolver_state
     float           time_seconds        = 0;
     const demo_assets* assets           = nullptr;
     const demo_screen_state* screen     = nullptr;
+    vxui_hud*       hud                 = nullptr;
 };
 
 static uint32_t demo_id( const char* s )
@@ -216,6 +219,8 @@ static glm::vec4 demo_status_colour( int status )
 static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, void* ud )
 {
     demo_resolver_state* st = (demo_resolver_state*) ud;
+
+    if ( st->hud && vxui_hud_resolve( st->hud, c, out ) ) return;
 
     if ( c->type == VXUI_DRAW_TEXT )
     {
@@ -662,6 +667,7 @@ int main( int /*argc*/, char** /*argv*/ )
 
     demo_screen_state   screen_state;
     demo_resolver_state resolver_state;
+    vxui_hud            hud = {};
     resolver_state.panel_id           = demo_id( "demo_panel"    );
     resolver_state.frame_id           = demo_id( "demo_frame"    );
     resolver_state.bg_id              = demo_id( "demo_bg"       );
@@ -679,6 +685,7 @@ int main( int /*argc*/, char** /*argv*/ )
         else if ( s_demo_missions[i].status == DEMO_MISSION_OPEN   ) resolver_state.ops_icon[i] = assets.warning;
         else                                                          resolver_state.ops_icon[i] = 0;
     }
+    resolver_state.hud = &hud;
     vxui_set_render_data_fn( &ctx, demo_render_data, &resolver_state );
 
     static const struct { int key; const char* action; } s_keymap[] = {
@@ -704,7 +711,8 @@ int main( int /*argc*/, char** /*argv*/ )
         glClearColor( 0.02f, 0.02f, 0.03f, 1.0f );
         glClear     ( GL_COLOR_BUFFER_BIT );
 
-        vxui_frame( &ctx, 1.0f / 60.0f, (float) fb_w, (float) fb_h );
+        vxui_frame    ( &ctx, 1.0f / 60.0f, (float) fb_w, (float) fb_h );
+        vxui_hud_begin( &hud, &ctx,          (float) fb_w, (float) fb_h );
 
         for ( auto& m : s_keymap )
             if ( glfwGetKey( window, m.key ) == GLFW_PRESS )
