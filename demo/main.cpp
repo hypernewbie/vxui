@@ -711,34 +711,38 @@ int main( int /*argc*/, char** /*argv*/ )
         glClearColor( 0.02f, 0.02f, 0.03f, 1.0f );
         glClear     ( GL_COLOR_BUFFER_BIT );
 
-        vxui_frame    ( &ctx, 1.0f / 60.0f, (float) fb_w, (float) fb_h );
-        vxui_hud_begin( &hud, &ctx,          (float) fb_w, (float) fb_h );
+        vxui_frame    ( &ctx, 1.0f / 60.0f, (float) DEMO_PORTRAIT_W, (float) DEMO_PORTRAIT_H );
+        vxui_hud_begin( &hud, &ctx,          (float) DEMO_PORTRAIT_W, (float) DEMO_PORTRAIT_H );
 
         for ( auto& m : s_keymap )
             if ( glfwGetKey( window, m.key ) == GLFW_PRESS )
                 vxui_input( &ctx, m.action );
+
+        resolver_state.time_seconds += 1.0f / 60.0f;
+
+        float scale    = glm::min( (float) fb_w / (float) DEMO_PORTRAIT_W, (float) fb_h / (float) DEMO_PORTRAIT_H );
+        float origin_x = ( (float) fb_w - (float) DEMO_PORTRAIT_W * scale ) * 0.5f;
+        float origin_y = ( (float) fb_h - (float) DEMO_PORTRAIT_H * scale ) * 0.5f;
+
+        vxui_gl_xform xf;
+        xf.offset = { origin_x, origin_y };
+        xf.scale  = scale;
 
         double mx = 0, my = 0;
         glfwGetCursorPos( window, &mx, &my );
         uint32_t mb = 0;
         if ( glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_LEFT  ) == GLFW_PRESS ) mb |= VXUI_MOUSE_LEFT;
         if ( glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_RIGHT ) == GLFW_PRESS ) mb |= VXUI_MOUSE_RIGHT;
-        vxui_mouse( &ctx, (float) mx, (float) my, mb );
+        vxui_mouse( &ctx, ( (float) mx - origin_x ) / scale, ( (float) my - origin_y ) / scale, mb );
 
-        resolver_state.time_seconds += 1.0f / 60.0f;
-
-        // Centre the portrait UI inside the landscape window.
-        float origin_x = ( (float) fb_w - (float) DEMO_PORTRAIT_W ) * 0.5f;
-        float origin_y = ( (float) fb_h - (float) DEMO_PORTRAIT_H ) * 0.5f;
-
-        vxui_root( &ctx, "demo_root", origin_x, origin_y );
+        vxui_root( &ctx, "demo_root", 0.0f, 0.0f );
 
             vxui_rect( &ctx, "demo_bg", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H } } );
             vxui_div_end( &ctx );
 
         vxui_root_end( &ctx );
 
-        vxui_root( &ctx, "demo_root2", origin_x, origin_y );
+        vxui_root( &ctx, "demo_root2", 0.0f, 0.0f );
 
             vxui_rect( &ctx, "demo_frame", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H }, .col = true, .padding = { 18, 18, 18, 18 }, .gap = 8 } );
 
@@ -777,7 +781,7 @@ int main( int /*argc*/, char** /*argv*/ )
         vxui_root_end( &ctx );
 
         vxui_draw_list dl = vxui_render( &ctx );
-        vxui_gl_render( &ctx, dl, (float) fb_w, (float) fb_h );
+        vxui_gl_render( &ctx, dl, (float) fb_w, (float) fb_h, xf );
 
         glfwSwapBuffers( window );
     }
