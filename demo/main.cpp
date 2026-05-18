@@ -128,7 +128,6 @@ static uint32_t demo_mission_thumb( const demo_assets* a, int sector )
 
 struct demo_screen_state
 {
-    bool         splash                  = true;
     const char*  stack[DEMO_MAX_STACK]   = { "main" };
     int          depth                   = 1;
 
@@ -352,9 +351,9 @@ static const char* s_demo_scaling[]     = { "Pixel Perfect", "Fit", "Stretch" };
 static const char* s_demo_controller[]  = { "Keyboard", "Gamepad 1", "All" };
 static const char* s_demo_icons[]       = { "Keyboard", "Xbox", "PlayStation", "Arcade" };
 
-static void demo_splash( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window )
+static void demo_splash( vxui_ctx* ctx, GLFWwindow* window )
 {
-    if ( ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CONFIRM ) != 0 ) s->splash = false;
+    if ( ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CONFIRM ) != 0 ) vxui_switch( ctx, "menu" );
     if ( ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CANCEL  ) != 0 ) glfwSetWindowShouldClose( window, GLFW_TRUE );
 
     vxui_div ( ctx, "splash_col", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .align_x = 1 } );
@@ -381,14 +380,14 @@ static void demo_splash( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window
 static void demo_main_menu( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window )
 {
     if ( !vxui_menu( ctx, "main", true, 0, true ) ) return;
-    if ( vxui_menu_action( ctx, "Start"        ) ) demo_push( s, "hud" );
+    if ( vxui_menu_action( ctx, "Start"        ) ) vxui_switch( ctx, "gameplay" );
     if ( vxui_menu_action( ctx, "Operations"   ) ) demo_push( s, "operations" );
     if ( vxui_menu_action( ctx, "Stage Select" ) ) demo_push( s, "stageselect" );
     if ( vxui_menu_action( ctx, "Settings"     ) ) demo_push( s, "settings" );
     if ( vxui_menu_action( ctx, "Archives"     ) ) demo_push( s, "archives" );
     if ( vxui_menu_action( ctx, "Extras"       ) ) demo_push( s, "extras" );
     if ( vxui_menu_action( ctx, "Exit"         ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
-    if ( vxui_menu_cancelled( ctx )              ) s->splash = true;
+    if ( vxui_menu_cancelled( ctx )              ) vxui_switch( ctx, "splash" );
     vxui_menu_end( ctx );
 }
 
@@ -578,9 +577,9 @@ static void demo_extras_menu( vxui_ctx* ctx, demo_screen_state* s )
     vxui_menu_end( ctx );
 }
 
-static void demo_hud( vxui_ctx* ctx, vxui_hud* hud, demo_screen_state* s, float t )
+static void demo_hud( vxui_ctx* ctx, vxui_hud* hud, float t )
 {
-    if ( ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CANCEL ) != 0 ) { demo_pop( s ); return; }
+    if ( ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CANCEL ) != 0 ) { vxui_switch( ctx, "menu" ); return; }
 
     float hp    = 50.0f + 50.0f * sinf( t * 0.5f );
     int   bombs = ( (int)( t * 0.5f ) ) % 4;
@@ -614,7 +613,7 @@ static void demo_hud( vxui_ctx* ctx, vxui_hud* hud, demo_screen_state* s, float 
     vxui_hud_text_box  ( hud, "exit_hint", "ESC TO EXIT", 480, 20, 1, 1 );
 }
 
-static void demo_dispatch_screen( vxui_ctx* ctx, vxui_hud* hud, demo_screen_state* s, GLFWwindow* window, float t )
+static void demo_dispatch_screen( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window )
 {
     const char* active = s->stack[s->depth - 1];
     if      ( strcmp( active, "main"              ) == 0 ) demo_main_menu        ( ctx, s, window );
@@ -629,7 +628,6 @@ static void demo_dispatch_screen( vxui_ctx* ctx, vxui_hud* hud, demo_screen_stat
     else if ( strcmp( active, "settings_assist"   ) == 0 ) demo_settings_assist  ( ctx, s );
     else if ( strcmp( active, "archives"          ) == 0 ) demo_archives_menu    ( ctx, s );
     else if ( strcmp( active, "extras"            ) == 0 ) demo_extras_menu      ( ctx, s );
-    else if ( strcmp( active, "hud"               ) == 0 ) demo_hud              ( ctx, hud, s, t );
 }
 
 int main( int /*argc*/, char** /*argv*/ )
@@ -666,7 +664,8 @@ int main( int /*argc*/, char** /*argv*/ )
     glfwGetFramebufferSize( window, &fb_w, &fb_h );
 
     vxui_ctx ctx = {};
-    vxui_init( &ctx, (float) fb_w, (float) fb_h, s_clay_mem, sizeof( s_clay_mem ) );
+    vxui_init  ( &ctx, (float) fb_w, (float) fb_h, s_clay_mem, sizeof( s_clay_mem ) );
+    vxui_switch( &ctx, "splash" );
 
     std::filesystem::path src_dir   = VXUI_SOURCE_DIR;
     std::filesystem::path font_path = src_dir / "fonts" / "Roboto-Regular.ttf";
@@ -777,50 +776,55 @@ int main( int /*argc*/, char** /*argv*/ )
         else
             vxui_mouse( &ctx, FLT_MAX, FLT_MAX, 0 );
 
-        vxui_root( &ctx, "demo_root", 0.0f, 0.0f );
+        if ( vxui_page( &ctx, "gameplay" ) )
+        {
+            demo_hud( &ctx, &hud, resolver_state.time_seconds );
+            resolver_state.ops_thumb_texture = 0;
+            resolver_state.stg_thumb_texture = 0;
+        }
+        else
+        {
+            vxui_root( &ctx, "demo_root", 0.0f, 0.0f );
+                vxui_rect( &ctx, "demo_bg", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H } } );
+                vxui_div_end( &ctx );
+            vxui_root_end( &ctx );
 
-            vxui_rect( &ctx, "demo_bg", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H } } );
-            vxui_div_end( &ctx );
+            vxui_root( &ctx, "demo_root2", 0.0f, 0.0f );
+                vxui_rect( &ctx, "demo_frame", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H }, .col = true, .padding = { 18, 18, 18, 18 }, .gap = 8 } );
 
-        vxui_root_end( &ctx );
-
-        vxui_root( &ctx, "demo_root2", 0.0f, 0.0f );
-
-            vxui_rect( &ctx, "demo_frame", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H }, .col = true, .padding = { 18, 18, 18, 18 }, .gap = 8 } );
-
-                if ( screen_state.splash )
-                {
-                    demo_splash( &ctx, &screen_state, window );
-                }
-                else
-                {
-                    vxui_rect( &ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 14, 14, 14, 14 }, .gap = 6 } );
-                        demo_dispatch_screen( &ctx, &hud, &screen_state, window, resolver_state.time_seconds );
-                    vxui_div_end( &ctx );
-
-                    const char* screen_top = screen_state.depth > 0 ? screen_state.stack[screen_state.depth - 1] : "";
-                    if ( strcmp( screen_top, "operations" ) == 0 )
+                    if ( vxui_page( &ctx, "splash" ) )
                     {
-                        int f = demo_menu_focused( &ctx, "operations" );
-                        if ( f < 0 || f >= DEMO_MISSION_COUNT ) f = 0;
-                        resolver_state.ops_thumb_texture = demo_mission_thumb( &assets, s_demo_missions[f].sector );
+                        demo_splash( &ctx, window );
                     }
                     else
-                        resolver_state.ops_thumb_texture = 0;
-
-                    if ( strcmp( screen_top, "stageselect" ) == 0 )
                     {
-                        int f = demo_menu_focused( &ctx, "stageselect" );
-                        if ( f < 0 || f >= DEMO_SECTOR_COUNT ) f = 0;
-                        resolver_state.stg_thumb_texture = demo_mission_thumb( &assets, f );
+                        vxui_rect( &ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 14, 14, 14, 14 }, .gap = 6 } );
+                            demo_dispatch_screen( &ctx, &screen_state, window );
+                        vxui_div_end( &ctx );
+
+                        const char* screen_top = screen_state.depth > 0 ? screen_state.stack[screen_state.depth - 1] : "";
+                        if ( strcmp( screen_top, "operations" ) == 0 )
+                        {
+                            int f = demo_menu_focused( &ctx, "operations" );
+                            if ( f < 0 || f >= DEMO_MISSION_COUNT ) f = 0;
+                            resolver_state.ops_thumb_texture = demo_mission_thumb( &assets, s_demo_missions[f].sector );
+                        }
+                        else
+                            resolver_state.ops_thumb_texture = 0;
+
+                        if ( strcmp( screen_top, "stageselect" ) == 0 )
+                        {
+                            int f = demo_menu_focused( &ctx, "stageselect" );
+                            if ( f < 0 || f >= DEMO_SECTOR_COUNT ) f = 0;
+                            resolver_state.stg_thumb_texture = demo_mission_thumb( &assets, f );
+                        }
+                        else
+                            resolver_state.stg_thumb_texture = 0;
                     }
-                    else
-                        resolver_state.stg_thumb_texture = 0;
-                }
 
-            vxui_div_end( &ctx );
-
-        vxui_root_end( &ctx );
+                vxui_div_end( &ctx );
+            vxui_root_end( &ctx );
+        }
 
         vxui_draw_list dl = vxui_render( &ctx );
         vxui_gl_render( &ctx, dl, (float) fb_w, (float) fb_h, xf );
