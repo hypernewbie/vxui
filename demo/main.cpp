@@ -381,7 +381,7 @@ static void demo_splash( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window
 static void demo_main_menu( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window )
 {
     if ( !vxui_menu( ctx, "main", true, 0, true ) ) return;
-    if ( vxui_menu_action( ctx, "Start"        ) ) printf( "Start fired\n" );
+    if ( vxui_menu_action( ctx, "Start"        ) ) demo_push( s, "hud" );
     if ( vxui_menu_action( ctx, "Operations"   ) ) demo_push( s, "operations" );
     if ( vxui_menu_action( ctx, "Stage Select" ) ) demo_push( s, "stageselect" );
     if ( vxui_menu_action( ctx, "Settings"     ) ) demo_push( s, "settings" );
@@ -578,7 +578,43 @@ static void demo_extras_menu( vxui_ctx* ctx, demo_screen_state* s )
     vxui_menu_end( ctx );
 }
 
-static void demo_dispatch_screen( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window )
+static void demo_hud( vxui_ctx* ctx, vxui_hud* hud, demo_screen_state* s, float t )
+{
+    if ( ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CANCEL ) != 0 ) { demo_pop( s ); return; }
+
+    float hp    = 50.0f + 50.0f * sinf( t * 0.5f );
+    int   bombs = ( (int)( t * 0.5f ) ) % 4;
+    int   lives = 3;
+
+    vxui_hud_set_pos     ( hud, 20, 20 );
+    vxui_hud_set_colour  ( hud, { 0.20f, 0.25f, 0.30f, 1.0f } );
+    vxui_hud_resource_bar( hud, "boss_track", 0, 1.0f, 440, 14, {} );
+
+    vxui_hud_set_pos     ( hud, 20, 20 );
+    vxui_hud_set_colour  ( hud, { 0.95f, 0.30f, 0.40f, 1.0f } );
+    vxui_hud_health_bar  ( hud, "boss", 0, hp, 100.0f, 440, 14, {}, true );
+
+    vxui_hud_set_pos       ( hud, 20, 60 );
+    vxui_hud_set_colour    ( hud, { 0.25f, 0.25f, 0.30f, 1.0f } );
+    vxui_hud_resource_stock( hud, "bombs_bg", 0, 3, 32, 32, VXUI_HUD_STOCK_HEX_COL, {}, 4 );
+
+    vxui_hud_set_pos       ( hud, 20, 60 );
+    vxui_hud_set_colour    ( hud, { 0.30f, 0.95f, 1.00f, 1.0f } );
+    vxui_hud_resource_stock( hud, "bombs", 0, bombs, 32, 32, VXUI_HUD_STOCK_HEX_COL, {}, 4 );
+
+    vxui_hud_set_pos       ( hud, 20, 560 );
+    vxui_hud_set_colour    ( hud, { 0.95f, 0.95f, 0.95f, 1.0f } );
+    vxui_hud_resource_stock( hud, "lives", 0, lives, 36, 36, VXUI_HUD_STOCK_ROW, {}, 4 );
+
+    vxui_hud_set_pos   ( hud, 280, 560 );
+    vxui_hud_set_colour( hud, { 0.85f, 0.92f, 1.00f, 1.0f } );
+    vxui_hud_text_box  ( hud, "score", "SCORE 000000", 180, 30, 2, 1 );
+
+    vxui_hud_set_pos   ( hud, 0, 610 );
+    vxui_hud_text_box  ( hud, "exit_hint", "ESC TO EXIT", 480, 20, 1, 1 );
+}
+
+static void demo_dispatch_screen( vxui_ctx* ctx, vxui_hud* hud, demo_screen_state* s, GLFWwindow* window, float t )
 {
     const char* active = s->stack[s->depth - 1];
     if      ( strcmp( active, "main"              ) == 0 ) demo_main_menu        ( ctx, s, window );
@@ -593,6 +629,7 @@ static void demo_dispatch_screen( vxui_ctx* ctx, demo_screen_state* s, GLFWwindo
     else if ( strcmp( active, "settings_assist"   ) == 0 ) demo_settings_assist  ( ctx, s );
     else if ( strcmp( active, "archives"          ) == 0 ) demo_archives_menu    ( ctx, s );
     else if ( strcmp( active, "extras"            ) == 0 ) demo_extras_menu      ( ctx, s );
+    else if ( strcmp( active, "hud"               ) == 0 ) demo_hud              ( ctx, hud, s, t );
 }
 
 int main( int /*argc*/, char** /*argv*/ )
@@ -758,7 +795,7 @@ int main( int /*argc*/, char** /*argv*/ )
                 else
                 {
                     vxui_rect( &ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 14, 14, 14, 14 }, .gap = 6 } );
-                        demo_dispatch_screen( &ctx, &screen_state, window );
+                        demo_dispatch_screen( &ctx, &hud, &screen_state, window, resolver_state.time_seconds );
                     vxui_div_end( &ctx );
 
                     const char* screen_top = screen_state.depth > 0 ? screen_state.stack[screen_state.depth - 1] : "";
