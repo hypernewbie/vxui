@@ -408,7 +408,7 @@ static void demo_operations_menu( vxui_ctx* ctx, demo_screen_state* s )
                 if ( vxui_menu_action( ctx, m.name ) )
                 {
                     if ( m.status == DEMO_MISSION_LOCKED ) printf( "locked: %s\n", m.name );
-                    else                                   printf( "launch: %s\n", m.name );
+                    else                                   vxui_switch( ctx, "gameplay" );
                 }
             }
             if ( vxui_menu_cancelled( ctx ) ) demo_pop( s );
