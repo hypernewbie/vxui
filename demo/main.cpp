@@ -733,7 +733,12 @@ int main( int /*argc*/, char** /*argv*/ )
         uint32_t mb = 0;
         if ( glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_LEFT  ) == GLFW_PRESS ) mb |= VXUI_MOUSE_LEFT;
         if ( glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_RIGHT ) == GLFW_PRESS ) mb |= VXUI_MOUSE_RIGHT;
-        vxui_mouse( &ctx, ( (float) mx - origin_x ) / scale, ( (float) my - origin_y ) / scale, mb );
+        bool inside = mx >= origin_x && mx < origin_x + (float) DEMO_PORTRAIT_W * scale
+                   && my >= origin_y && my < origin_y + (float) DEMO_PORTRAIT_H * scale;
+        if ( inside )
+            vxui_mouse( &ctx, ( (float) mx - origin_x ) / scale, ( (float) my - origin_y ) / scale, mb );
+        else
+            vxui_mouse( &ctx, FLT_MAX, FLT_MAX, 0 );
 
         vxui_root( &ctx, "demo_root", 0.0f, 0.0f );
 
