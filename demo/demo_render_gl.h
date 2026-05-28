@@ -68,6 +68,7 @@ struct vxui_gl_state
     GLuint shader_outline       = 0;
     GLuint fbo[2]               = { 0, 0 };
     GLuint fbo_texture[2]       = { 0, 0 };
+    GLuint fbo_stencil_rb       = 0;
 
     vxui_gl_material_data material_data[DEMO_GL_MAX_MATERIAL_DCALLS] = {};
     int                   material_data_count                         = 0;
@@ -316,6 +317,11 @@ static void vxui_gl_setup_fbo( vxui_gl_state* gl )
     glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
     glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
     glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gl->fbo_texture[0], 0 );
+
+    glGenRenderbuffers( 1, &gl->fbo_stencil_rb );
+    glBindRenderbuffer( GL_RENDERBUFFER, gl->fbo_stencil_rb );
+    glRenderbufferStorage( GL_RENDERBUFFER, GL_STENCIL_INDEX8, VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH, VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT );
+    glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gl->fbo_stencil_rb );
 
     glBindFramebuffer( GL_FRAMEBUFFER, gl->fbo[1] );
     glBindTexture( GL_TEXTURE_2D, gl->fbo_texture[1] );
@@ -684,8 +690,6 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
     glVertexAttribPointer( 1, 2, GL_FLOAT, GL_FALSE, sizeof( ve_fontcache_vertex ), (void*) ( 2 * sizeof( float ) ) );
 
     glDisable( GL_CULL_FACE );
-    glEnable( GL_BLEND );
-    glBlendEquation( GL_FUNC_ADD );
 
     for ( ve_fontcache_draw& dcall : drawlist->dcalls )
     {
@@ -693,7 +697,27 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
         {
             glUseProgram( gl->shader_render_glyph );
             glBindFramebuffer( GL_FRAMEBUFFER, gl->fbo[0] );
-            glBlendFunc( GL_ONE_MINUS_DST_COLOR, GL_ONE_MINUS_SRC_COLOR );
+            glDisable( GL_BLEND );
+            glColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE );
+            glEnable( GL_STENCIL_TEST );
+            glStencilMask( 0xFF );
+            glStencilFunc( GL_ALWAYS, 0, 0xFF );
+            glStencilOpSeparate( GL_FRONT, GL_KEEP, GL_KEEP, GL_INCR_WRAP );
+            glStencilOpSeparate( GL_BACK,  GL_KEEP, GL_KEEP, GL_DECR_WRAP );
+            glViewport( 0, 0, VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH, VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT );
+            glScissor( 0, 0, VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH, VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT );
+            glDisable( GL_FRAMEBUFFER_SRGB );
+        }
+        else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH_RESOLVE )
+        {
+            glUseProgram( gl->shader_render_glyph );
+            glBindFramebuffer( GL_FRAMEBUFFER, gl->fbo[0] );
+            glDisable( GL_BLEND );
+            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+            glEnable( GL_STENCIL_TEST );
+            glStencilMask( 0xFF );
+            glStencilFunc( GL_NOTEQUAL, 0, 0xFF );
+            glStencilOp( GL_KEEP, GL_KEEP, GL_ZERO );
             glViewport( 0, 0, VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH, VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT );
             glScissor( 0, 0, VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH, VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT );
             glDisable( GL_FRAMEBUFFER_SRGB );
@@ -702,6 +726,9 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
         {
             glUseProgram( gl->shader_blit_atlas );
             glBindFramebuffer( GL_FRAMEBUFFER, gl->fbo[1] );
+            glDisable( GL_STENCIL_TEST );
+            glEnable( GL_BLEND );
+            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, VE_FONTCACHE_ATLAS_WIDTH, VE_FONTCACHE_ATLAS_HEIGHT );
             glScissor( 0, 0, VE_FONTCACHE_ATLAS_WIDTH, VE_FONTCACHE_ATLAS_HEIGHT );
@@ -715,6 +742,9 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
         {
             glUseProgram( gl->shader_draw_text );
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glDisable( GL_STENCIL_TEST );
+            glEnable( GL_BLEND );
+            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
             glScissor( 0, 0, win_w, win_h );
@@ -729,6 +759,9 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
         {
             glUseProgram( gl->shader_rect );
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glDisable( GL_STENCIL_TEST );
+            glEnable( GL_BLEND );
+            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
             glScissor( 0, 0, win_w, win_h );
@@ -739,6 +772,9 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
         {
             glUseProgram( gl->shader_rect_textured );
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glDisable( GL_STENCIL_TEST );
+            glEnable( GL_BLEND );
+            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
             glScissor( 0, 0, win_w, win_h );
@@ -752,6 +788,9 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
         {
             glUseProgram( gl->shader_image );
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glDisable( GL_STENCIL_TEST );
+            glEnable( GL_BLEND );
+            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
             glScissor( 0, 0, win_w, win_h );
@@ -765,6 +804,9 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
         {
             glUseProgram( gl->shader_crt );
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glDisable( GL_STENCIL_TEST );
+            glEnable( GL_BLEND );
+            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
             glScissor( 0, 0, win_w, win_h );
@@ -779,6 +821,9 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
         {
             glUseProgram( gl->shader_round );
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glDisable( GL_STENCIL_TEST );
+            glEnable( GL_BLEND );
+            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
             glScissor( 0, 0, win_w, win_h );
@@ -792,6 +837,9 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
         {
             glUseProgram( gl->shader_outline );
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glDisable( GL_STENCIL_TEST );
+            glEnable( GL_BLEND );
+            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
             glScissor( 0, 0, win_w, win_h );
@@ -804,7 +852,18 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
         if ( dcall.clear_before_draw )
         {
             glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
-            glClear( GL_COLOR_BUFFER_BIT );
+            if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH )
+            {
+                glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+                glStencilMask( 0xFF );
+                glClearStencil( 0 );
+                glClear( GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT );
+                glColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE );
+            }
+            else
+            {
+                glClear( GL_COLOR_BUFFER_BIT );
+            }
         }
         if ( dcall.end_index - dcall.start_index == 0 ) continue;
         glDrawElements( GL_TRIANGLES, dcall.end_index - dcall.start_index, GL_UNSIGNED_INT, (GLvoid*) ( dcall.start_index * sizeof( uint32_t ) ) );
@@ -848,6 +907,7 @@ void vxui_gl_shutdown( vxui_ctx* ctx )
     glDeleteProgram( gl->shader_crt );
     glDeleteProgram( gl->shader_round );
     glDeleteProgram( gl->shader_outline );
+    glDeleteRenderbuffers( 1, &gl->fbo_stencil_rb );
     glDeleteFramebuffers( 2, gl->fbo );
     glDeleteTextures( 2, gl->fbo_texture );
 
