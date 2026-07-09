@@ -46,8 +46,6 @@ static int label_frame( vxui_ctx* ctx, uint32_t input )
     return fired;
 }
 
-/* ---- section --------------------------------------------------------- */
-
 UTEST(menu_section, focus_skips_section_row) {
     vxui_ctx ctx = make_ctx();
     section_frame( &ctx, 0 );       // frame 1: establish [section, Play, Quit]
@@ -67,8 +65,6 @@ UTEST(menu_section, counts_as_row) {
     // 3 rows total: section + Play + Quit
     ASSERT_EQ( ctx.menu_state[0].z, (uint32_t) 3 );
 }
-
-/* ---- label ----------------------------------------------------------- */
 
 UTEST(menu_label, focus_skips_label_row) {
     vxui_ctx ctx = make_ctx();

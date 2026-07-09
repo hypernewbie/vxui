@@ -307,8 +307,6 @@ UTEST(menu_slider, single_step_covers_full_range) {
     ASSERT_NEAR( v, 0.0f, 1e-5f );
 }
 
-/* ---- value display --------------------------------------------------- */
-
 UTEST(menu_slider, value_text_emitted) {
     vxui_ctx ctx = make_ctx();
     float v = 0.5f;

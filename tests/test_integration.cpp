@@ -12,8 +12,8 @@ static vxui_ctx make_ctx()
     return ctx;
 }
 
-// ---- 3.3 helper --------------------------------------------------------
-
+// Six-row settings menu shared by the tests below: row 0 ("DISPLAY") and
+// row 3 ("AUDIO") are section headers, so navigation must skip them.
 struct settings_state
 {
     int   fullscreen  = 0;
@@ -31,26 +31,24 @@ static void settings_menu_frame( vxui_ctx* ctx, settings_state* s, uint32_t inpu
     ctx->input = input;
     if ( vxui_menu( ctx, "settings" ) )
     {
-        vxui_menu_section( ctx, "DISPLAY" );                                  // row 0  skip
-        vxui_menu_option ( ctx, "Fullscreen", &s->fullscreen, s_on_off, 2 ); // row 1
-        vxui_menu_option ( ctx, "VSync",      &s->vsync,      s_on_off, 2 ); // row 2
-        vxui_menu_section( ctx, "AUDIO" );                                    // row 3  skip
-        vxui_menu_slider ( ctx, "Volume", &s->volume );                       // row 4
-        s->apply_fired = vxui_menu_action( ctx, "Apply" );                   // row 5
+        vxui_menu_section( ctx, "DISPLAY" );
+        vxui_menu_option ( ctx, "Fullscreen", &s->fullscreen, s_on_off, 2 );
+        vxui_menu_option ( ctx, "VSync",      &s->vsync,      s_on_off, 2 );
+        vxui_menu_section( ctx, "AUDIO" );
+        vxui_menu_slider ( ctx, "Volume", &s->volume );
+        s->apply_fired = vxui_menu_action( ctx, "Apply" );
         vxui_menu_end( ctx );
     }
     vxui_render( ctx );
     ctx->input = 0;   // release so next call registers as a fresh edge
 }
 
-// ---- 3.1 Page + menu navigation (title → options → back) ---------------
-
 UTEST(integration, page_menu_nav)
 {
     vxui_ctx ctx = make_ctx();
     vxui_switch( &ctx, "title" );
 
-    // ---- Frame 1: establish title menu [Play, Options, Quit] ----
+    // frame 1: establish title menu [Play, Options, Quit]
     vxui_frame( &ctx, 1.0f / 60.0f );
     if ( vxui_page( &ctx, "title" ) )
     {
@@ -65,7 +63,6 @@ UTEST(integration, page_menu_nav)
     vxui_render( &ctx );
     ASSERT_TRUE( vxui_page( &ctx, "title" ) );
 
-    // ---- Frame 2: navigate down to Options (row 1), confirm → "options" ----
     vxui_frame( &ctx, 1.0f / 60.0f );
     ctx.input = VXUI_INPUT_DOWN | VXUI_INPUT_CONFIRM;
     if ( vxui_page( &ctx, "title" ) )
@@ -81,13 +78,12 @@ UTEST(integration, page_menu_nav)
     vxui_render( &ctx );
     ASSERT_TRUE( vxui_page( &ctx, "options" ) );
 
-    // ---- Frame 2.5: release so next confirm is a fresh edge ----
+    // release so next confirm is a fresh edge
     vxui_frame( &ctx, 1.0f / 60.0f );
     if ( vxui_page( &ctx, "options" ) )
         if ( vxui_menu( &ctx, "opts" ) ) vxui_menu_end( &ctx );
     vxui_render( &ctx );
 
-    // ---- Frame 3: on "options", confirm Gameplay (row 0) → "options_gameplay" ----
     vxui_frame( &ctx, 1.0f / 60.0f );
     ctx.input = VXUI_INPUT_CONFIRM;
     if ( vxui_page( &ctx, "options" ) )
@@ -102,7 +98,6 @@ UTEST(integration, page_menu_nav)
     vxui_render( &ctx );
     ASSERT_TRUE( vxui_page( &ctx, "options_gameplay" ) );
 
-    // ---- Frame 4: on "options_gameplay", cancel → back to "options" ----
     vxui_frame( &ctx, 1.0f / 60.0f );
     ctx.input = VXUI_INPUT_CANCEL;
     if ( vxui_page( &ctx, "options_gameplay" ) )
@@ -113,13 +108,12 @@ UTEST(integration, page_menu_nav)
     vxui_render( &ctx );
     ASSERT_TRUE( vxui_page( &ctx, "options" ) );
 
-    // ---- Frame 4.5: release so next cancel is a fresh edge ----
+    // release so next cancel is a fresh edge
     vxui_frame( &ctx, 1.0f / 60.0f );
     if ( vxui_page( &ctx, "options" ) )
         if ( vxui_menu( &ctx, "opts" ) ) vxui_menu_end( &ctx );
     vxui_render( &ctx );
 
-    // ---- Frame 5: on "options", cancel → back to "title" ----
     vxui_frame( &ctx, 1.0f / 60.0f );
     ctx.input = VXUI_INPUT_CANCEL;
     if ( vxui_page( &ctx, "options" ) )
@@ -137,8 +131,6 @@ UTEST(integration, page_menu_nav)
     ASSERT_TRUE( vxui_page( &ctx, "title" ) );
 }
 
-// ---- 3.2 Multi-menu isolation ------------------------------------------
-//
 // Both menus share the same input bitfield — this is expected behavior.
 // Focus state is keyed by ID so it does not bleed between menus.
 
@@ -146,7 +138,7 @@ UTEST(integration, multi_menu_isolation)
 {
     vxui_ctx ctx = make_ctx();
 
-    // ---- Frame 1: establish "left" (3 rows) and "right" (3 rows) ----
+    // frame 1: establish "left" (3 rows) and "right" (3 rows)
     vxui_frame( &ctx, 1.0f / 60.0f );
     if ( vxui_menu( &ctx, "left" ) )
     {
@@ -164,7 +156,6 @@ UTEST(integration, multi_menu_isolation)
     }
     vxui_render( &ctx );
 
-    // ---- Frame 2: input=down — both menus navigate (expected shared-input behavior) ----
     vxui_frame( &ctx, 1.0f / 60.0f );
     ctx.input = VXUI_INPUT_DOWN;
     if ( vxui_menu( &ctx, "left" ) )
@@ -187,7 +178,6 @@ UTEST(integration, multi_menu_isolation)
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
     ASSERT_EQ( ctx.menu_state[1].y, (uint32_t) 1 );
 
-    // ---- Frame 3: no input — focus stable ----
     vxui_frame( &ctx, 1.0f / 60.0f );
     if ( vxui_menu( &ctx, "left" ) )
     {
@@ -208,18 +198,6 @@ UTEST(integration, multi_menu_isolation)
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
     ASSERT_EQ( ctx.menu_state[1].y, (uint32_t) 1 );
 }
-
-// ---- 3.3 Mixed row navigation with skip --------------------------------
-//
-// Menu layout:
-//   row 0  section "DISPLAY"   — skip
-//   row 1  option  "Fullscreen"
-//   row 2  option  "VSync"
-//   row 3  section "AUDIO"     — skip
-//   row 4  slider  "Volume"
-//   row 5  action  "Apply"
-//
-// Navigation must never land on rows 0 or 3.
 
 UTEST(integration, mixed_skip_navigation)
 {
@@ -255,8 +233,6 @@ UTEST(integration, mixed_skip_navigation)
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 5 );
 }
 
-// ---- 3.4 Focus clamping integration ------------------------------------
-//
 // Focus=3 on a 4-row menu. Menu shrinks to 3 rows (Debug omitted).
 // One additional frame is needed for the clamp to fire, since num_rows is
 // written by vxui_menu_end and the clamp uses the previous frame's count.
@@ -265,7 +241,7 @@ UTEST(integration, focus_clamp)
 {
     vxui_ctx ctx = make_ctx();
 
-    // ---- Frame 1: establish [Play, Options, Debug, Quit] (4 rows) ----
+    // frame 1: establish [Play, Options, Debug, Quit] (4 rows)
     vxui_frame( &ctx, 1.0f / 60.0f );
     if ( vxui_menu( &ctx, "test" ) )
     {
@@ -277,7 +253,7 @@ UTEST(integration, focus_clamp)
     }
     vxui_render( &ctx );
 
-    // ---- Frame 2: up (wraps from 0 → 3 = Quit) ----
+    // frame 2: up (wraps from 0 → 3 = Quit)
     vxui_frame( &ctx, 1.0f / 60.0f );
     ctx.input = VXUI_INPUT_UP;
     if ( vxui_menu( &ctx, "test" ) )
@@ -291,8 +267,8 @@ UTEST(integration, focus_clamp)
     vxui_render( &ctx );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 3 );
 
-    // ---- Frame 3: Debug omitted — 3-row menu writes num_rows=3.
-    //              Clamp has not fired yet (prev num_rows was still 4). ----
+    // frame 3: Debug omitted — 3-row menu writes num_rows=3.
+    // Clamp has not fired yet (prev num_rows was still 4).
     vxui_frame( &ctx, 1.0f / 60.0f );
     if ( vxui_menu( &ctx, "test" ) )
     {
@@ -304,8 +280,8 @@ UTEST(integration, focus_clamp)
     vxui_render( &ctx );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 3 );   // still 3, clamp fires next frame
 
-    // ---- Frame 4: confirm — clamp fires (focus 3 >= num_rows 3 → clamped to 2),
-    //              then confirm on clamped row 2 (Quit) fires ----
+    // frame 4: confirm — clamp fires (focus 3 >= num_rows 3 → clamped to 2),
+    // then confirm on clamped row 2 (Quit) fires
     int fired = -1;
     vxui_frame( &ctx, 1.0f / 60.0f );
     ctx.input = VXUI_INPUT_CONFIRM;

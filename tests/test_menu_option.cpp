@@ -52,8 +52,6 @@ static bool option_frame( vxui_ctx* ctx, int* index, uint32_t input )
     return changed;
 }
 
-/* ---- basic ----------------------------------------------------------- */
-
 UTEST(menu_option, no_change_by_default) {
     vxui_ctx ctx = make_ctx();
     int idx = 1;
@@ -63,8 +61,6 @@ UTEST(menu_option, no_change_by_default) {
     ASSERT_FALSE( changed );
     ASSERT_EQ( idx, 1 );
 }
-
-/* ---- left/right ------------------------------------------------------ */
 
 UTEST(menu_option, right_increments) {
     vxui_ctx ctx = make_ctx();
@@ -104,8 +100,6 @@ UTEST(menu_option, left_wraps) {
     ASSERT_EQ( idx, s_diff_n - 1 );
 }
 
-/* ---- focus ----------------------------------------------------------- */
-
 UTEST(menu_option, only_fires_when_focused) {
     vxui_ctx ctx = make_ctx();
     int idx = 0;
@@ -134,8 +128,6 @@ UTEST(menu_option, only_fires_when_focused) {
     ASSERT_FALSE( changed );
     ASSERT_EQ( idx, 0 );
 }
-
-/* ---- value display --------------------------------------------------- */
 
 UTEST(menu_option, value_text_emitted) {
     vxui_ctx ctx = make_ctx();
@@ -200,8 +192,6 @@ UTEST(menu_option, row_id_stable_across_value_change) {
     ASSERT_EQ( id_easy, id_hard );
     ASSERT_EQ( id_easy, row_id( "m", "Difficulty" ) );
 }
-
-/* ---- fill rows ------------------------------------------------------- */
 
 UTEST(menu_option, fill_row_grows_with_value_present) {
     vxui_ctx ctx = make_ctx();

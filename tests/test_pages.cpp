@@ -24,8 +24,6 @@ UTEST(page, switch_replaces) {
     ASSERT_TRUE(vxui_page(&ctx, "options"));
 }
 
-/* ---- input ----------------------------------------------------------- */
-
 UTEST(input, nothing_by_default) {
     vxui_ctx ctx = {};
     ASSERT_EQ(ctx.input, (uint32_t)0);
@@ -59,8 +57,6 @@ UTEST(input, release) {
     vxui_input(&ctx, "up", false);
     ASSERT_FALSE(ctx.input & VXUI_INPUT_UP);
 }
-
-/* ---- input_pressed --------------------------------------------------- */
 
 UTEST(input_pressed, reads_back_true) {
     vxui_ctx ctx = {};

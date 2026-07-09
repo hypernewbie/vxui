@@ -2,8 +2,6 @@
 #include "../vxui_impl_util.h"
 #include <glm/glm.hpp>
 
-/* ---- hash ------------------------------------------------------------ */
-
 UTEST(hash, nonempty) {
     ASSERT_NE((uint32_t)0, vxui_hash("hello"));
 }
@@ -15,8 +13,6 @@ UTEST(hash, deterministic) {
 UTEST(hash, different_strings_differ) {
     ASSERT_NE(vxui_hash("title"), vxui_hash("options"));
 }
-
-/* ---- arena ----------------------------------------------------------- */
 
 UTEST(arena, create) {
     uint8_t buf[1024];
@@ -49,8 +45,6 @@ UTEST(arena, reset) {
     vxui_alloc_reset(&a);
     ASSERT_EQ(a.offset, (uint64_t)0);
 }
-
-/* ---- spring ---------------------------------------------------------- */
 
 // at rest: value == target, velocity == 0 -> stays exactly put
 UTEST(spring, at_rest) {

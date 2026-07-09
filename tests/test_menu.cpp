@@ -36,8 +36,6 @@ static int menu_frame( vxui_ctx* ctx, uint32_t input )
     return fired;
 }
 
-/* ---- basic ----------------------------------------------------------- */
-
 UTEST(menu, opens_and_closes) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
@@ -51,8 +49,6 @@ UTEST(menu, focus_starts_at_zero) {
     menu_frame( &ctx, 0 );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 0 );
 }
-
-/* ---- confirm --------------------------------------------------------- */
 
 UTEST(menu, confirm_fires_focused) {
     vxui_ctx ctx = make_ctx();
@@ -70,8 +66,6 @@ UTEST(menu, confirm_only_fires_focused) {
     int fired = menu_frame( &ctx, VXUI_INPUT_CONFIRM ); // frame 3: confirm on row 1
     ASSERT_EQ( fired, 1 );
 }
-
-/* ---- navigation ------------------------------------------------------ */
 
 UTEST(menu, down_moves_focus) {
     vxui_ctx ctx = make_ctx();
@@ -380,8 +374,6 @@ UTEST(menu, all_skip_menu_emits_no_focus_rect) {
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
 }
 
-/* ---- cancel ---------------------------------------------------------- */
-
 UTEST(menu, cancelled_detects_cancel) {
     vxui_ctx ctx = make_ctx();
     menu_frame( &ctx, VXUI_INPUT_CANCEL );
@@ -393,8 +385,6 @@ UTEST(menu, cancelled_false_without_input) {
     menu_frame( &ctx, 0 );
     ASSERT_FALSE( vxui_menu_cancelled( &ctx ) );
 }
-
-/* ---- persistence ----------------------------------------------------- */
 
 UTEST(menu, focus_persists_across_frames) {
     vxui_ctx ctx = make_ctx();
