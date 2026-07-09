@@ -161,6 +161,9 @@ struct vxui_ctx
     vxui_draw_cmd  draw_buf[VXUI_MAX_DRAW_CMDS] = {};
     vxui_draw_list draw_list                     = {};
 
+    char text_buf   [VXUI_MAX_TEXT_BYTES] = {};   // per-frame text arena; cmds point into it
+    int  text_offset                      = 0;
+
     vxui_render_data_fn render_data_fn       = nullptr;
     void*               render_data_userdata = nullptr;
 };
