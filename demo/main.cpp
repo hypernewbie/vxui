@@ -106,21 +106,22 @@ static const char* s_sector_short[] = {
     "Helix Foundry", "Null Cathedral", "Boss Rush",
 };
 
-struct demo_assets
-{
-    uint32_t bg         = 0;
-    uint32_t logo       = 0;
-    uint32_t lock       = 0;
-    uint32_t warning    = 0;
-    uint32_t ship[3]    = {};
-    uint32_t mission[8] = {};
+// Per-sector tint for the procedural test-card thumb, parallel to s_sector_short.
+static const glm::vec4 s_sector_tint[] = {
+    { 1.00f, 0.55f, 0.35f, 1.0f },
+    { 0.40f, 0.85f, 1.00f, 1.0f },
+    { 0.55f, 1.00f, 0.60f, 1.0f },
+    { 1.00f, 0.85f, 0.30f, 1.0f },
+    { 0.75f, 0.40f, 1.00f, 1.0f },
+    { 1.00f, 0.30f, 0.35f, 1.0f },
 };
 
-static uint32_t demo_mission_thumb( const demo_assets* a, int sector )
+struct demo_assets
 {
-    if ( sector < 0 || sector >= 8 ) sector = 0;
-    return a->mission[sector];
-}
+    uint32_t lock     = 0;
+    uint32_t warning  = 0;
+    uint32_t testcard = 0;
+};
 
 struct demo_screen_state
 {
@@ -183,8 +184,10 @@ struct demo_resolver_state
     uint32_t        ops_icon[DEMO_MISSION_COUNT] = {};  // texture per ops row; 0 = none
     uint32_t        ops_thumb_id        = 0;
     uint32_t        ops_thumb_texture   = 0;
+    glm::vec4       ops_thumb_tint      = { 1.0f, 1.0f, 1.0f, 1.0f };
     uint32_t        stg_thumb_id        = 0;
     uint32_t        stg_thumb_texture   = 0;
+    glm::vec4       stg_thumb_tint      = { 1.0f, 1.0f, 1.0f, 1.0f };
     float           time_seconds        = 0;
     const demo_assets* assets           = nullptr;
     const demo_screen_state* screen     = nullptr;
@@ -205,6 +208,11 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
             out->colour = { pulse, pulse * 0.95f, pulse * 0.8f, 1.0f };
             return;
         }
+        if ( c->id == st->logo_id )
+        {
+            out->colour = { 0.55f, 0.95f, 1.00f, 1.0f };
+            return;
+        }
         // Pale blue-white reads as "panel readout" against the cyan accents.
         out->colour = { 0.85f, 0.92f, 1.00f, 1.0f };
         return;
@@ -212,25 +220,14 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
 
     if ( c->id == st->bg_id )
     {
-        out->material_id = DEMO_MATERIAL_IMAGE;
-        out->texture_id  = st->assets->bg;
-        out->colour      = { 1.0f, 1.0f, 1.0f, 1.0f };
-        return;
-    }
-
-    if ( c->id == st->logo_id )
-    {
-        out->material_id = DEMO_MATERIAL_IMAGE;
-        out->texture_id  = st->assets->logo;
-        out->uv          = { 0.05f, 0.30f, 0.95f, 0.70f };   // crop the logo band out of the square source
-        out->colour      = { 1.0f, 1.0f, 1.0f, 1.0f };
+        out->colour = { 0.02f, 0.03f, 0.07f, 1.0f };   // deep space; the panel's CRT material adds scanlines on top
         return;
     }
 
     if ( ( c->id == st->ops_thumb_id && st->ops_thumb_texture != 0 ) ||
          ( c->id == st->stg_thumb_id && st->stg_thumb_texture != 0 ) )
     {
-        // Center-crop the square mission image into the portrait rect.
+        // Center-crop the square test-card texture into the portrait rect.
         // crop_x clips equal amounts from both sides so the image fills
         // the rect without stretching.
         float crop_x = 0.0f;
@@ -239,13 +236,13 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         out->material_id = DEMO_MATERIAL_IMAGE;
         out->texture_id  = ( c->id == st->ops_thumb_id ) ? st->ops_thumb_texture : st->stg_thumb_texture;
         out->uv          = { crop_x, 0.0f, 1.0f - crop_x, 1.0f };
-        out->colour      = { 1.0f, 1.0f, 1.0f, 1.0f };
+        out->colour      = ( c->id == st->ops_thumb_id ) ? st->ops_thumb_tint : st->stg_thumb_tint;
         return;
     }
 
     if ( c->id == st->panel_id )
     {
-        // No fill — let the BG image + content render through. Scanlines
+        // No fill — let the BG rect + content render through. Scanlines
         // ride the existing pixels via the CRT material at low strength.
         out->material_id = DEMO_MATERIAL_CRT;
         out->flags       = DEMO_MATERIAL_FLAG_SCANLINES;
@@ -257,7 +254,7 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
 
     if ( c->id == st->frame_id )
     {
-        // Outline only — the BG image is the background, no dark fill.
+        // Outline only — the BG rect is the background, no dark fill.
         out->colour            = { 0.0f, 0.0f, 0.0f, 0.0f };
         out->outline_colour    = { 0.30f, 0.70f, 0.95f, 1.0f };
         out->outline_thickness = 2.0f;
@@ -283,7 +280,7 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
     if ( c->row_index >= 0 && c->focused_row_index >= 0 )
     {
         // Distance-from-focus ramp: closer rows brighter, further rows fade
-        // toward the BG image so the column reads as a stack of glowing strips.
+        // toward the background so the column reads as a stack of glowing strips.
         int d = c->row_index - c->focused_row_index;
         if ( d < 0 ) d = -d;
         static const glm::vec4 s_ramp[4] = {
@@ -329,8 +326,7 @@ static void demo_splash( vxui_ctx* ctx, GLFWwindow* window )
         vxui_div ( ctx, "splash_pad_top", { .height = { VXUI_FIXED, 64 } } );
         vxui_div_end( ctx );
 
-        vxui_rect( ctx, "demo_logo", { .width = { VXUI_FIXED, 400 }, .height = { VXUI_FIXED, 180 } } );
-        vxui_div_end( ctx );
+        vxui_text( ctx, "demo_logo", "VXUI", 96 );
 
         vxui_div ( ctx, "splash_pad_mid", { .height = { VXUI_GROW, 0 } } );
         vxui_div_end( ctx );
@@ -648,24 +644,9 @@ int main( int /*argc*/, char** /*argv*/ )
     vxui_gl_init( &ctx );
 
     demo_assets assets = {};
-    {
-        std::filesystem::path a = src_dir / "assets";
-        assets.bg         = vxui_gl_load_image( ( a / "ui" / "vxui_bg.png"                ).string().c_str() );
-        assets.logo       = vxui_gl_load_image( ( a / "ui" / "vxui_logo_clean_alpha.png"  ).string().c_str() );
-        assets.lock       = vxui_gl_load_image( ( a / "ui" / "ui_lock_alpha.png"         ).string().c_str() );
-        assets.warning    = vxui_gl_load_image( ( a / "ui" / "ui_warning.png"            ).string().c_str() );
-        assets.ship[0]    = vxui_gl_load_image( ( a / "ships" / "ship_interceptor_alpha.png"  ).string().c_str() );
-        assets.ship[1]    = vxui_gl_load_image( ( a / "ships" / "ship_strike_craft_alpha.png" ).string().c_str() );
-        assets.ship[2]    = vxui_gl_load_image( ( a / "ships" / "ship_experimental_alpha.png" ).string().c_str() );
-        assets.mission[0] = vxui_gl_load_image( ( a / "missions" / "debris_belt.png"      ).string().c_str() );
-        assets.mission[1] = vxui_gl_load_image( ( a / "missions" / "signal_array.png"     ).string().c_str() );
-        assets.mission[2] = vxui_gl_load_image( ( a / "missions" / "glass_reactor.png"    ).string().c_str() );
-        assets.mission[3] = vxui_gl_load_image( ( a / "missions" / "iron_weather.png"     ).string().c_str() );
-        assets.mission[4] = vxui_gl_load_image( ( a / "missions" / "helix_foundry.png"    ).string().c_str() );
-        assets.mission[5] = vxui_gl_load_image( ( a / "missions" / "static_choir.png"     ).string().c_str() );
-        assets.mission[6] = vxui_gl_load_image( ( a / "missions" / "moonbreaker.png"      ).string().c_str() );
-        assets.mission[7] = vxui_gl_load_image( ( a / "missions" / "null_cathedral.png"   ).string().c_str() );
-    }
+    assets.lock     = vxui_gl_create_lock_texture();
+    assets.warning  = vxui_gl_create_warning_texture();
+    assets.testcard = vxui_gl_create_testcard_texture();
 
     demo_screen_state   screen_state;
     demo_resolver_state resolver_state;
@@ -772,7 +753,8 @@ int main( int /*argc*/, char** /*argv*/ )
                         {
                             int f = demo_menu_focused( &ctx, "operations" );
                             if ( f < 0 || f >= DEMO_MISSION_COUNT ) f = 0;
-                            resolver_state.ops_thumb_texture = demo_mission_thumb( &assets, s_demo_missions[f].sector );
+                            resolver_state.ops_thumb_texture = assets.testcard;
+                            resolver_state.ops_thumb_tint    = s_sector_tint[s_demo_missions[f].sector];
                         }
                         else
                             resolver_state.ops_thumb_texture = 0;
@@ -781,7 +763,8 @@ int main( int /*argc*/, char** /*argv*/ )
                         {
                             int f = demo_menu_focused( &ctx, "stageselect" );
                             if ( f < 0 || f >= DEMO_SECTOR_COUNT ) f = 0;
-                            resolver_state.stg_thumb_texture = demo_mission_thumb( &assets, f );
+                            resolver_state.stg_thumb_texture = assets.testcard;
+                            resolver_state.stg_thumb_tint    = s_sector_tint[f];
                         }
                         else
                             resolver_state.stg_thumb_texture = 0;

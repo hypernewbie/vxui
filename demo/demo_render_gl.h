@@ -26,7 +26,9 @@ void     vxui_gl_init    ( vxui_ctx* ctx );
 void     vxui_gl_render  ( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf = {} );
 void     vxui_gl_shutdown( vxui_ctx* ctx );
 uint32_t vxui_gl_create_chevron_texture();
-uint32_t vxui_gl_load_image( const char* path );
+uint32_t vxui_gl_create_lock_texture();
+uint32_t vxui_gl_create_warning_texture();
+uint32_t vxui_gl_create_testcard_texture();
 
 #endif // VXUI_DEMO_RENDER_GL_H
 
@@ -35,9 +37,6 @@ uint32_t vxui_gl_load_image( const char* path );
 #include <cstdio>
 #include <cassert>
 #include "ve_fontcache.h"
-#define STB_IMAGE_IMPLEMENTATION
-#define STBI_NO_STDIO_DEPRECATED
-#include "stb_image.h"
 
 // Pass IDs share VEFC's dcall.pass uint32_t namespace; values >= 8 are demo-owned.
 #define DEMO_GL_PASS_RECT          8
@@ -359,26 +358,95 @@ uint32_t vxui_gl_create_chevron_texture()
     return (uint32_t) tex;
 }
 
-uint32_t vxui_gl_load_image( const char* path )
+uint32_t vxui_gl_create_lock_texture()
 {
-    int w = 0, h = 0, comp = 0;
-    stbi_uc* pixels = stbi_load( path, &w, &h, &comp, 4 );
-    if ( !pixels )
+    uint8_t pixels[32 * 32] = {};
+
+    // Body: filled square.
+    for ( int y = 14; y < 28; y++ )
+        for ( int x = 7; x < 25; x++ )
+            pixels[y * 32 + x] = 255;
+
+    // Shackle: two posts capped by a bar.
+    for ( int y = 5; y < 16; y++ )
     {
-        fprintf( stderr, "vxui_gl_load_image: failed to load %s\n", path );
-        return 0;
+        pixels[y * 32 + 11] = 255; pixels[y * 32 + 12] = 255;
+        pixels[y * 32 + 19] = 255; pixels[y * 32 + 20] = 255;
+    }
+    for ( int x = 11; x <= 20; x++ )
+    {
+        pixels[5 * 32 + x] = 255;
+        pixels[6 * 32 + x] = 255;
     }
 
     GLuint tex = 0;
     glGenTextures( 1, &tex );
     glBindTexture( GL_TEXTURE_2D, tex );
-    glTexImage2D( GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels );
+    glTexImage2D( GL_TEXTURE_2D, 0, GL_R8, 32, 32, 0, GL_RED, GL_UNSIGNED_BYTE, pixels );
     glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE );
     glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE );
     glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
     glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
     glBindTexture( GL_TEXTURE_2D, 0 );
-    stbi_image_free( pixels );
+    return (uint32_t) tex;
+}
+
+uint32_t vxui_gl_create_warning_texture()
+{
+    uint8_t pixels[32 * 32] = {};
+
+    // Outlined triangle, apex at top, 2px stroke, plus an exclamation mark.
+    for ( int y = 3; y < 28; y++ )
+    {
+        int half  = ( y - 3 ) * 13 / 24;
+        int left  = 15 - half;
+        int right = 16 + half;
+        for ( int x = left; x <= right; x++ )
+            if ( x <= left + 1 || x >= right - 1 || y >= 26 )
+                pixels[y * 32 + x] = 255;
+    }
+    for ( int y = 9; y < 19; y++ ) { pixels[y * 32 + 15] = 255; pixels[y * 32 + 16] = 255; }
+    for ( int y = 22; y < 24; y++ ) { pixels[y * 32 + 15] = 255; pixels[y * 32 + 16] = 255; }
+
+    GLuint tex = 0;
+    glGenTextures( 1, &tex );
+    glBindTexture( GL_TEXTURE_2D, tex );
+    glTexImage2D( GL_TEXTURE_2D, 0, GL_R8, 32, 32, 0, GL_RED, GL_UNSIGNED_BYTE, pixels );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+    glBindTexture( GL_TEXTURE_2D, 0 );
+    return (uint32_t) tex;
+}
+
+uint32_t vxui_gl_create_testcard_texture()
+{
+    uint8_t pixels[64 * 64 * 4] = {};
+    for ( int y = 0; y < 64; y++ )
+    {
+        for ( int x = 0; x < 64; x++ )
+        {
+            float   g    = ( x + y ) / 126.0f;                  // diagonal gradient, 0..1
+            bool    grid = ( x % 8 == 0 ) || ( y % 8 == 0 );      // 8px grid lines
+            uint8_t v    = grid ? 255 : (uint8_t) ( 40.0f + g * 180.0f );
+            int     i    = ( y * 64 + x ) * 4;
+            pixels[i + 0] = v;
+            pixels[i + 1] = v;
+            pixels[i + 2] = v;
+            pixels[i + 3] = 255;
+        }
+    }
+
+    GLuint tex = 0;
+    glGenTextures( 1, &tex );
+    glBindTexture( GL_TEXTURE_2D, tex );
+    glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+    glBindTexture( GL_TEXTURE_2D, 0 );
     return (uint32_t) tex;
 }
 
