@@ -110,8 +110,6 @@ struct demo_assets
 {
     uint32_t bg         = 0;
     uint32_t logo       = 0;
-    uint32_t border     = 0;
-    uint32_t chevron    = 0;
     uint32_t lock       = 0;
     uint32_t warning    = 0;
     uint32_t ship[3]    = {};
@@ -120,10 +118,8 @@ struct demo_assets
 
 static uint32_t demo_mission_thumb( const demo_assets* a, int sector )
 {
-    // 0..4 = stages; 5..7 = rush/survival/one-life share thumbs.
-    static const int s_thumb_idx[] = { 0, 1, 2, 3, 4, 5, 6, 7 };
     if ( sector < 0 || sector >= 8 ) sector = 0;
-    return a->mission[s_thumb_idx[sector]];
+    return a->mission[sector];
 }
 
 struct demo_screen_state
@@ -180,7 +176,6 @@ struct demo_resolver_state
     uint32_t        panel_id            = 0;
     uint32_t        frame_id            = 0;
     uint32_t        bg_id               = 0;
-    uint32_t        border_id           = 0;
     uint32_t        logo_id             = 0;
     uint32_t        splash_prompt_id    = 0;
     uint32_t        version_id          = 0;
@@ -195,25 +190,6 @@ struct demo_resolver_state
     const demo_screen_state* screen     = nullptr;
     vxui_hud*       hud                 = nullptr;
 };
-
-static uint32_t demo_id( const char* s )
-{
-    Clay_String cs = { false, (int32_t) strlen( s ), s };
-    return Clay__HashString( cs, 0 ).id;
-}
-
-// Status -> text colour. Mirrors the BR mission list scheme:
-// locked = grey, cleared = green, A+ = yellow, default = white.
-static glm::vec4 demo_status_colour( int status )
-{
-    switch ( status )
-    {
-        case DEMO_MISSION_LOCKED:  return { 0.40f, 0.40f, 0.45f, 1.0f };
-        case DEMO_MISSION_CLEARED: return { 0.55f, 0.90f, 0.50f, 1.0f };
-        case DEMO_MISSION_APLUS:   return { 1.00f, 0.85f, 0.30f, 1.0f };
-        default:                   return { 0.95f, 0.95f, 0.95f, 1.0f };
-    }
-}
 
 static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, void* ud )
 {
@@ -248,14 +224,6 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         out->texture_id  = st->assets->logo;
         out->uv          = { 0.05f, 0.30f, 0.95f, 0.70f };   // crop the logo band out of the square source
         out->colour      = { 1.0f, 1.0f, 1.0f, 1.0f };
-        return;
-    }
-
-    if ( c->id == st->border_id )
-    {
-        out->material_id = DEMO_MATERIAL_IMAGE;
-        out->texture_id  = st->assets->border;
-        out->colour      = { 0.55f, 0.95f, 1.00f, 1.0f };
         return;
     }
 
@@ -684,8 +652,6 @@ int main( int /*argc*/, char** /*argv*/ )
         std::filesystem::path a = src_dir / "assets";
         assets.bg         = vxui_gl_load_image( ( a / "ui" / "vxui_bg.png"                ).string().c_str() );
         assets.logo       = vxui_gl_load_image( ( a / "ui" / "vxui_logo_clean_alpha.png"  ).string().c_str() );
-        assets.border     = vxui_gl_load_image( ( a / "ui" / "ui_border_alpha.png"       ).string().c_str() );
-        assets.chevron    = vxui_gl_load_image( ( a / "ui" / "ui_chevron_alpha.png"      ).string().c_str() );
         assets.lock       = vxui_gl_load_image( ( a / "ui" / "ui_lock_alpha.png"         ).string().c_str() );
         assets.warning    = vxui_gl_load_image( ( a / "ui" / "ui_warning.png"            ).string().c_str() );
         assets.ship[0]    = vxui_gl_load_image( ( a / "ships" / "ship_interceptor_alpha.png"  ).string().c_str() );
@@ -704,15 +670,14 @@ int main( int /*argc*/, char** /*argv*/ )
     demo_screen_state   screen_state;
     demo_resolver_state resolver_state;
     vxui_hud            hud = {};
-    resolver_state.panel_id           = demo_id( "demo_panel"    );
-    resolver_state.frame_id           = demo_id( "demo_frame"    );
-    resolver_state.bg_id              = demo_id( "demo_bg"       );
-    resolver_state.border_id          = demo_id( "demo_border"   );
-    resolver_state.logo_id            = demo_id( "demo_logo"     );
-    resolver_state.splash_prompt_id   = Clay__HashNumber( 0, demo_id( "splash_prompt" ) ).id;
+    resolver_state.panel_id           = vxui_id( "demo_panel"    );
+    resolver_state.frame_id           = vxui_id( "demo_frame"    );
+    resolver_state.bg_id              = vxui_id( "demo_bg"       );
+    resolver_state.logo_id            = vxui_id( "demo_logo"     );
+    resolver_state.splash_prompt_id   = Clay__HashNumber( 0, vxui_id( "splash_prompt" ) ).id;
     resolver_state.focus_icon_texture = vxui_gl_create_chevron_texture();
-    resolver_state.ops_thumb_id       = demo_id( "ops_thumb" );
-    resolver_state.stg_thumb_id       = demo_id( "stg_thumb" );
+    resolver_state.ops_thumb_id       = vxui_id( "ops_thumb" );
+    resolver_state.stg_thumb_id       = vxui_id( "stg_thumb" );
     resolver_state.assets             = &assets;
     resolver_state.screen             = &screen_state;
     for ( int i = 0; i < DEMO_MISSION_COUNT; i++ )

@@ -49,109 +49,18 @@ endif()
 
 if(VXUI_BUILD_TESTS)
     enable_testing()
-    add_executable(test_util tests/test_util.cpp)
-    target_link_libraries(test_util PRIVATE vxui)
-    add_test(NAME test_util COMMAND test_util)
-
-    add_executable(test_pages tests/test_pages.cpp)
-    target_link_libraries(test_pages PRIVATE vxui)
-    add_test(NAME test_pages COMMAND test_pages)
-
-    add_executable(test_menu tests/test_menu.cpp)
-    target_link_libraries(test_menu PRIVATE vxui)
-    add_test(NAME test_menu COMMAND test_menu)
-
-    add_executable(test_menu_option tests/test_menu_option.cpp)
-    target_link_libraries(test_menu_option PRIVATE vxui)
-    add_test(NAME test_menu_option COMMAND test_menu_option)
-
-    add_executable(test_menu_slider tests/test_menu_slider.cpp)
-    target_link_libraries(test_menu_slider PRIVATE vxui)
-    add_test(NAME test_menu_slider COMMAND test_menu_slider)
-
-    add_executable(test_menu_noninteractive tests/test_menu_noninteractive.cpp)
-    target_link_libraries(test_menu_noninteractive PRIVATE vxui)
-    add_test(NAME test_menu_noninteractive COMMAND test_menu_noninteractive)
-
-    add_executable(test_frame tests/test_frame.cpp)
-    target_link_libraries(test_frame PRIVATE vxui)
-    add_test(NAME test_frame COMMAND test_frame)
-
-    add_executable(test_integration tests/test_integration.cpp)
-    target_link_libraries(test_integration PRIVATE vxui)
-    add_test(NAME test_integration COMMAND test_integration)
-
-    add_executable(test_menu_draw tests/test_menu_draw.cpp)
-    target_link_libraries(test_menu_draw PRIVATE vxui)
-    add_test(NAME test_menu_draw COMMAND test_menu_draw)
-
-    add_executable(test_render_data tests/test_render_data.cpp)
-    target_link_libraries(test_render_data PRIVATE vxui)
-    add_test(NAME test_render_data COMMAND test_render_data)
-
-    add_executable(test_game_menu tests/test_game_menu.cpp)
-    target_link_libraries(test_game_menu PRIVATE vxui)
-    add_test(NAME test_game_menu COMMAND test_game_menu)
-
-    add_executable(test_menu_in_div tests/test_menu_in_div.cpp)
-    target_link_libraries(test_menu_in_div PRIVATE vxui)
-    add_test(NAME test_menu_in_div COMMAND test_menu_in_div)
-
-    add_executable(test_root tests/test_root.cpp)
-    target_link_libraries(test_root PRIVATE vxui)
-    add_test(NAME test_root COMMAND test_root)
-
-    add_executable(test_menu_scroll tests/test_menu_scroll.cpp)
-    target_link_libraries(test_menu_scroll PRIVATE vxui)
-    add_test(NAME test_menu_scroll COMMAND test_menu_scroll)
-
-    add_executable(test_input_just_pressed tests/test_input_just_pressed.cpp)
-    target_link_libraries(test_input_just_pressed PRIVATE vxui)
-    add_test(NAME test_input_just_pressed COMMAND test_input_just_pressed)
-
-    add_executable(test_menu_remount tests/test_menu_remount.cpp)
-    target_link_libraries(test_menu_remount PRIVATE vxui)
-    add_test(NAME test_menu_remount COMMAND test_menu_remount)
-
-    add_executable(test_menu_collision tests/test_menu_collision.cpp)
-    target_link_libraries(test_menu_collision PRIVATE vxui)
-    add_test(NAME test_menu_collision COMMAND test_menu_collision)
-
-    add_executable(test_input_repeated tests/test_input_repeated.cpp)
-    target_link_libraries(test_input_repeated PRIVATE vxui)
-    add_test(NAME test_input_repeated COMMAND test_input_repeated)
-
-    add_executable(test_menu_input_edge tests/test_menu_input_edge.cpp)
-    target_link_libraries(test_menu_input_edge PRIVATE vxui)
-    add_test(NAME test_menu_input_edge COMMAND test_menu_input_edge)
-
-    add_executable(test_menu_text tests/test_menu_text.cpp)
-    target_link_libraries(test_menu_text PRIVATE vxui)
-    add_test(NAME test_menu_text COMMAND test_menu_text)
-
-    add_executable(test_mouse tests/test_mouse.cpp)
-    target_link_libraries(test_mouse PRIVATE vxui)
-    add_test(NAME test_mouse COMMAND test_mouse)
-
-    add_executable(test_hud tests/test_hud.cpp)
-    target_link_libraries(test_hud PRIVATE vxui)
-    add_test(NAME test_hud COMMAND test_hud)
-
-    add_executable(test_menu_stack tests/test_menu_stack.cpp)
-    target_link_libraries(test_menu_stack PRIVATE vxui)
-    add_test(NAME test_menu_stack COMMAND test_menu_stack)
-
-    add_executable(test_row_index tests/test_row_index.cpp)
-    target_link_libraries(test_row_index PRIVATE vxui)
-    add_test(NAME test_row_index COMMAND test_row_index)
-
-    add_executable(test_text tests/test_text.cpp)
-    target_link_libraries(test_text PRIVATE vxui)
-    add_test(NAME test_text COMMAND test_text)
-
-    add_executable(test_vefc_backend tests/test_vefc_backend.cpp)
-    target_link_libraries(test_vefc_backend PRIVATE vxui)
-    add_test(NAME test_vefc_backend COMMAND test_vefc_backend)
+    foreach(t
+        test_util test_pages test_menu test_menu_option test_menu_slider
+        test_menu_noninteractive test_frame test_integration test_menu_draw
+        test_render_data test_game_menu test_menu_in_div test_root
+        test_menu_scroll test_input_just_pressed test_menu_remount
+        test_menu_collision test_input_repeated test_menu_input_edge
+        test_menu_text test_mouse test_hud test_menu_stack test_row_index
+        test_text test_vefc_backend)
+        add_executable(${t} tests/${t}.cpp)
+        target_link_libraries(${t} PRIVATE vxui)
+        add_test(NAME ${t} COMMAND ${t})
+    endforeach()
 
     if(VXUI_BUILD_DEMO)
         add_executable(test_vefc_backend_gl tests/test_vefc_backend_gl.cpp)

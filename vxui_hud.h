@@ -65,7 +65,6 @@ void      vxui_hud_move_pos      ( vxui_hud* hud, float x, float y );
 void      vxui_hud_set_colour    ( vxui_hud* hud, glm::vec4 colour );
 void      vxui_hud_set_font      ( vxui_hud* hud, vxui_font_id font, uint16_t px );
 void      vxui_hud_set_z         ( vxui_hud* hud, int16_t z );
-uint32_t  vxui_hud_id            ( const char* id );
 glm::vec4 vxui_hud_tile          ( int tex_w, int tex_h, int tile_w, int tile_h, int idx );
 glm::vec4 vxui_hud_tile1d        ( int tex_sz, int tile_sz, int idx );
 void      vxui_hud_meter         ( vxui_hud* hud, const char* id, uint32_t texture_id, float t, float w, float h, bool vertical = false, bool reverse = false, glm::vec4 uv = { 0.0f, 0.0f, 1.0f, 1.0f } );
@@ -167,11 +166,6 @@ void vxui_hud_set_z( vxui_hud* hud, int16_t z )
 {
     assert( hud );
     hud->z = z;
-}
-
-uint32_t vxui_hud_id( const char* id )
-{
-    return vxui_id( id );
 }
 
 glm::vec4 vxui_hud_tile( int tex_w, int tex_h, int tile_w, int tile_h, int idx )

@@ -114,10 +114,6 @@ UTEST(hud, tile1d_returns_expected_uvs) {
     ASSERT_EQ( uv.w, 128.0f / 1024.0f );
 }
 
-UTEST(hud, id_matches_vxui_id) {
-    ASSERT_EQ( vxui_hud_id( "test" ), vxui_id( "test" ) );
-}
-
 UTEST(hud, meter_emits_track_and_fill) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
