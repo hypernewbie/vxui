@@ -43,8 +43,8 @@ constexpr uint32_t vxui_hash( const char* s )
 
 struct vxui_alloc_state
 {
-    uint8_t* base = nullptr;
-    uint64_t size = 0;
+    uint8_t* base   = nullptr;
+    uint64_t size   = 0;
     uint64_t offset = 0;
 };
 
@@ -52,8 +52,8 @@ static inline vxui_alloc_state vxui_alloc_create( uint64_t size, void* memory )
 {
     assert( memory );
     vxui_alloc_state out = { 0 };
-    out.base = ( uint8_t* ) memory;
-    out.size = size;
+    out.base   = ( uint8_t* ) memory;
+    out.size   = size;
     out.offset = 0;
     return out;
 }

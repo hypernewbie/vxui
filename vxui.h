@@ -26,6 +26,73 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 
+/*
+	VXUI is layout and navigation truth for arcade-style game UI. It resolves
+	WHERE things are on screen (Clay does the box math) and WHICH one has
+	focus (the menu system below owns that). Every frame it hands you back a
+	flat draw list: rects and text, each carrying truth (id, rect, focus /
+	pressed / hovered state) plus whatever transport bytes you asked it to
+	carry. You paint the pixels; VXUI never does.
+
+	A complete integration, minus your window and input mapping:
+
+		static uint8_t clay_mem[16 * 1024 * 1024];
+		vxui_ctx ctx = {};
+		vxui_init( &ctx, 1280, 720, clay_mem, sizeof( clay_mem ) );
+
+		while ( running )
+		{
+			vxui_frame( &ctx, dt );
+
+			// vxui_frame just cleared ctx->input -- report every held key again.
+			if ( key_up_held )      vxui_input( &ctx, "up" );
+			if ( key_down_held )    vxui_input( &ctx, "down" );
+			if ( key_confirm_held ) vxui_input( &ctx, "confirm" );
+
+			if ( vxui_menu( &ctx, "main" ) )
+			{
+				if ( vxui_menu_action( &ctx, "Play" ) )    start_game();
+				if ( vxui_menu_action( &ctx, "Options" ) ) open_options();
+				if ( vxui_menu_action( &ctx, "Quit" ) )    running = false;
+				vxui_menu_end( &ctx );
+			}
+
+			vxui_draw_list dl = vxui_render( &ctx );
+			for ( int i = 0; i < dl.count; i++ )
+			{
+				const vxui_draw_cmd& c = dl.cmds[i];
+				if ( c.type == VXUI_DRAW_RECT )
+					my_renderer_draw_rect( c.rect, c.state, c.render );
+				else // VXUI_DRAW_TEXT
+					my_renderer_draw_text( c.rect, c.text, c.text_len, c.font, c.font_px, c.render );
+			}
+		}
+
+	That solid-colour sketch is the whole contract. `demo/demo_render_gl.h` is
+	the reference renderer if you want shaders, materials, and a working GL
+	pipeline instead of pseudocode.
+
+	The resolver contract: render-data fields (colour, texture_id, uv,
+	material_id, outline_colour, outline_thickness, params, flags) are
+	transport, not policy. VXUI memsets every one to zero, then -- if you
+	registered one with vxui_set_render_data_fn -- calls your resolver so you
+	can fill them in per command. Zero means the renderer decides; VXUI never
+	picks a colour, a font, or a material for you.
+
+	Gotchas that bite in hour one:
+
+	- vxui_frame clears ctx->input. Report held keys every frame, not once.
+	- Navigation runs on last frame's row count, so the first frame just
+	  establishes the menu -- confirm/cancel on frame one won't do anything
+	  useful yet.
+	- cmd->text points into ctx->text_buf. It is valid until the next
+	  vxui_frame and not a moment longer; copy it out if you need it to live.
+	- vxui_frame and vxui_render must pair, once each, every frame. The
+	  asserts inside both are load-bearing, not decoration.
+	- Memory is fixed at vxui_init. Nothing allocates after that except
+	  vxui_load_font, which you call as many times as you have fonts.
+*/
+
 #define VXUI_MAX_MENUS         32
 #define VXUI_MAX_MENU_ROWS     32
 #define VXUI_ROW_HEIGHT        32
@@ -114,20 +181,20 @@ typedef void ( *vxui_render_data_fn )( const vxui_draw_cmd* cmd, vxui_render_dat
 
 struct vxui_ctx
 {
-    uint32_t active_page      = 0;
-    uint32_t input            = 0;         // bitfield of vxui_input_action, cleared each vxui_frame
-    uint32_t prev_input       = 0;         // input bitfield from the previous frame
-    uint32_t input_repeated   = 0;         // bits firing this frame (just-pressed | repeat)
-    uint32_t menu_active_mask = 0;         // bit i set if menu i was active this frame
-    uint32_t prev_active_mask = 0;         // menu_active_mask from the previous frame
-    bool     frame_active     = false;     // true between vxui_frame and vxui_render
-    bool     inputs_committed = false;     // input_repeated computed this frame
-    float    input_held_time  [6] = {};    // seconds each input has been held
-    float    input_next_fire  [6] = {};    // next held_time threshold to fire repeat
-    float    dt               = 0;
-    void*    clay             = nullptr;
-    void*    text             = nullptr;   // vxui_text_state*, lazy on first vxui_load_font
-    void*    renderer         = nullptr;   // owned by sibling render module
+    uint32_t active_page          = 0;
+    uint32_t input                = 0;   // bitfield of vxui_input_action, cleared each vxui_frame
+    uint32_t prev_input           = 0;   // input bitfield from the previous frame
+    uint32_t input_repeated       = 0;   // bits firing this frame (just-pressed | repeat)
+    uint32_t menu_active_mask     = 0;   // bit i set if menu i was active this frame
+    uint32_t prev_active_mask     = 0;   // menu_active_mask from the previous frame
+    bool     frame_active         = false;   // true between vxui_frame and vxui_render
+    bool     inputs_committed     = false;   // input_repeated computed this frame
+    float    input_held_time  [6] = {};   // seconds each input has been held
+    float    input_next_fire  [6] = {};   // next held_time threshold to fire repeat
+    float    dt                   = 0;
+    void*    clay                 = nullptr;
+    void*    text                 = nullptr;   // vxui_text_state*, lazy on first vxui_load_font
+    void*    renderer             = nullptr;   // owned by sibling render module
 
     glm::vec2 mouse_pos          = { FLT_MAX, FLT_MAX };  // off-screen sentinel = no mouse
     uint32_t  mouse_buttons      = 0;    // bitfield of VXUI_MOUSE_*, cleared each vxui_frame
@@ -135,17 +202,17 @@ struct vxui_ctx
     uint32_t  mouse_press_row_id = 0;    // RECT id pressed under cursor, persists until release
     uint32_t  mouse_click_row_id = 0;    // RECT id activated by button-up over same rect, one-frame carry
 
-    glm::uvec4  menu_state       [VXUI_MAX_MENUS] = {}; // { hash_id, current_row, num_rows, skip_mask }
-    glm::vec4   menu_focus_spring[VXUI_MAX_MENUS] = {}; // { offset_y, velocity_y, prev_row, _ }, prev_row -1 = unset
-    int         menu_scroll_top  [VXUI_MAX_MENUS] = {}; // topmost visible row index when max_visible > 0
-    const char* menu_names       [VXUI_MAX_MENUS] = {}; // literal pointer for hash-collision detection
+    glm::uvec4  menu_state       [VXUI_MAX_MENUS]    = {};   // { hash_id, current_row, num_rows, skip_mask }
+    glm::vec4   menu_focus_spring[VXUI_MAX_MENUS]    = {};   // { offset_y, velocity_y, prev_row, _ }, prev_row -1 = unset
+    int         menu_scroll_top  [VXUI_MAX_MENUS]    = {};   // topmost visible row index when max_visible > 0
+    const char* menu_names       [VXUI_MAX_MENUS]    = {};   // literal pointer for hash-collision detection
     uint32_t active_menu_row_ids[VXUI_MAX_MENU_ROWS] = {};   // Clay ids of rows declared this frame, for dup detection
-    int      menu_count           = 0;
-    int      active_menu          = -1;                       // index into menus[], -1 = none
-    int      active_menu_row      = 0;                        // current row being declared
-    uint32_t active_menu_skip     = 0;                        // bitmask, accumulated during declaration
-    uint32_t active_menu_focus_id = 0;                        // Clay id of focused row this frame, 0 = none
-    bool     active_menu_fill     = false;                    // rows fill the menu column width (set by vxui_menu)
+    int      menu_count                              = 0;
+    int      active_menu                             = -1;      // index into menus[], -1 = none
+    int      active_menu_row                         = 0;       // current row being declared
+    uint32_t active_menu_skip                        = 0;       // bitmask, accumulated during declaration
+    uint32_t active_menu_focus_id                    = 0;       // Clay id of focused row this frame, 0 = none
+    bool     active_menu_fill                        = false;   // rows fill the menu column width (set by vxui_menu)
 
     uint32_t focused_row_ids[VXUI_MAX_MENUS] = {};   // per-frame, count = focused_row_count
     float    focus_offsets  [VXUI_MAX_MENUS] = {};   // parallel to focused_row_ids
@@ -171,18 +238,18 @@ struct vxui_ctx
 #define VXUI_FONT_INVALID 0xffff
 typedef uint16_t vxui_font_id;
 
-void           vxui_init    ( vxui_ctx* ctx, float w, float h, void* clay_memory, size_t clay_size );
-void           vxui_shutdown( vxui_ctx* ctx );
+void           vxui_init     ( vxui_ctx* ctx, float w, float h, void* clay_memory, size_t clay_size );
+void           vxui_shutdown ( vxui_ctx* ctx );
 vxui_font_id   vxui_load_font( vxui_ctx* ctx, const void* data, size_t size, float size_px );
-void           vxui_frame   ( vxui_ctx* ctx, float dt, float w = 0, float h = 0 );
-vxui_draw_list vxui_render  ( vxui_ctx* ctx );
-void           vxui_div     ( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg = {} );
-void           vxui_div_end ( vxui_ctx* ctx );
-void           vxui_rect    ( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg = {} );
-void           vxui_text    ( vxui_ctx* ctx, const char* id, const char* label, uint16_t font_px = 0 );
-void           vxui_root    ( vxui_ctx* ctx, const char* id, float x, float y );
-void           vxui_root_end( vxui_ctx* ctx );
-uint32_t       vxui_id      ( const char* id );
+void           vxui_frame    ( vxui_ctx* ctx, float dt, float w = 0, float h = 0 );
+vxui_draw_list vxui_render   ( vxui_ctx* ctx );
+void           vxui_div      ( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg = {} );
+void           vxui_div_end  ( vxui_ctx* ctx );
+void           vxui_rect     ( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg = {} );
+void           vxui_text     ( vxui_ctx* ctx, const char* id, const char* label, uint16_t font_px = 0 );
+void           vxui_root     ( vxui_ctx* ctx, const char* id, float x, float y );
+void           vxui_root_end ( vxui_ctx* ctx );
+uint32_t       vxui_id       ( const char* id );
 
 bool vxui_page              ( vxui_ctx* ctx, const char* name );
 void vxui_switch            ( vxui_ctx* ctx, const char* name );
