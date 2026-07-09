@@ -366,6 +366,14 @@ uint32_t vxui_id( const char* id )
     return vxui_clay_id( id ).id;
 }
 
+// Clay double-hashes text: text element = HashNumber( child offset, parent ),
+// line cmd = HashNumber( line index, text element ). This is the first line
+// of a single vxui_text/vxui_hud_text element -- both offsets zero.
+uint32_t vxui_text_id( const char* id )
+{
+    return Clay__HashNumber( 0, Clay__HashNumber( 0, vxui_clay_id( id ).id ).id ).id;
+}
+
 bool vxui_page( vxui_ctx* ctx, const char* name )
 {
     assert( ctx );

@@ -360,11 +360,7 @@ void vxui_hud_text( vxui_hud* hud, const char* id, const char* text )
 
     Clay__CloseElement();
 
-    // Clay double-hashes text cmds: text element id = HashNumber( 0, parent.id ),
-    // then line cmd id = HashNumber( lineIndex, textElement.id ).
-    uint32_t text_elem_id = Clay__HashNumber( 0, eid.id ).id;
-    uint32_t text_cmd_id  = Clay__HashNumber( 0, text_elem_id ).id;
-    vxui_hud_record( hud, text_cmd_id, 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
+    vxui_hud_record( hud, vxui_text_id( id ), 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
 
     hud->y += hud->font_px;
 }
@@ -399,9 +395,7 @@ void vxui_hud_text_box( vxui_hud* hud, const char* id, const char* text, float w
 
     Clay__CloseElement();
 
-    uint32_t text_elem_id = Clay__HashNumber( 0, eid.id ).id;
-    uint32_t text_cmd_id  = Clay__HashNumber( 0, text_elem_id ).id;
-    vxui_hud_record( hud, text_cmd_id, 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
+    vxui_hud_record( hud, vxui_text_id( id ), 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
 
     hud->y += h;
 }

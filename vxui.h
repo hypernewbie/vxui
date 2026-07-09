@@ -250,6 +250,7 @@ void           vxui_text     ( vxui_ctx* ctx, const char* id, const char* label,
 void           vxui_root     ( vxui_ctx* ctx, const char* id, float x, float y );
 void           vxui_root_end ( vxui_ctx* ctx );
 uint32_t       vxui_id       ( const char* id );
+uint32_t       vxui_text_id  ( const char* id );
 
 bool vxui_page              ( vxui_ctx* ctx, const char* name );
 void vxui_switch            ( vxui_ctx* ctx, const char* name );

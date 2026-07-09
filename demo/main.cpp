@@ -179,7 +179,6 @@ struct demo_resolver_state
     uint32_t        bg_id               = 0;
     uint32_t        logo_id             = 0;
     uint32_t        splash_prompt_id    = 0;
-    uint32_t        version_id          = 0;
     uint32_t        focus_icon_texture  = 0;
     uint32_t        ops_icon[DEMO_MISSION_COUNT] = {};  // texture per ops row; 0 = none
     uint32_t        ops_thumb_id        = 0;
@@ -654,8 +653,8 @@ int main( int /*argc*/, char** /*argv*/ )
     resolver_state.panel_id           = vxui_id( "demo_panel"    );
     resolver_state.frame_id           = vxui_id( "demo_frame"    );
     resolver_state.bg_id              = vxui_id( "demo_bg"       );
-    resolver_state.logo_id            = vxui_id( "demo_logo"     );
-    resolver_state.splash_prompt_id   = Clay__HashNumber( 0, vxui_id( "splash_prompt" ) ).id;
+    resolver_state.logo_id            = vxui_text_id( "demo_logo" );
+    resolver_state.splash_prompt_id   = vxui_text_id( "splash_prompt" );
     resolver_state.focus_icon_texture = vxui_gl_create_chevron_texture();
     resolver_state.ops_thumb_id       = vxui_id( "ops_thumb" );
     resolver_state.stg_thumb_id       = vxui_id( "stg_thumb" );

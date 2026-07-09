@@ -110,6 +110,15 @@ UTEST(text, two_ctx_do_not_share_text) {
     ASSERT_TRUE( tb->text >= ctx_b.text_buf && tb->text < ctx_b.text_buf + VXUI_MAX_TEXT_BYTES );
 }
 
+UTEST(text, cmd_id_matches_vxui_text_id) {
+    vxui_ctx ctx = make_ctx();
+    vxui_frame( &ctx, 1.0f / 60.0f );
+    vxui_text( &ctx, "title", "VXUI", 64 );
+    vxui_draw_list dl = vxui_render( &ctx );
+
+    ASSERT_TRUE( vxui_draw_find( dl, VXUI_DRAW_TEXT, vxui_text_id( "title" ) ) != nullptr );
+}
+
 UTEST(text, offset_resets_each_frame) {
     vxui_ctx ctx = make_ctx();
 
