@@ -33,8 +33,6 @@
 #define VXUI_INPUT_DELAY       0.4f
 #define VXUI_INPUT_REPEAT      0.1f
 
-// ============================================== API ==================================================
-
 enum vxui_input_action : uint32_t
 {
     VXUI_INPUT_UP      = 1 << 0,
@@ -182,7 +180,6 @@ void           vxui_text    ( vxui_ctx* ctx, const char* id, const char* label, 
 void           vxui_root    ( vxui_ctx* ctx, const char* id, float x, float y );
 void           vxui_root_end( vxui_ctx* ctx );
 uint32_t       vxui_id      ( const char* id );
-
 
 bool vxui_page             ( vxui_ctx* ctx, const char* name );
 void vxui_switch           ( vxui_ctx* ctx, const char* name );

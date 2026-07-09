@@ -139,7 +139,7 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             out.state          = 0;
             out.rect           = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
             out.focus_offset_y = 0;
-            out.text           = t.stringContents.chars;     // points into ctx->text_buf, valid until next vxui_frame
+            out.text           = t.stringContents.chars;     // points into the per-frame text buffer, valid until next vxui_frame
             out.text_len       = t.stringContents.length;
             out.font           = t.fontId;
             out.font_px        = t.fontSize;
@@ -368,8 +368,6 @@ uint32_t vxui_id( const char* id )
 {
     return vxui_clay_id( id ).id;
 }
-
-
 
 bool vxui_page( vxui_ctx* ctx, const char* name )
 {

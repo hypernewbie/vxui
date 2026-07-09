@@ -77,8 +77,6 @@ if(VXUI_BUILD_TESTS)
     target_link_libraries(test_frame PRIVATE vxui)
     add_test(NAME test_frame COMMAND test_frame)
 
-
-
     add_executable(test_integration tests/test_integration.cpp)
     target_link_libraries(test_integration PRIVATE vxui)
     add_test(NAME test_integration COMMAND test_integration)

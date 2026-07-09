@@ -27,8 +27,6 @@
 #include <cmath>
 #include <glm/glm.hpp>
 
-// ============================================== UTILITY ==============================================
-
 #ifndef VXUI_ROUND_UP
 	#define VXUI_ROUND_UP(N, S) ((((N) + (S) - 1) / (S)) * (S))
 #endif
@@ -64,7 +62,7 @@ static inline void* vxui_alloc( vxui_alloc_state* a, uint64_t size, uint64_t ali
 {
     assert( a && a->base );
     if ( !size ) return nullptr;
-    
+
     uint64_t nptr = ( uint64_t ) a->base + a->offset;
     nptr = VXUI_ROUND_UP( nptr, align );
     nptr -= ( uint64_t ) a->base;
@@ -74,7 +72,7 @@ static inline void* vxui_alloc( vxui_alloc_state* a, uint64_t size, uint64_t ali
         // Can't allocate, arena is full.
         return nullptr;
     }
-    
+
     a->offset = nptr + size;
     return ( void* ) ( a->base + nptr );
 }
@@ -84,8 +82,6 @@ static inline void vxui_alloc_reset( vxui_alloc_state* a )
     assert( a );
     a->offset = 0;
 }
-
-// ============================================== SPRING ===============================================
 
 // s = { value, velocity }, xt = target, freq = omega (higher = snappier)
 static inline void vxui_spring_update( glm::vec2& s, float xt, float freq = 12.0f, float dT = 1.0f / 60.0f )
