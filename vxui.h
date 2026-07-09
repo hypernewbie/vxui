@@ -115,19 +115,19 @@ typedef void ( *vxui_render_data_fn )( const vxui_draw_cmd* cmd, vxui_render_dat
 struct vxui_ctx
 {
     uint32_t active_page      = 0;
-    uint32_t input            = 0;    // bitfield of vxui_input_action, cleared each vxui_frame
-    uint32_t prev_input       = 0;    // input bitfield from the previous frame
-    uint32_t input_repeated   = 0;    // bits firing this frame (just-pressed | repeat)
-    uint32_t menu_active_mask = 0;    // bit i set if menu i was active this frame
-    uint32_t prev_active_mask = 0;    // menu_active_mask from the previous frame
-    bool     frame_active     = false;// true between vxui_frame and vxui_render
-    bool     inputs_committed = false;// input_repeated computed this frame
-    float    input_held_time  [6] = {};// seconds each input has been held
-    float    input_next_fire  [6] = {};// next held_time threshold to fire repeat
+    uint32_t input            = 0;         // bitfield of vxui_input_action, cleared each vxui_frame
+    uint32_t prev_input       = 0;         // input bitfield from the previous frame
+    uint32_t input_repeated   = 0;         // bits firing this frame (just-pressed | repeat)
+    uint32_t menu_active_mask = 0;         // bit i set if menu i was active this frame
+    uint32_t prev_active_mask = 0;         // menu_active_mask from the previous frame
+    bool     frame_active     = false;     // true between vxui_frame and vxui_render
+    bool     inputs_committed = false;     // input_repeated computed this frame
+    float    input_held_time  [6] = {};    // seconds each input has been held
+    float    input_next_fire  [6] = {};    // next held_time threshold to fire repeat
     float    dt               = 0;
     void*    clay             = nullptr;
-    void*    text             = nullptr;// vxui_text_state*, lazy on first vxui_load_font
-    void*    renderer         = nullptr;// owned by sibling render module
+    void*    text             = nullptr;   // vxui_text_state*, lazy on first vxui_load_font
+    void*    renderer         = nullptr;   // owned by sibling render module
 
     glm::vec2 mouse_pos          = { FLT_MAX, FLT_MAX };  // off-screen sentinel = no mouse
     uint32_t  mouse_buttons      = 0;    // bitfield of VXUI_MOUSE_*, cleared each vxui_frame
@@ -139,13 +139,13 @@ struct vxui_ctx
     glm::vec4   menu_focus_spring[VXUI_MAX_MENUS] = {}; // { offset_y, velocity_y, prev_row, _ }, prev_row -1 = unset
     int         menu_scroll_top  [VXUI_MAX_MENUS] = {}; // topmost visible row index when max_visible > 0
     const char* menu_names       [VXUI_MAX_MENUS] = {}; // literal pointer for hash-collision detection
-    uint32_t active_menu_row_ids[VXUI_MAX_MENU_ROWS] = {}; // Clay ids of rows declared this frame, for dup detection
+    uint32_t active_menu_row_ids[VXUI_MAX_MENU_ROWS] = {};   // Clay ids of rows declared this frame, for dup detection
     int      menu_count           = 0;
-    int      active_menu          = -1;  // index into menus[], -1 = none
-    int      active_menu_row      = 0;   // current row being declared
-    uint32_t active_menu_skip     = 0;   // bitmask, accumulated during declaration
-    uint32_t active_menu_focus_id = 0;   // Clay id of focused row this frame, 0 = none
-    bool     active_menu_fill     = false;// rows fill the menu column width (set by vxui_menu)
+    int      active_menu          = -1;                       // index into menus[], -1 = none
+    int      active_menu_row      = 0;                        // current row being declared
+    uint32_t active_menu_skip     = 0;                        // bitmask, accumulated during declaration
+    uint32_t active_menu_focus_id = 0;                        // Clay id of focused row this frame, 0 = none
+    bool     active_menu_fill     = false;                    // rows fill the menu column width (set by vxui_menu)
 
     uint32_t focused_row_ids[VXUI_MAX_MENUS] = {};   // per-frame, count = focused_row_count
     float    focus_offsets  [VXUI_MAX_MENUS] = {};   // parallel to focused_row_ids
@@ -181,24 +181,24 @@ void           vxui_root    ( vxui_ctx* ctx, const char* id, float x, float y );
 void           vxui_root_end( vxui_ctx* ctx );
 uint32_t       vxui_id      ( const char* id );
 
-bool vxui_page             ( vxui_ctx* ctx, const char* name );
-void vxui_switch           ( vxui_ctx* ctx, const char* name );
-void vxui_input            ( vxui_ctx* ctx, const char* action, bool pressed = true );
-bool vxui_input_pressed    ( vxui_ctx* ctx, const char* action );
+bool vxui_page              ( vxui_ctx* ctx, const char* name );
+void vxui_switch            ( vxui_ctx* ctx, const char* name );
+void vxui_input             ( vxui_ctx* ctx, const char* action, bool pressed = true );
+bool vxui_input_pressed     ( vxui_ctx* ctx, const char* action );
 bool vxui_input_just_pressed( vxui_ctx* ctx, const char* action );
 bool vxui_input_repeated    ( vxui_ctx* ctx, const char* action );
-void vxui_mouse            ( vxui_ctx* ctx, float x, float y, uint32_t buttons );
+void vxui_mouse             ( vxui_ctx* ctx, float x, float y, uint32_t buttons );
 
-bool vxui_menu           ( vxui_ctx* ctx, const char* id, bool wrap = true, int max_visible = 0, bool fill = false );
+bool vxui_menu          ( vxui_ctx* ctx, const char* id, bool wrap = true, int max_visible = 0, bool fill = false );
+bool vxui_menu_action   ( vxui_ctx* ctx, const char* label );
+bool vxui_menu_option   ( vxui_ctx* ctx, const char* label, int* index, const char** options, int count );
+bool vxui_menu_slider   ( vxui_ctx* ctx, const char* label, float* value, float mn = 0.0f, float mx = 1.0f, float step = 0.1f );
+void vxui_menu_section  ( vxui_ctx* ctx, const char* title );
+void vxui_menu_label    ( vxui_ctx* ctx, const char* text );
+bool vxui_menu_cancelled( vxui_ctx* ctx );
+void vxui_menu_end      ( vxui_ctx* ctx );
 
-int                  vxui_draw_count ( const vxui_draw_list& dl, uint8_t type );
-const vxui_draw_cmd* vxui_draw_nth   ( const vxui_draw_list& dl, uint8_t type, int n );
-const vxui_draw_cmd* vxui_draw_find  ( const vxui_draw_list& dl, uint8_t type, uint32_t id );
-void vxui_set_render_data_fn( vxui_ctx* ctx, vxui_render_data_fn fn, void* userdata );
-bool vxui_menu_action    ( vxui_ctx* ctx, const char* label );
-bool vxui_menu_option    ( vxui_ctx* ctx, const char* label, int* index, const char** options, int count );
-bool vxui_menu_slider    ( vxui_ctx* ctx, const char* label, float* value, float mn = 0.0f, float mx = 1.0f, float step = 0.1f );
-void vxui_menu_section   ( vxui_ctx* ctx, const char* title );
-void vxui_menu_label     ( vxui_ctx* ctx, const char* text );
-bool vxui_menu_cancelled ( vxui_ctx* ctx );
-void vxui_menu_end       ( vxui_ctx* ctx );
+int                  vxui_draw_count        ( const vxui_draw_list& dl, uint8_t type );
+const vxui_draw_cmd* vxui_draw_nth          ( const vxui_draw_list& dl, uint8_t type, int n );
+const vxui_draw_cmd* vxui_draw_find         ( const vxui_draw_list& dl, uint8_t type, uint32_t id );
+void                 vxui_set_render_data_fn( vxui_ctx* ctx, vxui_render_data_fn fn, void* userdata );

@@ -105,7 +105,7 @@ static void vxui_hud_rect_at( vxui_hud* hud, const char* id, float x, float y, f
     Clay_ElementId eid = vxui_hud_clay_id( id );
     Clay__OpenElementWithId( eid );
 
-    Clay_ElementDeclaration decl = {};
+    Clay_ElementDeclaration decl       = {};
     decl.layout.sizing.width           = CLAY_SIZING_FIXED( w );
     decl.layout.sizing.height          = CLAY_SIZING_FIXED( h );
     decl.floating.attachTo             = CLAY_ATTACH_TO_ROOT;
@@ -133,7 +133,7 @@ void vxui_hud_begin( vxui_hud* hud, vxui_ctx* ctx, float w, float h )
     hud->font        = 0;
     hud->font_px     = VXUI_FONT_SIZE_DEFAULT;
     hud->z           = 0;
-    hud->item_count = 0;
+    hud->item_count  = 0;
 }
 
 void vxui_hud_set_pos( vxui_hud* hud, float x, float y )

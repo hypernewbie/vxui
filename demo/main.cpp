@@ -721,7 +721,7 @@ int main( int /*argc*/, char** /*argv*/ )
         else if ( s_demo_missions[i].status == DEMO_MISSION_OPEN   ) resolver_state.ops_icon[i] = assets.warning;
         else                                                          resolver_state.ops_icon[i] = 0;
     }
-    resolver_state.hud = &hud;
+    resolver_state.hud                = &hud;
     vxui_set_render_data_fn( &ctx, demo_render_data, &resolver_state );
 
     static const struct { int key; const char* action; } s_keymap[] = {

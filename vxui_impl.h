@@ -78,7 +78,7 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
     ctx->dt                     = dt;
     ctx->frame_active           = true;
     ctx->inputs_committed       = false;
-    g_vxui_text_offset = 0;
+    g_vxui_text_offset          = 0;
     ctx->focused_row_count      = 0;
     ctx->pressed_row_count      = 0;
     ctx->frame_row_count        = 0;
@@ -118,32 +118,32 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_RECTANGLE )
         {
             vxui_draw_cmd& out = ctx->draw_buf[count++];
-            out.id             = cmd->id;
-            out.type           = VXUI_DRAW_RECT;
-            out.state          = 0;
-            out.rect           = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
-            out.focus_offset_y = 0;
-            out.text           = nullptr;
-            out.text_len       = 0;
-            out.font           = 0;
-            out.font_px        = 0;
-            out.row_index      = -1;
+            out.id                = cmd->id;
+            out.type              = VXUI_DRAW_RECT;
+            out.state             = 0;
+            out.rect              = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+            out.focus_offset_y    = 0;
+            out.text              = nullptr;
+            out.text_len          = 0;
+            out.font              = 0;
+            out.font_px           = 0;
+            out.row_index         = -1;
             out.focused_row_index = -1;
         }
         else if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT )
         {
             const Clay_TextRenderData& t = cmd->renderData.text;
             vxui_draw_cmd& out = ctx->draw_buf[count++];
-            out.id             = cmd->id;
-            out.type           = VXUI_DRAW_TEXT;
-            out.state          = 0;
-            out.rect           = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
-            out.focus_offset_y = 0;
-            out.text           = t.stringContents.chars;     // points into the per-frame text buffer, valid until next vxui_frame
-            out.text_len       = t.stringContents.length;
-            out.font           = t.fontId;
-            out.font_px        = t.fontSize;
-            out.row_index      = -1;
+            out.id                = cmd->id;
+            out.type              = VXUI_DRAW_TEXT;
+            out.state             = 0;
+            out.rect              = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+            out.focus_offset_y    = 0;
+            out.text              = t.stringContents.chars;     // points into the per-frame text buffer, valid until next vxui_frame
+            out.text_len          = t.stringContents.length;
+            out.font              = t.fontId;
+            out.font_px           = t.fontSize;
+            out.row_index         = -1;
             out.focused_row_index = -1;
         }
     }
@@ -503,8 +503,7 @@ static int vxui_menu_get( vxui_ctx* ctx, const char* name )
     return idx;
 }
 
-static uint32_t vxui_menu_next_row( uint32_t from, uint32_t num_rows,
-                                    uint32_t skip_mask, int step, bool wrap )
+static uint32_t vxui_menu_next_row( uint32_t from, uint32_t num_rows, uint32_t skip_mask, int step, bool wrap )
 {
     // step: +1 forward, -1 backward.
     for ( uint32_t i = 0; i < num_rows; i++ )
@@ -583,9 +582,7 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible, bool 
     Clay_ElementDeclaration decl = {};
     decl.layout.layoutDirection  = CLAY_TOP_TO_BOTTOM;
     decl.layout.sizing.width     = fill ? CLAY_SIZING_GROW( 0 ) : CLAY_SIZING_FIT( 0 );
-    decl.layout.sizing.height    = max_visible > 0
-                                   ? CLAY_SIZING_FIXED( (float) ( max_visible * VXUI_ROW_HEIGHT ) )
-                                   : CLAY_SIZING_FIT( 0 );
+    decl.layout.sizing.height    = max_visible > 0 ? CLAY_SIZING_FIXED( (float) ( max_visible * VXUI_ROW_HEIGHT ) ) : CLAY_SIZING_FIT( 0 );
     if ( max_visible > 0 )
     {
         decl.clip.vertical    = true;
