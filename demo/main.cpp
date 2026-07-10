@@ -47,7 +47,7 @@ static uint8_t s_clay_mem[16 * 1024 * 1024];
 #define DEMO_MAX_STACK    8
 #define DEMO_MISSION_COUNT 18
 
-// Mission unlock states. Drives the row text colour in operations screen.
+// Mission unlock states. Drives the ops row icon and the LOCKED/OPEN/CLEARED/PERFECT tag text.
 #define DEMO_MISSION_LOCKED   0
 #define DEMO_MISSION_OPEN     1
 #define DEMO_MISSION_CLEARED  2

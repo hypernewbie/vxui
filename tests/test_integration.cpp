@@ -131,9 +131,7 @@ UTEST(integration, page_menu_nav)
     ASSERT_TRUE( vxui_page( &ctx, "title" ) );
 }
 
-// Both menus share the same input bitfield — this is expected behavior.
-// Focus state is keyed by ID so it does not bleed between menus.
-
+// Shared input bitfield is by design; focus is keyed per menu id.
 UTEST(integration, multi_menu_isolation)
 {
     vxui_ctx ctx = make_ctx();

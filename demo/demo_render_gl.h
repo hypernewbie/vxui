@@ -427,7 +427,7 @@ uint32_t vxui_gl_create_testcard_texture()
     {
         for ( int x = 0; x < 64; x++ )
         {
-            float   g    = ( x + y ) / 126.0f;                  // diagonal gradient, 0..1
+            float   g    = ( x + y ) / 126.0f;                    // diagonal gradient, 0..1
             bool    grid = ( x % 8 == 0 ) || ( y % 8 == 0 );      // 8px grid lines
             uint8_t v    = grid ? 255 : (uint8_t) ( 40.0f + g * 180.0f );
             int     i    = ( y * 64 + x ) * 4;

@@ -168,9 +168,7 @@ UTEST(menu_scroll, scroll_with_skip_rows) {
     ASSERT_EQ( ctx.menu_scroll_top[0], 2 );
 }
 
-// Two menus share the input bitfield by design. This test verifies they each
-// keep their own scroll_top in distinct array slots — different max_visible
-// drives different scroll behavior under the same input.
+// Two menus share the input bitfield by design; scroll_top is per-menu state, in distinct array slots.
 UTEST(menu_scroll, two_menus_independent_scroll) {
     vxui_ctx ctx = make_ctx();
 

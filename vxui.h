@@ -1,4 +1,3 @@
-
 /*
 	-- VXUI Motion UI --
 
@@ -39,6 +38,8 @@
 		static uint8_t clay_mem[16 * 1024 * 1024];
 		vxui_ctx ctx = {};
 		vxui_init( &ctx, 1280, 720, clay_mem, sizeof( clay_mem ) );
+		vxui_font_id font = vxui_load_font( &ctx, ttf_bytes, ttf_size, 24.0f );
+		// no font loaded = no text measurement = invisible labels. Load one.
 
 		while ( running )
 		{
@@ -182,15 +183,15 @@ typedef void ( *vxui_render_data_fn )( const vxui_draw_cmd* cmd, vxui_render_dat
 struct vxui_ctx
 {
     uint32_t active_page          = 0;
-    uint32_t input                = 0;   // bitfield of vxui_input_action, cleared each vxui_frame
-    uint32_t prev_input           = 0;   // input bitfield from the previous frame
-    uint32_t input_repeated       = 0;   // bits firing this frame (just-pressed | repeat)
-    uint32_t menu_active_mask     = 0;   // bit i set if menu i was active this frame
-    uint32_t prev_active_mask     = 0;   // menu_active_mask from the previous frame
-    bool     frame_active         = false;   // true between vxui_frame and vxui_render
-    bool     inputs_committed     = false;   // input_repeated computed this frame
-    float    input_held_time  [6] = {};   // seconds each input has been held
-    float    input_next_fire  [6] = {};   // next held_time threshold to fire repeat
+    uint32_t input                = 0;         // bitfield of vxui_input_action, cleared each vxui_frame
+    uint32_t prev_input           = 0;         // input bitfield from the previous frame
+    uint32_t input_repeated       = 0;         // bits firing this frame (just-pressed | repeat)
+    uint32_t menu_active_mask     = 0;         // bit i set if menu i was active this frame
+    uint32_t prev_active_mask     = 0;         // menu_active_mask from the previous frame
+    bool     frame_active         = false;     // true between vxui_frame and vxui_render
+    bool     inputs_committed     = false;     // input_repeated computed this frame
+    float    input_held_time  [6] = {};        // seconds each input has been held
+    float    input_next_fire  [6] = {};        // next held_time threshold to fire repeat
     float    dt                   = 0;
     void*    clay                 = nullptr;
     void*    text                 = nullptr;   // vxui_text_state*, lazy on first vxui_load_font
