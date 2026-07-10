@@ -45,7 +45,7 @@
 		{
 			vxui_frame( &ctx, dt );
 
-			// vxui_frame just cleared ctx->input -- report every held key again.
+			// vxui_frame just cleared ctx->input. Report every held key again.
 			if ( key_up_held )      vxui_input( &ctx, "up" );
 			if ( key_down_held )    vxui_input( &ctx, "down" );
 			if ( key_confirm_held ) vxui_input( &ctx, "confirm" );
@@ -75,19 +75,18 @@
 
 	The resolver contract: render-data fields (colour, texture_id, uv,
 	material_id, outline_colour, outline_thickness, params, flags) are
-	transport, not policy. VXUI memsets every one to zero, then -- if you
-	registered one with vxui_set_render_data_fn -- calls your resolver so you
-	can fill them in per command. Zero means the renderer decides; VXUI never
-	picks a colour, a font, or a material for you.
+	transport, not policy. VXUI memsets every one to zero, then calls your
+	resolver (if you registered one with vxui_set_render_data_fn) so you can
+	fill them in per command. Zero means the renderer decides; VXUI never
+	picks a colour or a material for you.
 
-	Gotchas that bite in hour one:
+	Gotchas:
 
 	- vxui_frame clears ctx->input. Report held keys every frame, not once.
 	- Navigation runs on last frame's row count, so the first frame just
-	  establishes the menu -- confirm/cancel on frame one won't do anything
-	  useful yet.
+	  establishes the menu; confirm/cancel on frame one does nothing yet.
 	- cmd->text points into ctx->text_buf. It is valid until the next
-	  vxui_frame and not a moment longer; copy it out if you need it to live.
+	  vxui_frame; copy it out if you need it to live.
 	- vxui_frame and vxui_render must pair, once each, every frame. The
 	  asserts inside both are load-bearing, not decoration.
 	- Memory is fixed at vxui_init. Nothing allocates after that except

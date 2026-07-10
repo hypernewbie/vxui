@@ -1,4 +1,4 @@
-// Demo GL renderer for VXUI. Reference only — not part of the library.
+// Demo GL renderer for VXUI. Reference only, not part of the library.
 // #define VXUI_DEMO_RENDER_GL_IMPL in one TU.
 
 #ifndef VXUI_DEMO_RENDER_GL_H
@@ -73,7 +73,7 @@ struct vxui_gl_state
     int                   material_data_count                         = 0;
 };
 
-// VEFC text shaders — byte-identical to vefc/demo/demo.cpp.
+// VEFC text shaders, byte-identical to vefc/demo/demo.cpp.
 static const char* s_vxui_gl_vefc_vs_shared = R"(#version 330 core
 in vec2 vpos;
 in vec2 vtex;

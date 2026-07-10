@@ -26,7 +26,7 @@ static int menu_body( vxui_ctx* ctx )
     return fired;
 }
 
-// Helper: full frame — begin, set input, declare menu, render.
+// Helper: full frame (begin, set input, declare menu, render).
 static int menu_frame( vxui_ctx* ctx, uint32_t input )
 {
     vxui_frame( ctx, 1.0f / 60.0f );

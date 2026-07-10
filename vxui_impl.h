@@ -368,7 +368,7 @@ uint32_t vxui_id( const char* id )
 
 // Clay double-hashes text: text element = HashNumber( child offset, parent ),
 // line cmd = HashNumber( line index, text element ). This is the first line
-// of a single vxui_text/vxui_hud_text element -- both offsets zero.
+// of a single vxui_text/vxui_hud_text element; both offsets zero.
 uint32_t vxui_text_id( const char* id )
 {
     return Clay__HashNumber( 0, Clay__HashNumber( 0, vxui_clay_id( id ).id ).id ).id;
@@ -602,7 +602,7 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible, bool 
 static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, const char* value = nullptr )
 {
     // Composite id: menu hash as seed so same label in different menus doesn't collide.
-    // Identity uses label only -- value text can change every frame without remounting focus.
+    // Identity uses label only; value text can change every frame without remounting focus.
     int              label_len = (int) strlen( label );
     Clay_String      cs        = { false, (int32_t) label_len, label };
     Clay_ElementId   eid       = Clay__HashString( cs, ctx->menu_state[ctx->active_menu].x );
@@ -750,7 +750,7 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
     assert( value && mn < mx && step > 0.0f );
 
     // Visible bar + percentage: 8 cells filled by t = (value - mn) / (mx - mn).
-    // Not a slider widget -- a readable summary that sits on the right of the row.
+    // Not a slider widget, just a readable summary that sits on the right of the row.
     float t      = glm::clamp( ( *value - mn ) / ( mx - mn ), 0.0f, 1.0f );
     int   filled = (int) ( t * 8.0f + 0.5f );
     char  bar[9];

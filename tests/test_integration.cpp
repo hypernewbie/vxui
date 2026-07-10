@@ -172,7 +172,7 @@ UTEST(integration, multi_menu_isolation)
     }
     vxui_render( &ctx );
 
-    // Both moved to row 1 — shared input is expected, not a bug.
+    // Both moved to row 1; shared input is expected, not a bug.
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
     ASSERT_EQ( ctx.menu_state[1].y, (uint32_t) 1 );
 
@@ -265,7 +265,7 @@ UTEST(integration, focus_clamp)
     vxui_render( &ctx );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 3 );
 
-    // frame 3: Debug omitted — 3-row menu writes num_rows=3.
+    // frame 3: Debug omitted; 3-row menu writes num_rows=3.
     // Clamp has not fired yet (prev num_rows was still 4).
     vxui_frame( &ctx, 1.0f / 60.0f );
     if ( vxui_menu( &ctx, "test" ) )
@@ -278,7 +278,7 @@ UTEST(integration, focus_clamp)
     vxui_render( &ctx );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 3 );   // still 3, clamp fires next frame
 
-    // frame 4: confirm — clamp fires (focus 3 >= num_rows 3 → clamped to 2),
+    // frame 4: confirm; clamp fires (focus 3 >= num_rows 3 → clamped to 2),
     // then confirm on clamped row 2 (Quit) fires
     int fired = -1;
     vxui_frame( &ctx, 1.0f / 60.0f );

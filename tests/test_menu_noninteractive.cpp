@@ -54,7 +54,7 @@ UTEST(menu_section, focus_skips_section_row) {
     section_frame( &ctx, 0 );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
 
-    // Frame 3: confirm — fires Play (row 1), not section (row 0).
+    // Frame 3: confirm fires Play (row 1), not section (row 0).
     int fired = section_frame( &ctx, VXUI_INPUT_CONFIRM );
     ASSERT_EQ( fired, 0 );
 }
@@ -74,7 +74,7 @@ UTEST(menu_label, focus_skips_label_row) {
     label_frame( &ctx, 0 );
     ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
 
-    // Frame 3: confirm — fires Play (row 1), not label (row 0).
+    // Frame 3: confirm fires Play (row 1), not label (row 0).
     int fired = label_frame( &ctx, VXUI_INPUT_CONFIRM );
     ASSERT_EQ( fired, 0 );
 }

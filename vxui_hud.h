@@ -76,7 +76,7 @@ void      vxui_hud_resource_bar  ( vxui_hud* hud, const char* id, uint32_t textu
 void      vxui_hud_health_bar    ( vxui_hud* hud, const char* id, uint32_t texture_id, float hp, float max_hp, float w, float h, glm::vec4 uv, bool text = true );
 bool      vxui_hud_resolve       ( const vxui_hud* hud, const vxui_draw_cmd* cmd, vxui_render_data* out );
 
-// Define VXUI_HUD_IMPL in the same translation unit as VXUI_IMPL -- the
+// Define VXUI_HUD_IMPL in the same translation unit as VXUI_IMPL; the
 // implementation below reaches into VXUI internals.
 #ifdef VXUI_HUD_IMPL
 

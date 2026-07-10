@@ -1,4 +1,4 @@
-// VXUI demo — portrait sci-fi mock menu (BR-shaped, not BR-labelled).
+// VXUI demo: portrait sci-fi mock menu (BR-shaped, not BR-labelled).
 
 #include <cstdio>
 #include <cstdlib>
@@ -241,7 +241,7 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
 
     if ( c->id == st->panel_id )
     {
-        // No fill — let the BG rect + content render through. Scanlines
+        // No fill: let the BG rect + content render through. Scanlines
         // ride the existing pixels via the CRT material at low strength.
         out->material_id = DEMO_MATERIAL_CRT;
         out->flags       = DEMO_MATERIAL_FLAG_SCANLINES;
@@ -253,7 +253,7 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
 
     if ( c->id == st->frame_id )
     {
-        // Outline only — the BG rect is the background, no dark fill.
+        // Outline only: the BG rect is the background, no dark fill.
         out->colour            = { 0.0f, 0.0f, 0.0f, 0.0f };
         out->outline_colour    = { 0.30f, 0.70f, 0.95f, 1.0f };
         out->outline_thickness = 2.0f;

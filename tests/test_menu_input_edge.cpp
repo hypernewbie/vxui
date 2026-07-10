@@ -183,7 +183,7 @@ UTEST(menu_input_edge, slider_right_held_repeats_after_das) {
 
 UTEST(menu_input_edge, option_release_resets_das_delay) {
     // After a press + partial hold + release, the next press starts a fresh
-    // DAS delay — i.e. held_time is reset on release. Without that reset,
+    // DAS delay, i.e. held_time is reset on release. Without that reset,
     // a quick re-press during the prior DAS window would auto-repeat instantly.
     vxui_ctx ctx = make_ctx();
     int idx = 0;
