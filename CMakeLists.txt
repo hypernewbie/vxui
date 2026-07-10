@@ -79,6 +79,7 @@ if(VXUI_BUILD_TESTS)
         add_test(NAME test_vefc_backend_gl COMMAND test_vefc_backend_gl)
     endif()
 
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tmp) # test_plot dumps .layout files here; gitignored, absent on a fresh checkout
     add_executable(test_plot tests/test_plot.cpp)
     target_link_libraries(test_plot PRIVATE vxui)
     add_test(NAME test_plot COMMAND test_plot WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
