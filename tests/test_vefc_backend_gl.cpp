@@ -156,6 +156,19 @@ UTEST(vefc_backend_gl, full_suite_passes) {
     EXPECT_EQ( 0, result.failed );
     EXPECT_TRUE( result.passed > 0 );
 
+    ve_fontcache_flush_drawlist( &cache );
+    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+    glDisable( GL_SCISSOR_TEST );
+    glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+    glClearColor( 0, 0, 0, 0 );
+    glClear( GL_COLOR_BUFFER_BIT );
+    vxui_gl_push_solid_quad( &cache.drawlist, 0.25f, 0.25f, 0.75f, 0.75f, { 1, 0, 0, 1 } );
+    vxui_gl_execute( gl, &cache, win_w, win_h );
+    uint8_t pixel[4] = {};
+    glReadBuffer( GL_BACK );
+    glReadPixels( win_w / 2, win_h / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel );
+    EXPECT_TRUE( pixel[0] > 200 && pixel[1] < 10 && pixel[2] < 10 && pixel[3] > 200 );
+
     vxui_gl_shutdown( &stub );
     ve_fontcache_shutdown( &cache );
     glfwDestroyWindow( window );

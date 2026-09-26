@@ -38,14 +38,15 @@ uint32_t vxui_gl_create_testcard_texture();
 #include <cassert>
 #include "ve_fontcache.h"
 
-// Pass IDs share VEFC's dcall.pass uint32_t namespace; values >= 8 are demo-owned.
-#define DEMO_GL_PASS_RECT          8
-#define DEMO_GL_PASS_RECT_TEXTURED 9
-#define DEMO_GL_PASS_CRT           10
-#define DEMO_GL_PASS_ROUND         11
-#define DEMO_GL_PASS_OUTLINE       12
-#define DEMO_GL_PASS_IMAGE         13
+#define DEMO_GL_PASS_RECT          16
+#define DEMO_GL_PASS_RECT_TEXTURED 17
+#define DEMO_GL_PASS_CRT           18
+#define DEMO_GL_PASS_ROUND         19
+#define DEMO_GL_PASS_OUTLINE       20
+#define DEMO_GL_PASS_IMAGE         21
 #define DEMO_GL_MAX_MATERIAL_DCALLS 64
+
+static_assert( DEMO_GL_PASS_RECT > VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH_RESOLVE, "demo passes must not overlap VEFC" );
 
 struct vxui_gl_material_data
 {
