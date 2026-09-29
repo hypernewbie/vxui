@@ -600,6 +600,7 @@ static void vxui_gl_push_material_quad( ve_fontcache_drawlist* dl, vxui_gl_state
 
 static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, const vxui_draw_cmd* c, float px, float py, float fb_w, float fb_h, vxui_gl_xform xf )
 {
+    // TODO: trim the quad to c->clip (same pattern as vxui_gl_emit_text)
     float sw = c->rect.z * xf.scale;
     float sh = c->rect.w * xf.scale;
 

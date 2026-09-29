@@ -133,6 +133,7 @@ struct vxui_div_cfg
 
 #define VXUI_MAX_DRAW_CMDS  512
 #define VXUI_MAX_TEXT_BYTES 16384
+#define VXUI_MAX_CLIP_STACK 8
 
 #define VXUI_DRAW_RECT 0
 #define VXUI_DRAW_TEXT 1
@@ -160,7 +161,9 @@ struct vxui_draw_cmd
     uint32_t         id;
     uint8_t          type;            // VXUI_DRAW_RECT | VXUI_DRAW_TEXT
     uint8_t          state;           // VXUI_DRAW_FOCUSED | _PRESSED | _DISABLED | _HOVERED
+    bool             clipped;         // true when an ancestor scroll clip applies
     glm::vec4        rect;            // x, y, w, h
+    glm::vec4        clip;            // x, y, w, h; intersected ancestors; w or h <= 0 = nothing visible
     float            focus_offset_y;  // VXUI-owned spring; nonzero only on FOCUSED RECT cmds
     const char*      text;            // null when type != TEXT; valid until next vxui_frame
     int32_t          text_len;

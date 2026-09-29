@@ -90,6 +90,17 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
 
 static void vxui_commit_inputs( vxui_ctx* ctx );
 
+// RECT hit test: inside the rect and inside its scroll clip, if any.
+static bool vxui_hit_rect( const vxui_draw_cmd& c, glm::vec2 p )
+{
+    bool inside = p.x >= c.rect.x && p.x <= c.rect.x + c.rect.z
+               && p.y >= c.rect.y && p.y <= c.rect.y + c.rect.w;
+    if ( !inside || !c.clipped ) return inside;
+    if ( c.clip.z <= 0 || c.clip.w <= 0 ) return false;
+    return p.x >= c.clip.x && p.x <= c.clip.x + c.clip.z
+        && p.y >= c.clip.y && p.y <= c.clip.y + c.clip.w;
+}
+
 vxui_draw_list vxui_render( vxui_ctx* ctx )
 {
     assert( ctx );
@@ -107,10 +118,41 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
 
     Clay_RenderCommandArray cmds = Clay_EndLayout();
 
+    // Clay emits scissor start/end around clipped subtrees. Carry the active
+    // intersection onto each command so hit tests and renderers share it.
+    glm::vec4 clip_stack[VXUI_MAX_CLIP_STACK] = {};
+    int       clip_depth                     = 0;
+
     int count = 0;
     for ( int i = 0; i < cmds.length && count < VXUI_MAX_DRAW_CMDS; i++ )
     {
         Clay_RenderCommand* cmd = &cmds.internalArray[i];
+
+        if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_SCISSOR_START )
+        {
+            assert( clip_depth < VXUI_MAX_CLIP_STACK );
+            glm::vec4 next = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+            if ( clip_depth > 0 )
+            {
+                glm::vec4& cur = clip_stack[clip_depth - 1];
+                float x0 = cur.x > next.x ? cur.x : next.x;
+                float y0 = cur.y > next.y ? cur.y : next.y;
+                float x1 = cur.x + cur.z < next.x + next.z ? cur.x + cur.z : next.x + next.z;
+                float y1 = cur.y + cur.w < next.y + next.w ? cur.y + cur.w : next.y + next.w;
+                next = { x0, y0, x1 - x0, y1 - y0 };
+            }
+            clip_stack[clip_depth++] = next;
+            continue;
+        }
+        if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_SCISSOR_END )
+        {
+            assert( clip_depth > 0 );
+            clip_depth--;
+            continue;
+        }
+
+        glm::vec4 clip    = clip_depth > 0 ? clip_stack[clip_depth - 1] : glm::vec4{};
+        bool      clipped = clip_depth > 0;
 
         if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_RECTANGLE )
         {
@@ -118,7 +160,9 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             out.id                = cmd->id;
             out.type              = VXUI_DRAW_RECT;
             out.state             = 0;
+            out.clipped           = clipped;
             out.rect              = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+            out.clip              = clip;
             out.focus_offset_y    = 0;
             out.text              = nullptr;
             out.text_len          = 0;
@@ -134,7 +178,9 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             out.id                = cmd->id;
             out.type              = VXUI_DRAW_TEXT;
             out.state             = 0;
+            out.clipped           = clipped;
             out.rect              = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+            out.clip              = clip;
             out.focus_offset_y    = 0;
             out.text              = t.stringContents.chars;     // points into ctx->text_buf, valid until next vxui_frame
             out.text_len          = t.stringContents.length;
@@ -186,9 +232,7 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
     {
         vxui_draw_cmd& c = ctx->draw_buf[i];
         if ( c.type != VXUI_DRAW_RECT ) continue;
-        bool inside = ctx->mouse_pos.x >= c.rect.x && ctx->mouse_pos.x <= c.rect.x + c.rect.z
-                   && ctx->mouse_pos.y >= c.rect.y && ctx->mouse_pos.y <= c.rect.y + c.rect.w;
-        if ( inside ) under_cursor_id = c.id;     // last (topmost) wins for click target
+        if ( vxui_hit_rect( c, ctx->mouse_pos ) ) under_cursor_id = c.id;     // last (topmost) wins for click target
     }
 
     bool btn_now  = ( ctx->mouse_buttons      & VXUI_MOUSE_LEFT ) != 0;
@@ -206,9 +250,7 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
     {
         vxui_draw_cmd& c = ctx->draw_buf[i];
         if ( c.type != VXUI_DRAW_RECT ) continue;
-        bool inside = ctx->mouse_pos.x >= c.rect.x && ctx->mouse_pos.x <= c.rect.x + c.rect.z
-                   && ctx->mouse_pos.y >= c.rect.y && ctx->mouse_pos.y <= c.rect.y + c.rect.w;
-        if ( !inside ) continue;
+        if ( !vxui_hit_rect( c, ctx->mouse_pos ) ) continue;
         c.state |= VXUI_DRAW_HOVERED;
         if ( c.id == ctx->mouse_press_row_id ) c.state |= VXUI_DRAW_PRESSED;
     }

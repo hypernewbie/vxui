@@ -72,6 +72,23 @@ static menu_fire menu_frame( vxui_ctx* ctx, float mx, float my, uint32_t mb )
     return r;
 }
 
+// Three-action menu with two visible rows: "Quit" sits below the scroll clip.
+static bool scroll_menu_frame( vxui_ctx* ctx, float mx, float my, uint32_t mb )
+{
+    vxui_frame( ctx, 1.0f / 60.0f );
+    vxui_mouse( ctx, mx, my, mb );
+    bool fired = false;
+    if ( vxui_menu( ctx, "scroll", true, 2 ) )
+    {
+        vxui_menu_action( ctx, "Play" );
+        vxui_menu_action( ctx, "Options" );
+        if ( vxui_menu_action( ctx, "Quit" ) ) fired = true;
+        vxui_menu_end( ctx );
+    }
+    vxui_render( ctx );
+    return fired;
+}
+
 UTEST(mouse, default_sentinel_no_hover) {
     vxui_ctx ctx;
     init_ctx( &ctx );
@@ -376,6 +393,37 @@ UTEST(mouse, press_then_move_back_then_release_fires) {
     menu_fire fire = menu_frame( &ctx, px, py, 0 );
 
     ASSERT_TRUE( fire.play );
+}
+
+UTEST(mouse, row_below_scroll_clip_not_hovered) {
+    vxui_ctx ctx;
+    init_ctx_with_font( &ctx );
+
+    scroll_menu_frame( &ctx, FLT_MAX, FLT_MAX, 0 );
+    const vxui_draw_cmd* quit = vxui_draw_find( ctx.draw_list, VXUI_DRAW_RECT, row_id( "scroll", "Quit" ) );
+    ASSERT_TRUE( quit != nullptr );
+    float qx = quit->rect.x + 5.0f;
+    float qy = quit->rect.y + quit->rect.w * 0.5f;
+
+    scroll_menu_frame( &ctx, qx, qy, 0 );
+    const vxui_draw_cmd* quit2 = vxui_draw_find( ctx.draw_list, VXUI_DRAW_RECT, row_id( "scroll", "Quit" ) );
+    ASSERT_TRUE( quit2 != nullptr );
+    ASSERT_EQ( quit2->state & VXUI_DRAW_HOVERED, (uint8_t) 0 );
+}
+
+UTEST(mouse, click_on_row_below_scroll_clip_no_fire) {
+    vxui_ctx ctx;
+    init_ctx_with_font( &ctx );
+
+    scroll_menu_frame( &ctx, FLT_MAX, FLT_MAX, 0 );
+    const vxui_draw_cmd* quit = vxui_draw_find( ctx.draw_list, VXUI_DRAW_RECT, row_id( "scroll", "Quit" ) );
+    ASSERT_TRUE( quit != nullptr );
+    float qx = quit->rect.x + 5.0f;
+    float qy = quit->rect.y + quit->rect.w * 0.5f;
+
+    scroll_menu_frame( &ctx, qx, qy, VXUI_MOUSE_LEFT );
+    scroll_menu_frame( &ctx, qx, qy, 0 );
+    ASSERT_FALSE( scroll_menu_frame( &ctx, qx, qy, 0 ) );
 }
 
 UTEST_MAIN();
