@@ -44,7 +44,10 @@ uint32_t vxui_gl_create_testcard_texture();
 #define DEMO_GL_PASS_ROUND         19
 #define DEMO_GL_PASS_OUTLINE       20
 #define DEMO_GL_PASS_IMAGE         21
+#define DEMO_GL_PASS_SCISSOR_SET   22
+#define DEMO_GL_PASS_SCISSOR_RESET 23
 #define DEMO_GL_MAX_MATERIAL_DCALLS 64
+#define DEMO_GL_MAX_SCISSOR_DCALLS  512
 
 static_assert( DEMO_GL_PASS_RECT > VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH_RESOLVE, "demo passes must not overlap VEFC" );
 
@@ -72,6 +75,9 @@ struct vxui_gl_state
 
     vxui_gl_material_data material_data[DEMO_GL_MAX_MATERIAL_DCALLS] = {};
     int                   material_data_count                         = 0;
+
+    glm::vec4 scissor_data[DEMO_GL_MAX_SCISSOR_DCALLS] = {};
+    int       scissor_data_count                       = 0;
 };
 
 // VEFC text shaders, byte-identical to vefc/demo/demo.cpp.
@@ -600,7 +606,6 @@ static void vxui_gl_push_material_quad( ve_fontcache_drawlist* dl, vxui_gl_state
 
 static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, const vxui_draw_cmd* c, float px, float py, float fb_w, float fb_h, vxui_gl_xform xf )
 {
-    // TODO: trim the quad to c->clip (same pattern as vxui_gl_emit_text)
     float sw = c->rect.z * xf.scale;
     float sh = c->rect.w * xf.scale;
 
@@ -675,6 +680,40 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
     }
 }
 
+// Clip rect in layout space -> glScissor-ready normalized rect (origin bottom-left).
+static glm::vec4 vxui_gl_scissor_rect( const vxui_draw_cmd* c, float w, float h, vxui_gl_xform xf )
+{
+    float x0 = xf.offset.x + c->clip.x * xf.scale;
+    float y0 = xf.offset.y + c->clip.y * xf.scale;
+    float x1 = x0 + c->clip.z * xf.scale;
+    float y1 = y0 + c->clip.w * xf.scale;
+    return { x0 / w, 1.0f - y1 / h, ( x1 - x0 ) / w, ( y1 - y0 ) / h };
+}
+
+// Zero-index markers: the dispatcher applies scissor state, so clipped rects
+// and glyphs share one mechanism instead of trimming each quad.
+static void vxui_gl_push_scissor_set( ve_fontcache_drawlist* dl, vxui_gl_state* gl, const glm::vec4& scissor )
+{
+    assert( gl->scissor_data_count < DEMO_GL_MAX_SCISSOR_DCALLS );
+    gl->scissor_data[gl->scissor_data_count] = scissor;
+
+    ve_fontcache_draw dcall;
+    dcall.pass        = DEMO_GL_PASS_SCISSOR_SET;
+    dcall.start_index = (uint32_t) dl->indices.size();
+    dcall.end_index   = dcall.start_index;
+    dcall.region      = (uint32_t) gl->scissor_data_count++;
+    dl->dcalls.push_back( dcall );
+}
+
+static void vxui_gl_push_scissor_reset( ve_fontcache_drawlist* dl )
+{
+    ve_fontcache_draw dcall;
+    dcall.pass        = DEMO_GL_PASS_SCISSOR_RESET;
+    dcall.start_index = (uint32_t) dl->indices.size();
+    dcall.end_index   = dcall.start_index;
+    dl->dcalls.push_back( dcall );
+}
+
 static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf )
 {
     int rect_n = vxui_draw_count( dl, VXUI_DRAW_RECT );
@@ -686,7 +725,9 @@ static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, c
         if ( c->state & VXUI_DRAW_FOCUSED ) continue;
         float px = xf.offset.x + c->rect.x * xf.scale;
         float py = xf.offset.y + c->rect.y * xf.scale;
+        if ( c->clipped ) vxui_gl_push_scissor_set( fdl, gl, vxui_gl_scissor_rect( c, w, h, xf ) );
         vxui_gl_emit_one_rect( fdl, gl, c, px, py, w, h, xf );
+        if ( c->clipped ) vxui_gl_push_scissor_reset( fdl );
     }
 
     for ( int i = 0; i < rect_n; i++ )
@@ -695,17 +736,20 @@ static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, c
         if ( !( c->state & VXUI_DRAW_FOCUSED ) ) continue;
         float px = xf.offset.x + c->rect.x * xf.scale;
         float py = xf.offset.y + ( c->rect.y + c->focus_offset_y ) * xf.scale;
+        if ( c->clipped ) vxui_gl_push_scissor_set( fdl, gl, vxui_gl_scissor_rect( c, w, h, xf ) );
         vxui_gl_emit_one_rect( fdl, gl, c, px, py, w, h, xf );
+        if ( c->clipped ) vxui_gl_push_scissor_reset( fdl );
     }
 }
 
-static void vxui_gl_emit_text( vxui_text_state* st, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf )
+static void vxui_gl_emit_text( vxui_gl_state* gl, vxui_text_state* st, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf )
 {
     int text_n = vxui_draw_count( dl, VXUI_DRAW_TEXT );
     if ( text_n <= 0 ) return;
 
     ve_fontcache_configure_snap( &st->cache, (unsigned) w, (unsigned) h );
 
+    ve_fontcache_drawlist* fdl = ve_fontcache_get_drawlist( &st->cache );
     float inv_w = 1.0f / w;
     float inv_h = 1.0f / h;
 
@@ -731,7 +775,9 @@ static void vxui_gl_emit_text( vxui_text_state* st, const vxui_draw_list& dl, fl
         float sy   = xf.offset.y + c->rect.y * xf.scale;
         float posx = sx * inv_w;
         float posy = 1.0f - ( sy + font_px ) * inv_h;   // VEFC pen = baseline, y-up
+        if ( c->clipped ) vxui_gl_push_scissor_set( fdl, gl, vxui_gl_scissor_rect( c, w, h, xf ) );
         ve_fontcache_draw_text( &st->cache, font, text, posx, posy, inv_w, inv_h );
+        if ( c->clipped ) vxui_gl_push_scissor_reset( fdl );
     }
 }
 
@@ -761,9 +807,28 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
 
     glDisable( GL_CULL_FACE );
 
+    // UI clips arrive as scissor markers. Window passes reapply this rect because
+    // glyph and atlas passes set their own.
+    glm::ivec4 scissor = { 0, 0, win_w, win_h };
+    glEnable( GL_SCISSOR_TEST );
+    glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
+
     for ( ve_fontcache_draw& dcall : drawlist->dcalls )
     {
-        if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH )
+        if ( dcall.pass == DEMO_GL_PASS_SCISSOR_SET )
+        {
+            int mi = (int) dcall.region;
+            assert( mi >= 0 && mi < gl->scissor_data_count );
+            const glm::vec4& s = gl->scissor_data[mi];
+            scissor = { (int) ( s.x * win_w ), (int) ( s.y * win_h ), (int) ( s.z * win_w ), (int) ( s.w * win_h ) };
+            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
+        }
+        else if ( dcall.pass == DEMO_GL_PASS_SCISSOR_RESET )
+        {
+            scissor = { 0, 0, win_w, win_h };
+            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
+        }
+        else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH )
         {
             glUseProgram( gl->shader_render_glyph );
             glBindFramebuffer( GL_FRAMEBUFFER, gl->fbo[0] );
@@ -817,7 +882,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
-            glScissor( 0, 0, win_w, win_h );
+            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform1i( glGetUniformLocation( gl->shader_draw_text, "src_texture" ), 0 );
             glUniform1ui( glGetUniformLocation( gl->shader_draw_text, "downsample" ), dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED ? 1u : 0u );
             glActiveTexture( GL_TEXTURE0 );
@@ -834,7 +899,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
-            glScissor( 0, 0, win_w, win_h );
+            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_rect, "colour" ), 1, dcall.colour );
             glEnable( GL_FRAMEBUFFER_SRGB );
         }
@@ -847,7 +912,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
-            glScissor( 0, 0, win_w, win_h );
+            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_rect_textured, "colour" ), 1, dcall.colour );
             glUniform1i( glGetUniformLocation( gl->shader_rect_textured, "src_texture" ), 0 );
             glActiveTexture( GL_TEXTURE0 );
@@ -863,7 +928,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
-            glScissor( 0, 0, win_w, win_h );
+            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_image, "colour" ), 1, dcall.colour );
             glUniform1i( glGetUniformLocation( gl->shader_image, "src_texture" ), 0 );
             glActiveTexture( GL_TEXTURE0 );
@@ -879,7 +944,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
-            glScissor( 0, 0, win_w, win_h );
+            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_crt, "colour" ), 1, dcall.colour );
             int mi = (int) dcall.region;
             assert( mi >= 0 && mi < gl->material_data_count );
@@ -896,7 +961,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
-            glScissor( 0, 0, win_w, win_h );
+            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_round, "colour" ), 1, dcall.colour );
             int mi = (int) dcall.region;
             assert( mi >= 0 && mi < gl->material_data_count );
@@ -912,7 +977,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
             glViewport( 0, 0, win_w, win_h );
-            glScissor( 0, 0, win_w, win_h );
+            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_outline, "colour" ), 1, dcall.colour );
             int mi = (int) dcall.region;
             assert( mi >= 0 && mi < gl->material_data_count );
@@ -941,6 +1006,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
 
     glDeleteBuffers( 1, &vbo );
     glDeleteBuffers( 1, &ibo );
+    glDisable( GL_SCISSOR_TEST );
     glBindFramebuffer( GL_FRAMEBUFFER, 0 );
     glBindVertexArray( 0 );
     ve_fontcache_flush_drawlist( cache );
@@ -957,8 +1023,9 @@ void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h, 
     ve_fontcache_drawlist* fdl = ve_fontcache_get_drawlist( &st->cache );
 
     gl->material_data_count = 0;
+    gl->scissor_data_count  = 0;
     vxui_gl_emit_rects( fdl, gl, dl, w, h, xf );
-    vxui_gl_emit_text ( st, dl, w, h, xf );
+    vxui_gl_emit_text ( gl, st, dl, w, h, xf );
     vxui_gl_execute   ( gl, &st->cache, (int) w, (int) h );
 }
 

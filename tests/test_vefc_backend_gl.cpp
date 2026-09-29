@@ -169,6 +169,31 @@ UTEST(vefc_backend_gl, full_suite_passes) {
     glReadPixels( win_w / 2, win_h / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel );
     EXPECT_TRUE( pixel[0] > 200 && pixel[1] < 10 && pixel[2] < 10 && pixel[3] > 200 );
 
+    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+    glClearColor( 0, 0, 0, 0 );
+    glClear( GL_COLOR_BUFFER_BIT );
+
+    // Quad is 400x400 px, clip covers its left half: the right half must stay clear.
+    vxui_draw_cmd clipped  = {};
+    clipped.type           = VXUI_DRAW_RECT;
+    clipped.rect           = { 0, 0, 400, 400 };
+    clipped.clipped        = true;
+    clipped.clip           = { 0, 0, 200, 400 };
+    clipped.render.colour  = { 0, 1, 0, 1 };
+    vxui_draw_list dl      = { &clipped, 1 };
+
+    gl->scissor_data_count = 0;
+    vxui_gl_emit_rects( ve_fontcache_get_drawlist( &cache ), gl, dl, win_w, win_h, {} );
+    vxui_gl_execute( gl, &cache, win_w, win_h );
+
+    uint8_t inside[4] = {};
+    glReadPixels( 100, win_h - 100, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, inside );
+    EXPECT_TRUE( inside[1] > 200 && inside[0] < 10 );
+
+    uint8_t outside[4] = {};
+    glReadPixels( 300, win_h - 100, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, outside );
+    EXPECT_TRUE( outside[3] < 10 );
+
     vxui_gl_shutdown( &stub );
     ve_fontcache_shutdown( &cache );
     glfwDestroyWindow( window );
