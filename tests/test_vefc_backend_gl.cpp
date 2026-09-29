@@ -183,7 +183,7 @@ UTEST(vefc_backend_gl, full_suite_passes) {
     vxui_draw_list dl      = { &clipped, 1 };
 
     gl->scissor_data_count = 0;
-    vxui_gl_emit_rects( ve_fontcache_get_drawlist( &cache ), gl, dl, win_w, win_h, {} );
+    vxui_gl_emit( ve_fontcache_get_drawlist( &cache ), gl, &cache, -1, dl, win_w, win_h, {} );
     vxui_gl_execute( gl, &cache, win_w, win_h );
 
     uint8_t inside[4] = {};
@@ -193,6 +193,63 @@ UTEST(vefc_backend_gl, full_suite_passes) {
     uint8_t outside[4] = {};
     glReadPixels( 300, win_h - 100, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, outside );
     EXPECT_TRUE( outside[3] < 10 );
+
+    glClear( GL_COLOR_BUFFER_BIT );
+
+    // Producer order survives the walk: red is focused and declared first, green second.
+    vxui_draw_cmd order[2]  = {};
+    order[0].type           = VXUI_DRAW_RECT;
+    order[0].state          = VXUI_DRAW_FOCUSED;
+    order[0].rect           = { 0, 0, 400, 400 };
+    order[0].render.colour  = { 1, 0, 0, 1 };
+    order[1].type           = VXUI_DRAW_RECT;
+    order[1].rect           = { 0, 0, 400, 400 };
+    order[1].render.colour  = { 0, 1, 0, 1 };
+    vxui_draw_list order_dl = { order, 2 };
+
+    gl->material_data_count = 0;
+    gl->scissor_data_count  = 0;
+    vxui_gl_emit( ve_fontcache_get_drawlist( &cache ), gl, &cache, -1, order_dl, win_w, win_h, {} );
+    vxui_gl_execute( gl, &cache, win_w, win_h );
+
+    uint8_t top[4] = {};
+    glReadPixels( 200, win_h - 200, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, top );
+    EXPECT_TRUE( top[1] > 200 && top[0] < 10 );
+
+    // Mixed types keep their relative order too: rect, text, rect.
+    ve_fontcache_flush_drawlist( &cache );
+
+    ve_font_id font2 = ve_fontcache_load( &cache, bytes.data(), bytes.size(), 24.0f );
+    ASSERT_GE( font2, 1 );
+
+    vxui_draw_cmd mixed[3]  = {};
+    mixed[0].type           = VXUI_DRAW_RECT;
+    mixed[0].rect           = { 0, 0, 40, 40 };
+    mixed[0].render.colour  = { 1, 1, 1, 1 };
+    mixed[1].type           = VXUI_DRAW_TEXT;
+    mixed[1].rect           = { 0, 0, 40, 24 };
+    mixed[1].font           = (uint16_t) font2;
+    mixed[1].font_px        = 24;
+    mixed[1].text           = "Hi";
+    mixed[1].text_len       = 2;
+    mixed[2].type           = VXUI_DRAW_RECT;
+    mixed[2].rect           = { 0, 0, 40, 40 };
+    mixed[2].render.colour  = { 1, 1, 1, 1 };
+    vxui_draw_list mixed_dl = { mixed, 3 };
+
+    gl->material_data_count = 0;
+    gl->scissor_data_count  = 0;
+    vxui_gl_emit( ve_fontcache_get_drawlist( &cache ), gl, &cache, -1, mixed_dl, win_w, win_h, {} );
+
+    ve_fontcache_drawlist* emitted = ve_fontcache_get_drawlist( &cache );
+    int first_rect = -1, first_text = -1, last_rect = -1;
+    for ( int i = 0; i < (int) emitted->dcalls.size(); i++ )
+    {
+        uint32_t pass = emitted->dcalls[i].pass;
+        if ( pass == DEMO_GL_PASS_RECT ) { if ( first_rect < 0 ) first_rect = i; last_rect = i; }
+        if ( pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET && first_text < 0 ) first_text = i;
+    }
+    EXPECT_TRUE( first_rect >= 0 && first_text > first_rect && last_rect > first_text );
 
     vxui_gl_shutdown( &stub );
     ve_fontcache_shutdown( &cache );

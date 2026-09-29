@@ -714,49 +714,29 @@ static void vxui_gl_push_scissor_reset( ve_fontcache_drawlist* dl )
     dl->dcalls.push_back( dcall );
 }
 
-static void vxui_gl_emit_rects( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf )
+// One walk in producer order: Clay's command array is already sorted for drawing.
+static void vxui_gl_emit( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, ve_fontcache* cache, ve_font_id default_font, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf )
 {
-    int rect_n = vxui_draw_count( dl, VXUI_DRAW_RECT );
-    if ( rect_n <= 0 ) return;
+    ve_fontcache_configure_snap( cache, (unsigned) w, (unsigned) h );
 
-    for ( int i = 0; i < rect_n; i++ )
-    {
-        const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
-        if ( c->state & VXUI_DRAW_FOCUSED ) continue;
-        float px = xf.offset.x + c->rect.x * xf.scale;
-        float py = xf.offset.y + c->rect.y * xf.scale;
-        if ( c->clipped ) vxui_gl_push_scissor_set( fdl, gl, vxui_gl_scissor_rect( c, w, h, xf ) );
-        vxui_gl_emit_one_rect( fdl, gl, c, px, py, w, h, xf );
-        if ( c->clipped ) vxui_gl_push_scissor_reset( fdl );
-    }
-
-    for ( int i = 0; i < rect_n; i++ )
-    {
-        const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, i );
-        if ( !( c->state & VXUI_DRAW_FOCUSED ) ) continue;
-        float px = xf.offset.x + c->rect.x * xf.scale;
-        float py = xf.offset.y + ( c->rect.y + c->focus_offset_y ) * xf.scale;
-        if ( c->clipped ) vxui_gl_push_scissor_set( fdl, gl, vxui_gl_scissor_rect( c, w, h, xf ) );
-        vxui_gl_emit_one_rect( fdl, gl, c, px, py, w, h, xf );
-        if ( c->clipped ) vxui_gl_push_scissor_reset( fdl );
-    }
-}
-
-static void vxui_gl_emit_text( vxui_gl_state* gl, vxui_text_state* st, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf )
-{
-    int text_n = vxui_draw_count( dl, VXUI_DRAW_TEXT );
-    if ( text_n <= 0 ) return;
-
-    ve_fontcache_configure_snap( &st->cache, (unsigned) w, (unsigned) h );
-
-    ve_fontcache_drawlist* fdl = ve_fontcache_get_drawlist( &st->cache );
     float inv_w = 1.0f / w;
     float inv_h = 1.0f / h;
 
-    for ( int i = 0; i < text_n; i++ )
+    for ( int i = 0; i < dl.count; i++ )
     {
-        const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_TEXT, i );
-        ve_font_id font = ( c->font != 0 ) ? (ve_font_id) c->font : st->default_font;
+        const vxui_draw_cmd* c = &dl.cmds[i];
+
+        if ( c->type == VXUI_DRAW_RECT )
+        {
+            float px = xf.offset.x + c->rect.x * xf.scale;
+            float py = xf.offset.y + ( c->rect.y + ( ( c->state & VXUI_DRAW_FOCUSED ) ? c->focus_offset_y : 0.0f ) ) * xf.scale;
+            if ( c->clipped ) vxui_gl_push_scissor_set( fdl, gl, vxui_gl_scissor_rect( c, w, h, xf ) );
+            vxui_gl_emit_one_rect( fdl, gl, c, px, py, w, h, xf );
+            if ( c->clipped ) vxui_gl_push_scissor_reset( fdl );
+            continue;
+        }
+
+        ve_font_id font = ( c->font != 0 ) ? (ve_font_id) c->font : default_font;
         if ( font < 0 || c->text_len <= 0 ) continue;
 
         glm::vec4 col = c->render.colour;
@@ -767,8 +747,8 @@ static void vxui_gl_emit_text( vxui_gl_state* gl, vxui_text_state* st, const vxu
         // unique font size every frame and thrash the VEFC glyph cache.
         float quant_scale = glm::round( xf.scale * 4.0f ) / 4.0f;
         float font_px     = (float) c->font_px * quant_scale;
-        ve_fontcache_set_colour   ( &st->cache, text_colour );
-        ve_fontcache_set_font_size( &st->cache, font, font_px );
+        ve_fontcache_set_colour   ( cache, text_colour );
+        ve_fontcache_set_font_size( cache, font, font_px );
 
         std::u8string text( (const char8_t*) c->text, (size_t) c->text_len );
         float sx   = xf.offset.x + c->rect.x * xf.scale;
@@ -776,7 +756,7 @@ static void vxui_gl_emit_text( vxui_gl_state* gl, vxui_text_state* st, const vxu
         float posx = sx * inv_w;
         float posy = 1.0f - ( sy + font_px ) * inv_h;   // VEFC pen = baseline, y-up
         if ( c->clipped ) vxui_gl_push_scissor_set( fdl, gl, vxui_gl_scissor_rect( c, w, h, xf ) );
-        ve_fontcache_draw_text( &st->cache, font, text, posx, posy, inv_w, inv_h );
+        ve_fontcache_draw_text( cache, font, text, posx, posy, inv_w, inv_h );
         if ( c->clipped ) vxui_gl_push_scissor_reset( fdl );
     }
 }
@@ -1024,9 +1004,8 @@ void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h, 
 
     gl->material_data_count = 0;
     gl->scissor_data_count  = 0;
-    vxui_gl_emit_rects( fdl, gl, dl, w, h, xf );
-    vxui_gl_emit_text ( gl, st, dl, w, h, xf );
-    vxui_gl_execute   ( gl, &st->cache, (int) w, (int) h );
+    vxui_gl_emit( fdl, gl, &st->cache, st->default_font, dl, w, h, xf );
+    vxui_gl_execute( gl, &st->cache, (int) w, (int) h );
 }
 
 void vxui_gl_shutdown( vxui_ctx* ctx )
