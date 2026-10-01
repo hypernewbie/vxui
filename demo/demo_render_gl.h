@@ -743,10 +743,7 @@ static void vxui_gl_emit( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, ve_font
         if ( col.a <= 0.0f ) col = { 0.95f, 0.95f, 0.95f, 1.0f };
         float text_colour[4] = { col.r, col.g, col.b, col.a };
 
-        // Quantise to 0.25 steps so continuous window resize doesn't produce a
-        // unique font size every frame and thrash the VEFC glyph cache.
-        float quant_scale = glm::round( xf.scale * 4.0f ) / 4.0f;
-        float font_px     = (float) c->font_px * quant_scale;
+        float font_px = (float) c->font_px * xf.scale;
         ve_fontcache_set_colour   ( cache, text_colour );
         ve_fontcache_set_font_size( cache, font, font_px );
 

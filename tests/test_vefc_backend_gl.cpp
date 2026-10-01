@@ -42,6 +42,78 @@ static std::vector< uint8_t > roboto_bytes()
     return buf;
 }
 
+UTEST(vefc_backend_gl, text_uses_exact_layout_scale) {
+    ve_fontcache cache = {};
+    ve_fontcache_init( &cache, false );
+    std::vector< uint8_t > bytes = roboto_bytes();
+    uint16_t sizes[] = { 17, 24, 36 };
+    ve_font_id fonts[3] = {};
+    for ( int i = 0; i < 3; i++ )
+    {
+        fonts[i] = ve_fontcache_load( &cache, bytes.data(), bytes.size(), (float) sizes[i] );
+        ASSERT_GE( fonts[i], 0 );
+    }
+
+    vxui_gl_state gl = {};
+    float scales[] = { 1.0f, 1.125f, 0.875f, 0.625f, 1.3f, 2.1f };
+    for ( int i = 0; i < 6; i++ )
+    {
+        for ( int j = 0; j < 3; j++ )
+        {
+            ve_fontcache_flush_drawlist( &cache );
+            vxui_draw_cmd c = {};
+            c.type          = VXUI_DRAW_TEXT;
+            c.rect          = { 20, 30, 40, (float) sizes[j] };
+            c.font          = (uint16_t) fonts[j];
+            c.font_px       = sizes[j];
+            c.text          = "Hi";
+            c.text_len      = 2;
+            vxui_draw_list dl = { &c, 1 };
+            vxui_gl_xform  xf = { { 10, 20 }, scales[i] };
+            vxui_gl_emit( ve_fontcache_get_drawlist( &cache ), &gl, &cache, fonts[0], dl, 1280, 720, xf );
+
+            EXPECT_NEAR( cache.entry[fonts[j]].size, c.rect.w * xf.scale, 1e-5f );
+            int targets = 0;
+            ve_fontcache_drawlist* emitted = ve_fontcache_get_drawlist( &cache );
+            for ( int k = 0; k < (int) emitted->dcalls.size(); k++ )
+                if ( emitted->dcalls[k].pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET ) targets++;
+            EXPECT_GT( targets, 0 );
+        }
+    }
+    ve_fontcache_shutdown( &cache );
+}
+
+UTEST(vefc_backend_gl, text_baseline_matches_scaled_box_bottom) {
+    ve_fontcache cache = {};
+    ve_fontcache_init( &cache, false );
+    std::vector< uint8_t > bytes = roboto_bytes();
+    ve_font_id font = ve_fontcache_load( &cache, bytes.data(), bytes.size(), 24.0f );
+    ASSERT_GE( font, 0 );
+
+    vxui_gl_state gl = {};
+    vxui_draw_cmd cmds[2] = {};
+    cmds[0].type          = VXUI_DRAW_RECT;
+    cmds[0].rect          = { 8, 16, 40, 24 };
+    cmds[0].render.colour = { 1, 0, 0, 1 };
+    cmds[1].type          = VXUI_DRAW_TEXT;
+    cmds[1].rect          = cmds[0].rect;
+    cmds[1].font_px       = 24;
+    cmds[1].text          = "Hi";
+    cmds[1].text_len      = 2;
+    vxui_draw_list dl = { cmds, 2 };
+    vxui_gl_xform  xf = { { 10, 20 }, 1.125f };
+    vxui_gl_emit( ve_fontcache_get_drawlist( &cache ), &gl, &cache, font, dl, 1280, 720, xf );
+
+    ve_fontcache_drawlist* emitted = ve_fontcache_get_drawlist( &cache );
+    ASSERT_GE( emitted->vertices.size(), (size_t) 4 );
+    ASSERT_GT( emitted->dcalls.size(), (size_t) 1 );
+    ASSERT_EQ( emitted->dcalls[0].pass, DEMO_GL_PASS_RECT );
+    EXPECT_NEAR( cache.entry[font].size, 27.0f, 1e-5f );
+    EXPECT_NEAR( emitted->vertices[2].y, 1.0f - 65.0f / 720.0f, 1e-6f );
+    EXPECT_NEAR( ve_fontcache_get_cursor_pos( &cache ).y, emitted->vertices[2].y, 1e-6f );
+    ve_fontcache_shutdown( &cache );
+}
+
 UTEST(vefc_backend_gl, full_suite_passes) {
     if ( !glfwInit() )
     {
