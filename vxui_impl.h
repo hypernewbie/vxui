@@ -799,21 +799,10 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
     assert( ctx && ctx->active_menu >= 0 );
     assert( value && mn < mx && step > 0.0f );
 
-    // Visible bar + percentage: 8 cells filled by t = (value - mn) / (mx - mn).
-    // Not a slider widget, just a readable summary that sits on the right of the row.
-    float t      = glm::clamp( ( *value - mn ) / ( mx - mn ), 0.0f, 1.0f );
-    int   filled = (int) ( t * 8.0f + 0.5f );
-    char  bar[9];
-    for ( int i = 0; i < 8; i++ ) bar[i] = i < filled ? '#' : '-';
-    bar[8] = 0;
-    char value_buf[32];
-    snprintf( value_buf, sizeof( value_buf ), "[%s] %d%%", bar, (int) ( t * 100.0f + 0.5f ) );
-
-    bool focused = vxui_menu_row_interactive( ctx, label, true );
-    vxui_menu_close_row( ctx, value_buf );
+    bool focused = vxui_menu_row_interactive( ctx, label );
+    vxui_menu_close_row( ctx );
     if ( !focused ) return false;
     // TODO: PRESSED state on confirm-held mirror, see vxui_menu_action.
-    // TODO: format value after input (same pattern as vxui_menu_option via vxui_menu_close_row).
 
     float prev = *value;
 
