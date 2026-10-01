@@ -641,7 +641,7 @@ bool vxui_menu( vxui_ctx* ctx, const char* id, bool wrap, int max_visible, bool 
     return true;
 }
 
-static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, const char* value = nullptr )
+static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, bool has_value = false )
 {
     // Composite id: menu hash as seed so same label in different menus doesn't collide.
     // Identity uses label only; value text can change every frame without remounting focus.
@@ -660,9 +660,7 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, const char
     ctx->frame_row_indices        [fr] = ctx->active_menu_row;
     ctx->frame_row_menu_indices   [fr] = ctx->active_menu;
 
-    bool fill      = ctx->active_menu_fill;
-    bool has_value = value && *value;
-    int  value_len = has_value ? (int) strlen( value ) : 0;
+    bool fill = ctx->active_menu_fill;
 
     Clay__OpenElementWithId( eid );
 
@@ -689,13 +687,22 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, const char
         CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontSize = (uint16_t) VXUI_FONT_SIZE_DEFAULT } ) );
     }
 
+    return eid.id;
+}
+
+static void vxui_menu_close_row( vxui_ctx* ctx, const char* value = nullptr )
+{
+    bool fill      = ctx->active_menu_fill;
+    bool has_value = value && *value;
+    int  value_len = has_value ? (int) strlen( value ) : 0;
+
     // Optional value text. In fill rows a grow-spacer pushes it to the right
     // edge; in FIT rows it sits next to the label with childGap of 8.
     if ( has_value )
     {
         if ( fill )
         {
-            Clay_ElementId spacer_eid = Clay__HashString( CLAY_STRING( "spacer" ), eid.id );
+            Clay_ElementId spacer_eid = Clay__HashString( CLAY_STRING( "spacer" ), Clay__GetOpenLayoutElement()->id );
             Clay__OpenElementWithId( spacer_eid );
 
             Clay_ElementDeclaration spacer = {};
@@ -715,13 +722,11 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, const char
     }
 
     Clay__CloseElement();
-
-    return eid.id;
 }
 
-static bool vxui_menu_row_interactive( vxui_ctx* ctx, const char* label, const char* value = nullptr )
+static bool vxui_menu_row_interactive( vxui_ctx* ctx, const char* label, bool has_value = false )
 {
-    uint32_t row_id = vxui_menu_open_row( ctx, label, value );
+    uint32_t row_id = vxui_menu_open_row( ctx, label, has_value );
 
     glm::uvec4& m       = ctx->menu_state[ctx->active_menu];
     uint32_t&   current = m.y;
@@ -748,7 +753,9 @@ static bool vxui_menu_row_interactive( vxui_ctx* ctx, const char* label, const c
 bool vxui_menu_action( vxui_ctx* ctx, const char* label )
 {
     assert( ctx && ctx->active_menu >= 0 );
-    if ( !vxui_menu_row_interactive( ctx, label ) ) return false;
+    bool focused = vxui_menu_row_interactive( ctx, label );
+    vxui_menu_close_row( ctx );
+    if ( !focused ) return false;
 
     bool kbd_held   = ( ctx->input & VXUI_INPUT_CONFIRM ) != 0;
     bool kbd_fire   = ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CONFIRM ) != 0;
@@ -766,22 +773,23 @@ bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char*
 {
     assert( ctx && ctx->active_menu >= 0 );
     assert( index && options && count > 0 );
+    assert( *index >= 0 && *index < count );
 
-    int  safe_idx = ( *index < 0 ) ? 0 : ( *index >= count ? count - 1 : *index );
-    char value_buf[64];
-    snprintf( value_buf, sizeof( value_buf ), "< %s >", options[safe_idx] );
-
-    if ( !vxui_menu_row_interactive( ctx, label, value_buf ) ) return false;
+    bool focused = vxui_menu_row_interactive( ctx, label, true );
     // TODO: PRESSED state on confirm-held mirror, see vxui_menu_action.
 
     int prev = *index;
+    if ( focused )
+    {
+        // DAS-repeat: hold cycles at VXUI_INPUT_DELAY/REPEAT, not every frame.
+        if ( ctx->input_repeated & VXUI_INPUT_RIGHT )
+            *index = ( *index + 1 ) % count;
 
-    // DAS-repeat: hold cycles at VXUI_INPUT_DELAY/REPEAT, not every frame.
-    if ( ctx->input_repeated & VXUI_INPUT_RIGHT )
-        *index = ( *index + 1 ) % count;
+        if ( ctx->input_repeated & VXUI_INPUT_LEFT )
+            *index = ( *index - 1 + count ) % count;
+    }
 
-    if ( ctx->input_repeated & VXUI_INPUT_LEFT )
-        *index = ( *index - 1 + count ) % count;
+    vxui_menu_close_row( ctx, options[*index] );
 
     return *index != prev;
 }
@@ -801,8 +809,11 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
     char value_buf[32];
     snprintf( value_buf, sizeof( value_buf ), "[%s] %d%%", bar, (int) ( t * 100.0f + 0.5f ) );
 
-    if ( !vxui_menu_row_interactive( ctx, label, value_buf ) ) return false;
+    bool focused = vxui_menu_row_interactive( ctx, label, true );
+    vxui_menu_close_row( ctx, value_buf );
+    if ( !focused ) return false;
     // TODO: PRESSED state on confirm-held mirror, see vxui_menu_action.
+    // TODO: format value after input (same pattern as vxui_menu_option via vxui_menu_close_row).
 
     float prev = *value;
 
@@ -820,6 +831,7 @@ void vxui_menu_section( vxui_ctx* ctx, const char* title )
 {
     assert( ctx && ctx->active_menu >= 0 );
     vxui_menu_open_row( ctx, title );
+    vxui_menu_close_row( ctx );
     ctx->active_menu_skip |= ( 1u << ctx->active_menu_row );
     ctx->active_menu_row++;
 }
@@ -828,6 +840,7 @@ void vxui_menu_label( vxui_ctx* ctx, const char* text )
 {
     assert( ctx && ctx->active_menu >= 0 );
     vxui_menu_open_row( ctx, text );
+    vxui_menu_close_row( ctx );
     ctx->active_menu_skip |= ( 1u << ctx->active_menu_row );
     ctx->active_menu_row++;
 }
