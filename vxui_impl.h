@@ -124,7 +124,7 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
     int       clip_depth                     = 0;
 
     int count = 0;
-    for ( int i = 0; i < cmds.length && count < VXUI_MAX_DRAW_CMDS; i++ )
+    for ( int i = 0; i < cmds.length; i++ )
     {
         Clay_RenderCommand* cmd = &cmds.internalArray[i];
 
@@ -150,6 +150,10 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             clip_depth--;
             continue;
         }
+
+        if ( cmd->commandType != CLAY_RENDER_COMMAND_TYPE_RECTANGLE && cmd->commandType != CLAY_RENDER_COMMAND_TYPE_TEXT ) continue;
+        assert( count < VXUI_MAX_DRAW_CMDS && "draw command capacity exceeded" );
+        if ( count >= VXUI_MAX_DRAW_CMDS ) break;
 
         glm::vec4 clip    = clip_depth > 0 ? clip_stack[clip_depth - 1] : glm::vec4{};
         bool      clipped = clip_depth > 0;
