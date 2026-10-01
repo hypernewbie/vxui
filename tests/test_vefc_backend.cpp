@@ -46,4 +46,6 @@ UTEST(vefc_backend, cpu_suites_pass) {
     ve_fontcache_shutdown( &cache );
 }
 
+#include "../vefc/tests/test_glyph_size.cpp"
+
 UTEST_MAIN();
