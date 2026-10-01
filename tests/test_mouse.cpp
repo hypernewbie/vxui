@@ -350,8 +350,12 @@ UTEST(mouse, click_on_unfocused_row_moves_focus_and_fires) {
 
     vxui_draw_list dl_post = ctx.draw_list;
     const vxui_draw_cmd* qrect = vxui_draw_find( dl_post, VXUI_DRAW_RECT, row_id( "test", "Quit" ) );
-    ASSERT_TRUE( qrect != nullptr );
+    const vxui_draw_cmd* play  = vxui_draw_find( dl_post, VXUI_DRAW_RECT, row_id( "test", "Play" ) );
+    ASSERT_TRUE( qrect && play );
     ASSERT_TRUE( ( qrect->state & VXUI_DRAW_FOCUSED ) != 0 );
+    ASSERT_EQ( play->state & VXUI_DRAW_FOCUSED, (uint8_t) 0 );
+    ASSERT_EQ( play->focused_row_index, 1 );
+    ASSERT_EQ( qrect->focused_row_index, 1 );
 }
 
 UTEST(mouse, hover_does_not_move_focus) {

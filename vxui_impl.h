@@ -216,7 +216,7 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         {
             if ( c.id != ctx->frame_row_ids[j] ) continue;
             c.row_index         = ctx->frame_row_indices[j];
-            c.focused_row_index = ctx->frame_row_focused_indices[j];
+            c.focused_row_index = (int) ctx->menu_state[ctx->frame_row_menu_indices[j]].y;
             break;
         }
     }
@@ -658,7 +658,7 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, const char
     int fr = ctx->frame_row_count++;
     ctx->frame_row_ids            [fr] = eid.id;
     ctx->frame_row_indices        [fr] = ctx->active_menu_row;
-    ctx->frame_row_focused_indices[fr] = (int) ctx->menu_state[ctx->active_menu].y;
+    ctx->frame_row_menu_indices   [fr] = ctx->active_menu;
 
     bool fill      = ctx->active_menu_fill;
     bool has_value = value && *value;
