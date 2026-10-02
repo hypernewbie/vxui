@@ -396,8 +396,7 @@ void vxui_hud_text_box( vxui_hud* hud, const char* id, const char* text, float w
 
     Clay__CloseElement();
 
-    // TODO: record text base (same pattern as vxui_hud_text)
-    vxui_hud_record( hud, vxui_text_id( id ), 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
+    vxui_hud_record( hud, vxui_text_id( id ), 0, { 0.0f, 0.0f, 1.0f, 1.0f }, text_len > 0 ? stable : nullptr );
 
     hud->y += h;
 }

@@ -256,7 +256,7 @@ UTEST(hud_text_lines, all_item_slots_resolve_without_per_line_records) {
     }
 }
 
-UTEST(hud_text_lines, text_box_id_matching_stays_deferred) {
+UTEST(hud_text_lines, text_box_newlines_resolve) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
     vxui_hud hud = {};
@@ -267,7 +267,7 @@ UTEST(hud_text_lines, text_box_id_matching_stays_deferred) {
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 2 );
     vxui_render_data out = {};
     ASSERT_TRUE( vxui_hud_resolve( &hud, vxui_draw_nth( dl, VXUI_DRAW_TEXT, 0 ), &out ) );
-    ASSERT_FALSE( vxui_hud_resolve( &hud, vxui_draw_nth( dl, VXUI_DRAW_TEXT, 1 ), &out ) );
+    ASSERT_TRUE( vxui_hud_resolve( &hud, vxui_draw_nth( dl, VXUI_DRAW_TEXT, 1 ), &out ) );
 }
 
 UTEST(hud_text_lines, every_line_carries_the_same_frame_owned_base) {
