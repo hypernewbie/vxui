@@ -166,6 +166,7 @@ struct vxui_draw_cmd
     glm::vec4        clip;            // x, y, w, h; intersected ancestors; w or h <= 0 = nothing visible
     float            focus_offset_y;  // VXUI-owned spring; nonzero only on FOCUSED RECT cmds
     const char*      text;            // null when type != TEXT; valid until next vxui_frame
+    const char*      text_base;       // full source text; same lifetime as text; not NUL-terminated
     int32_t          text_len;
     uint16_t         font;
     uint16_t         font_px;

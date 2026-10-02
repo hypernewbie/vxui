@@ -35,11 +35,12 @@
 
 struct vxui_hud_item
 {
-    uint32_t  id         = 0;
-    uint32_t  texture_id = 0;
-    int16_t   z          = 0;
-    glm::vec4 colour     = { 1.0f, 1.0f, 1.0f, 1.0f };
-    glm::vec4 uv         = { 0.0f, 0.0f, 1.0f, 1.0f };
+    uint32_t    id         = 0;
+    uint32_t    texture_id = 0;
+    const char* text_base  = nullptr;
+    int16_t     z          = 0;
+    glm::vec4   colour     = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glm::vec4   uv         = { 0.0f, 0.0f, 1.0f, 1.0f };
 };
 
 struct vxui_hud
@@ -83,12 +84,13 @@ bool      vxui_hud_resolve       ( const vxui_hud* hud, const vxui_draw_cmd* cmd
 #include "clay/clay.h"
 #include <cstdio>
 
-static void vxui_hud_record( vxui_hud* hud, uint32_t id, uint32_t texture_id, glm::vec4 uv )
+static void vxui_hud_record( vxui_hud* hud, uint32_t id, uint32_t texture_id, glm::vec4 uv, const char* text_base = nullptr )
 {
     assert( hud && hud->item_count < VXUI_HUD_MAX_ITEMS );
     int i = hud->item_count++;
     hud->items[i].id         = id;
     hud->items[i].texture_id = texture_id;
+    hud->items[i].text_base  = text_base;
     hud->items[i].z          = hud->z;
     hud->items[i].colour     = hud->colour;
     hud->items[i].uv         = uv;
@@ -359,7 +361,7 @@ void vxui_hud_text( vxui_hud* hud, const char* id, const char* text )
 
     Clay__CloseElement();
 
-    vxui_hud_record( hud, vxui_text_id( id ), 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
+    vxui_hud_record( hud, vxui_text_id( id ), 0, { 0.0f, 0.0f, 1.0f, 1.0f }, text_len > 0 ? stable : nullptr );
 
     hud->y += hud->font_px;
 }
@@ -394,6 +396,7 @@ void vxui_hud_text_box( vxui_hud* hud, const char* id, const char* text, float w
 
     Clay__CloseElement();
 
+    // TODO: record text base (same pattern as vxui_hud_text)
     vxui_hud_record( hud, vxui_text_id( id ), 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
 
     hud->y += h;
@@ -404,7 +407,7 @@ bool vxui_hud_resolve( const vxui_hud* hud, const vxui_draw_cmd* cmd, vxui_rende
     assert( hud && cmd && out );
     for ( int i = 0; i < hud->item_count; i++ )
     {
-        if ( hud->items[i].id != cmd->id ) continue;
+        if ( hud->items[i].text_base ? hud->items[i].text_base != cmd->text_base : hud->items[i].id != cmd->id ) continue;
         out->texture_id = hud->items[i].texture_id;
         out->uv         = hud->items[i].uv;
         out->colour     = hud->items[i].colour;
