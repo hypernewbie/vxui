@@ -18,7 +18,7 @@ static Clay_Dimensions measure_text( Clay_StringSlice s, Clay_TextElementConfig*
     return { (float) s.length * 8.0f, (float) cfg->fontSize };
 }
 
-static void init_ctx( vxui_ctx* ctx, vxui_hud* hud, demo_resolver_state* resolver )
+static void init_ctx( vxui_ctx* ctx, vxui_hud* hud, demo_resolver_state* resolver, uint32_t input )
 {
     *ctx = {};
     vxui_init( ctx, 200, 200, s_clay_mem, sizeof( s_clay_mem ) );
@@ -27,6 +27,7 @@ static void init_ctx( vxui_ctx* ctx, vxui_hud* hud, demo_resolver_state* resolve
     resolver->hud = hud;
     vxui_set_render_data_fn( ctx, demo_render_data, resolver );
     vxui_frame( ctx, 1.0f / 60.0f );
+    ctx->input = input;
     vxui_hud_begin( hud, ctx, 200, 200 );
 }
 
@@ -34,7 +35,7 @@ UTEST(demo_hud_image, wide_image_fills_declared_rectangle) {
     vxui_ctx ctx;
     vxui_hud hud = {};
     demo_resolver_state resolver;
-    init_ctx( &ctx, &hud, &resolver );
+    init_ctx( &ctx, &hud, &resolver, 0 );
     vxui_hud_set_pos( &hud, 10, 30 );
     vxui_hud_image( &hud, "image", 42, 100, 20 );
     vxui_draw_list dl = vxui_render( &ctx );
@@ -57,7 +58,7 @@ UTEST(demo_hud_image, tall_image_uses_layout_transform) {
     vxui_ctx ctx;
     vxui_hud hud = {};
     demo_resolver_state resolver;
-    init_ctx( &ctx, &hud, &resolver );
+    init_ctx( &ctx, &hud, &resolver, 0 );
     vxui_hud_set_pos( &hud, 10, 20 );
     vxui_hud_image( &hud, "image", 42, 20, 100 );
     vxui_draw_list dl = vxui_render( &ctx );
@@ -78,7 +79,7 @@ UTEST(demo_hud_image, image_keeps_uv_and_tint) {
     vxui_ctx ctx;
     vxui_hud hud = {};
     demo_resolver_state resolver;
-    init_ctx( &ctx, &hud, &resolver );
+    init_ctx( &ctx, &hud, &resolver, 0 );
     vxui_hud_set_colour( &hud, { 0.2f, 0.3f, 0.4f, 0.5f } );
     vxui_hud_image( &hud, "image", 42, 100, 20, { 0.1f, 0.2f, 0.7f, 0.8f } );
     vxui_draw_list dl = vxui_render( &ctx );
@@ -102,7 +103,7 @@ UTEST(demo_hud_image, untextured_hud_rectangle_stays_solid) {
     vxui_ctx ctx;
     vxui_hud hud = {};
     demo_resolver_state resolver;
-    init_ctx( &ctx, &hud, &resolver );
+    init_ctx( &ctx, &hud, &resolver, 0 );
     vxui_hud_image( &hud, "image", 0, 100, 20 );
     vxui_draw_list dl = vxui_render( &ctx );
 
@@ -119,7 +120,7 @@ UTEST(demo_hud_image, stock_slots_are_full_images) {
     vxui_ctx ctx;
     vxui_hud hud = {};
     demo_resolver_state resolver;
-    init_ctx( &ctx, &hud, &resolver );
+    init_ctx( &ctx, &hud, &resolver, 0 );
     vxui_hud_resource_stock( &hud, "stock", 42, 2, 40, 10, VXUI_HUD_STOCK_ROW, { 0, 0, 1, 1 }, 5 );
     vxui_draw_list dl = vxui_render( &ctx );
 
@@ -140,7 +141,7 @@ UTEST(demo_hud_image, resource_bar_keeps_partial_width_and_uv) {
     vxui_ctx ctx;
     vxui_hud hud = {};
     demo_resolver_state resolver;
-    init_ctx( &ctx, &hud, &resolver );
+    init_ctx( &ctx, &hud, &resolver, 0 );
     vxui_hud_resource_bar( &hud, "bar", 42, 0.5f, 100, 20, { 0.2f, 0, 0.8f, 1 } );
     vxui_draw_list dl = vxui_render( &ctx );
 
@@ -158,7 +159,7 @@ UTEST(demo_hud_image, menu_texture_keeps_marker_semantics) {
     vxui_ctx ctx;
     vxui_hud hud = {};
     demo_resolver_state resolver;
-    init_ctx( &ctx, &hud, &resolver );
+    init_ctx( &ctx, &hud, &resolver, 0 );
     resolver.focus_icon_texture = 42;
     if ( vxui_menu( &ctx, "menu" ) )
     {
@@ -181,7 +182,7 @@ UTEST(demo_hud_image, text_is_not_given_image_material) {
     vxui_ctx ctx;
     vxui_hud hud = {};
     demo_resolver_state resolver;
-    init_ctx( &ctx, &hud, &resolver );
+    init_ctx( &ctx, &hud, &resolver, 0 );
     vxui_hud_set_colour( &hud, { 0.2f, 0.3f, 0.4f, 1 } );
     vxui_hud_text( &hud, "text", "alpha\nbeta" );
     vxui_draw_list dl = vxui_render( &ctx );

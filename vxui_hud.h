@@ -36,7 +36,6 @@
 struct vxui_hud_item
 {
     uint32_t  texture_id = 0;
-    int16_t   z          = 0;
     glm::vec4 colour     = { 1.0f, 1.0f, 1.0f, 1.0f };
     glm::vec4 uv         = { 0.0f, 0.0f, 1.0f, 1.0f };
 };
@@ -87,7 +86,6 @@ static vxui_hud_item* vxui_hud_record( vxui_hud* hud, uint32_t texture_id, glm::
     assert( hud && hud->item_count < VXUI_HUD_MAX_ITEMS );
     int i = hud->item_count++;
     hud->items[i].texture_id = texture_id;
-    hud->items[i].z          = hud->z;
     hud->items[i].colour     = hud->colour;
     hud->items[i].uv         = uv;
     return &hud->items[i];
