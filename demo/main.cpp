@@ -356,10 +356,6 @@ static void demo_main_menu( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* win
 
 static void demo_operations_menu( vxui_ctx* ctx, demo_screen_state* s )
 {
-    int focused = demo_menu_focused( ctx, "operations" );
-    if ( focused < 0 || focused >= DEMO_MISSION_COUNT ) focused = 0;
-    const demo_mission& sel = s_demo_missions[focused];
-
     vxui_div ( ctx, "ops_row", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .gap = 6 } );
 
         vxui_div ( ctx, "ops_left", { .width = { VXUI_FIXED, 240 }, .height = { VXUI_GROW, 0 }, .col = true } );
@@ -378,6 +374,10 @@ static void demo_operations_menu( vxui_ctx* ctx, demo_screen_state* s )
             vxui_menu_end( ctx );
         }
         vxui_div_end( ctx );
+
+        int focused = demo_menu_focused( ctx, "operations" );
+        if ( focused < 0 || focused >= DEMO_MISSION_COUNT ) focused = 0;
+        const demo_mission& sel = s_demo_missions[focused];
 
         vxui_rect( ctx, "ops_preview", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 6, 6, 6, 6 }, .gap = 8 } );
 
@@ -399,6 +399,7 @@ static void demo_operations_menu( vxui_ctx* ctx, demo_screen_state* s )
 
 static void demo_stage_select( vxui_ctx* ctx, demo_screen_state* s )
 {
+    // TODO: select preview after vxui_menu_end (same pattern as demo_operations_menu).
     int focused = demo_menu_focused( ctx, "stageselect" );
     if ( focused < 0 || focused >= DEMO_SECTOR_COUNT ) focused = 0;
     const demo_sector& sel = s_demo_sectors[focused];

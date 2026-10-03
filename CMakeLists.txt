@@ -63,20 +63,22 @@ if(VXUI_BUILD_TESTS)
     endforeach()
 
     if(VXUI_BUILD_DEMO)
-        add_executable(test_vefc_backend_gl tests/test_vefc_backend_gl.cpp)
-        target_include_directories(test_vefc_backend_gl PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/vefc/demo/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/demo
-        )
-        target_link_libraries(test_vefc_backend_gl PRIVATE vxui glfw)
-        if(WIN32)
-            target_link_libraries(test_vefc_backend_gl PRIVATE opengl32)
-        elseif(APPLE)
-            target_link_libraries(test_vefc_backend_gl PRIVATE OpenGL::GL)
-        elseif(UNIX)
-            target_link_libraries(test_vefc_backend_gl PRIVATE OpenGL::GL)
-        endif()
-        add_test(NAME test_vefc_backend_gl COMMAND test_vefc_backend_gl)
+        foreach(t test_vefc_backend_gl test_demo_operations)
+            add_executable(${t} tests/${t}.cpp)
+            target_include_directories(${t} PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/vefc/demo/include
+                ${CMAKE_CURRENT_SOURCE_DIR}/demo
+            )
+            target_link_libraries(${t} PRIVATE vxui glfw)
+            if(WIN32)
+                target_link_libraries(${t} PRIVATE opengl32)
+            elseif(APPLE)
+                target_link_libraries(${t} PRIVATE OpenGL::GL)
+            elseif(UNIX)
+                target_link_libraries(${t} PRIVATE OpenGL::GL)
+            endif()
+            add_test(NAME ${t} COMMAND ${t})
+        endforeach()
     endif()
 
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tmp) # test_plot dumps .layout files here; gitignored, absent on a fresh checkout
