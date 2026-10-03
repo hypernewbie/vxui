@@ -46,7 +46,7 @@ uint32_t vxui_gl_create_testcard_texture();
 #define DEMO_GL_PASS_IMAGE         21
 #define DEMO_GL_PASS_SCISSOR_SET   22
 #define DEMO_GL_PASS_SCISSOR_RESET 23
-#define DEMO_GL_MAX_MATERIAL_DCALLS 64
+#define DEMO_GL_MAX_MATERIAL_DCALLS ( VXUI_MAX_DRAW_CMDS * 2 )
 #define DEMO_GL_MAX_SCISSOR_DCALLS  512
 
 static_assert( DEMO_GL_PASS_RECT > VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH_RESOLVE, "demo passes must not overlap VEFC" );
