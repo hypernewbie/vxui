@@ -369,11 +369,8 @@ void vxui_text( vxui_ctx* ctx, const char* id, const char* label, uint16_t font_
 
     int         label_len = (int) strlen( label );
     const char* stable    = vxui_text_push( ctx, label, label_len );
-    if ( stable )
-    {
-        Clay_String text_str = { false, (int32_t) label_len, stable };
-        CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontSize = font_px } ) );
-    }
+    Clay_String text_str  = { false, (int32_t) label_len, stable };
+    CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontSize = font_px } ) );
 
     Clay__CloseElement();
 }
@@ -687,6 +684,7 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, bool has_v
 
     // Copy label into per-frame buffer so the Clay_String pointer stays valid through Clay_EndLayout.
     const char* stable_label = vxui_text_push( ctx, label, label_len );
+    // TODO: emit text without a null branch (same pattern as vxui_text).
     if ( stable_label )
     {
         Clay_String text_str = { false, (int32_t) label_len, stable_label };
@@ -720,6 +718,7 @@ static void vxui_menu_close_row( vxui_ctx* ctx, const char* value = nullptr )
         }
 
         const char* stable_value = vxui_text_push( ctx, value, value_len );
+        // TODO: emit text without a null branch (same pattern as vxui_text).
         if ( stable_value )
         {
             Clay_String text_str = { false, (int32_t) value_len, stable_value };
