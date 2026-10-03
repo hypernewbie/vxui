@@ -508,7 +508,7 @@ static void vxui_gl_push_solid_quad( ve_fontcache_drawlist* dl, float x0, float 
     dl->dcalls.push_back( dcall );
 }
 
-static void vxui_gl_push_textured_quad( ve_fontcache_drawlist* dl, float x0, float y0, float x1, float y1, const glm::vec4& uv, uint32_t texture_id, const glm::vec4& colour )
+static void vxui_gl_push_textured_quad( ve_fontcache_drawlist* dl, uint32_t pass, float x0, float y0, float x1, float y1, const glm::vec4& uv, uint32_t texture_id, const glm::vec4& colour )
 {
     float u0 = uv.x, v0 = uv.y, u1 = uv.z, v1 = uv.w;
 
@@ -527,37 +527,7 @@ static void vxui_gl_push_textured_quad( ve_fontcache_drawlist* dl, float x0, flo
     dl->indices.push_back( base + 3 );
 
     ve_fontcache_draw dcall;
-    dcall.pass        = DEMO_GL_PASS_RECT_TEXTURED;
-    dcall.start_index = idx_start;
-    dcall.end_index   = (uint32_t) dl->indices.size();
-    dcall.colour[0]   = colour.x;
-    dcall.colour[1]   = colour.y;
-    dcall.colour[2]   = colour.z;
-    dcall.colour[3]   = colour.w;
-    dcall.region      = texture_id;
-    dl->dcalls.push_back( dcall );
-}
-
-static void vxui_gl_push_image_quad( ve_fontcache_drawlist* dl, float x0, float y0, float x1, float y1, const glm::vec4& uv, uint32_t texture_id, const glm::vec4& colour )
-{
-    float u0 = uv.x, v0 = uv.y, u1 = uv.z, v1 = uv.w;
-
-    uint32_t base = (uint32_t) dl->vertices.size();
-    dl->vertices.push_back( { x0, y0, u0, v0 } );
-    dl->vertices.push_back( { x1, y0, u1, v0 } );
-    dl->vertices.push_back( { x1, y1, u1, v1 } );
-    dl->vertices.push_back( { x0, y1, u0, v1 } );
-
-    uint32_t idx_start = (uint32_t) dl->indices.size();
-    dl->indices.push_back( base + 0 );
-    dl->indices.push_back( base + 1 );
-    dl->indices.push_back( base + 2 );
-    dl->indices.push_back( base + 0 );
-    dl->indices.push_back( base + 2 );
-    dl->indices.push_back( base + 3 );
-
-    ve_fontcache_draw dcall;
-    dcall.pass        = DEMO_GL_PASS_IMAGE;
+    dcall.pass        = pass;
     dcall.start_index = idx_start;
     dcall.end_index   = (uint32_t) dl->indices.size();
     dcall.colour[0]   = colour.x;
@@ -645,7 +615,7 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
             if ( uv.z <= 0.0f && uv.w <= 0.0f ) uv = { 0.0f, 0.0f, 1.0f, 1.0f };
             glm::vec4 tint = c->render.colour;
             if ( tint.r == 0 && tint.g == 0 && tint.b == 0 && tint.a == 0 ) tint = { 1.0f, 1.0f, 1.0f, 1.0f };
-            vxui_gl_push_image_quad( fdl, x0, y0, x1, y1, uv, c->render.texture_id, tint );
+            vxui_gl_push_textured_quad( fdl, DEMO_GL_PASS_IMAGE, x0, y0, x1, y1, uv, c->render.texture_id, tint );
             break;
         }
         default:
@@ -678,7 +648,7 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
         float ix1 = ( icon_px + icon_w ) / fb_w;
         float iy0 = 1.0f - icon_py / fb_h;
         float iy1 = 1.0f - ( icon_py + icon_h ) / fb_h;
-        vxui_gl_push_textured_quad( fdl, ix0, iy0, ix1, iy1, c->render.uv, c->render.texture_id, c->render.colour );
+        vxui_gl_push_textured_quad( fdl, DEMO_GL_PASS_RECT_TEXTURED, ix0, iy0, ix1, iy1, c->render.uv, c->render.texture_id, c->render.colour );
     }
 }
 
