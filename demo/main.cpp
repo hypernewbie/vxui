@@ -223,7 +223,7 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
 
     if ( c->id == st->bg_id )
     {
-        out->colour = { 0.02f, 0.03f, 0.07f, 1.0f };   // deep space; the panel's CRT material adds scanlines on top
+        out->colour = { 0.02f, 0.03f, 0.07f, 1.0f };
         return;
     }
 
@@ -243,17 +243,7 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         return;
     }
 
-    if ( c->id == st->panel_id )
-    {
-        // No fill: let the BG rect + content render through. Scanlines
-        // ride the existing pixels via the CRT material at low strength.
-        out->material_id = DEMO_MATERIAL_CRT;
-        out->flags       = DEMO_MATERIAL_FLAG_SCANLINES;
-        out->params[0]   = st->time_seconds;
-        out->params[1]   = 0.08f;
-        out->colour      = { 0.0f, 0.0f, 0.0f, 0.0f };
-        return;
-    }
+    if ( c->id == st->panel_id ) return;
 
     if ( c->id == st->frame_id )
     {
