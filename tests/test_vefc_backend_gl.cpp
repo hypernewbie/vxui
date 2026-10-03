@@ -157,6 +157,60 @@ UTEST(vefc_backend_gl, full_suite_passes) {
     vxui_gl_init( &stub );
     vxui_gl_state* gl = (vxui_gl_state*) stub.renderer;
 
+    vxui_draw_cmd fontless[2] = {};
+    fontless[0].type          = VXUI_DRAW_RECT;
+    fontless[0].rect          = { 0, 0, 400, 400 };
+    fontless[0].render.colour = { 1, 0, 0, 1 };
+    fontless[1].type          = VXUI_DRAW_TEXT;
+    fontless[1].rect          = { 0, 0, 40, 24 };
+    fontless[1].font          = 7;
+    fontless[1].font_px       = 24;
+    fontless[1].text          = "Hi";
+    fontless[1].text_len      = 2;
+    vxui_draw_list fontless_dl = { fontless, 2 };
+    EXPECT_TRUE( stub.text == nullptr );
+    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+    glClearColor( 0, 0, 0, 0 );
+    glClear( GL_COLOR_BUFFER_BIT );
+    vxui_gl_render( &stub, fontless_dl, win_w, win_h );
+    uint8_t fontless_pixel[4] = {};
+    glReadPixels( 200, win_h - 200, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, fontless_pixel );
+    EXPECT_TRUE( fontless_pixel[0] > 200 && fontless_pixel[1] < 10 && fontless_pixel[2] < 10 );
+    EXPECT_TRUE( stub.text == nullptr );
+
+    fontless[0].render.colour = { 0, 1, 0, 1 };
+    fontless[0].clipped       = true;
+    fontless[0].clip          = { 0, 0, 200, 400 };
+    glClear( GL_COLOR_BUFFER_BIT );
+    vxui_gl_render( &stub, fontless_dl, win_w, win_h );
+    glReadPixels( 100, win_h - 200, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, fontless_pixel );
+    EXPECT_TRUE( fontless_pixel[1] > 200 && fontless_pixel[0] < 10 );
+    glReadPixels( 300, win_h - 200, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, fontless_pixel );
+    EXPECT_TRUE( fontless_pixel[0] < 10 && fontless_pixel[1] < 10 && fontless_pixel[2] < 10 );
+
+    fontless[0].render.colour = { 0, 0, 1, 1 };
+    fontless[0].clipped       = false;
+    glClear( GL_COLOR_BUFFER_BIT );
+    vxui_gl_render( &stub, fontless_dl, win_w, win_h );
+    glReadPixels( 300, win_h - 200, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, fontless_pixel );
+    EXPECT_TRUE( fontless_pixel[2] > 200 && fontless_pixel[0] < 10 && fontless_pixel[1] < 10 );
+    EXPECT_FALSE( glIsEnabled( GL_SCISSOR_TEST ) );
+    EXPECT_TRUE( stub.text == nullptr );
+
+    glClear( GL_COLOR_BUFFER_BIT );
+    vxui_gl_render( &stub, {}, win_w, win_h );
+    glReadPixels( 200, win_h - 200, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, fontless_pixel );
+    EXPECT_TRUE( fontless_pixel[0] < 10 && fontless_pixel[1] < 10 && fontless_pixel[2] < 10 );
+
+    vxui_font_id loaded = vxui_load_font( &stub, bytes.data(), bytes.size(), 24.0f );
+    EXPECT_NE( loaded, VXUI_FONT_INVALID );
+    fontless[1].font          = loaded;
+    fontless[0].render.colour = { 0, 1, 0, 1 };
+    vxui_gl_render( &stub, fontless_dl, win_w, win_h );
+    glReadPixels( 300, win_h - 200, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, fontless_pixel );
+    EXPECT_TRUE( fontless_pixel[1] > 200 && fontless_pixel[0] < 10 && fontless_pixel[2] < 10 );
+    EXPECT_TRUE( stub.text != nullptr );
+
     ve_fontcache_backend_test_options opts;
     opts.cache = &cache;
     opts.font  = font;
@@ -324,6 +378,7 @@ UTEST(vefc_backend_gl, full_suite_passes) {
     EXPECT_TRUE( first_rect >= 0 && first_text > first_rect && last_rect > first_text );
 
     vxui_gl_shutdown( &stub );
+    vxui_shutdown( &stub );
     ve_fontcache_shutdown( &cache );
     glfwDestroyWindow( window );
     glfwTerminate();

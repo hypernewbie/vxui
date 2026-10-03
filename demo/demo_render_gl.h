@@ -73,6 +73,8 @@ struct vxui_gl_state
     GLuint fbo_texture[2]       = { 0, 0 };
     GLuint fbo_stencil_rb       = 0;
 
+    ve_fontcache rect_cache = {};
+
     vxui_gl_material_data material_data[DEMO_GL_MAX_MATERIAL_DCALLS] = {};
     int                   material_data_count                         = 0;
 
@@ -737,7 +739,7 @@ static void vxui_gl_emit( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, ve_font
         }
 
         ve_font_id font = ( c->font != 0 ) ? (ve_font_id) c->font : default_font;
-        if ( font < 0 || c->text_len <= 0 ) continue;
+        if ( cache->entry.empty() || font < 0 || c->text_len <= 0 ) continue;
 
         glm::vec4 col = c->render.colour;
         if ( col.a <= 0.0f ) col = { 0.95f, 0.95f, 0.95f, 1.0f };
@@ -994,15 +996,15 @@ void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h, 
 {
     assert( ctx && ctx->renderer );
     vxui_gl_state* gl = (vxui_gl_state*) ctx->renderer;
-    if ( !ctx->text ) return;
-
-    vxui_text_state* st = (vxui_text_state*) ctx->text;
-    ve_fontcache_drawlist* fdl = ve_fontcache_get_drawlist( &st->cache );
+    vxui_text_state*       st           = (vxui_text_state*) ctx->text;
+    ve_fontcache*          cache        = st ? &st->cache : &gl->rect_cache;
+    ve_font_id             default_font = st ? st->default_font : -1;
+    ve_fontcache_drawlist* fdl          = ve_fontcache_get_drawlist( cache );
 
     gl->material_data_count = 0;
     gl->scissor_data_count  = 0;
-    vxui_gl_emit( fdl, gl, &st->cache, st->default_font, dl, w, h, xf );
-    vxui_gl_execute( gl, &st->cache, (int) w, (int) h );
+    vxui_gl_emit( fdl, gl, cache, default_font, dl, w, h, xf );
+    vxui_gl_execute( gl, cache, (int) w, (int) h );
 }
 
 void vxui_gl_shutdown( vxui_ctx* ctx )
