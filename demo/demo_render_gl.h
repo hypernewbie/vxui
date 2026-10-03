@@ -764,6 +764,18 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
 
     for ( ve_fontcache_draw& dcall : drawlist->dcalls )
     {
+        if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET || dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED || ( dcall.pass >= DEMO_GL_PASS_RECT && dcall.pass <= DEMO_GL_PASS_IMAGE ) )
+        {
+            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+            glDisable( GL_STENCIL_TEST );
+            glEnable( GL_BLEND );
+            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+            glViewport( 0, 0, win_w, win_h );
+            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
+            glEnable( GL_FRAMEBUFFER_SRGB );
+        }
+
         if ( dcall.pass == DEMO_GL_PASS_SCISSOR_SET )
         {
             int mi = (int) dcall.region;
@@ -825,113 +837,57 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
         else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET || dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED )
         {
             glUseProgram( gl->shader_draw_text );
-            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-            glDisable( GL_STENCIL_TEST );
-            glEnable( GL_BLEND );
-            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-            glViewport( 0, 0, win_w, win_h );
-            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform1i( glGetUniformLocation( gl->shader_draw_text, "src_texture" ), 0 );
             glUniform1ui( glGetUniformLocation( gl->shader_draw_text, "downsample" ), dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED ? 1u : 0u );
             glActiveTexture( GL_TEXTURE0 );
             glBindTexture( GL_TEXTURE_2D, dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED ? gl->fbo_texture[0] : gl->fbo_texture[1] );
             glUniform4fv( glGetUniformLocation( gl->shader_draw_text, "colour" ), 1, dcall.colour );
-            glEnable( GL_FRAMEBUFFER_SRGB );
         }
         else if ( dcall.pass == DEMO_GL_PASS_RECT )
         {
             glUseProgram( gl->shader_rect );
-            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-            glDisable( GL_STENCIL_TEST );
-            glEnable( GL_BLEND );
-            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-            glViewport( 0, 0, win_w, win_h );
-            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_rect, "colour" ), 1, dcall.colour );
-            glEnable( GL_FRAMEBUFFER_SRGB );
         }
         else if ( dcall.pass == DEMO_GL_PASS_RECT_TEXTURED )
         {
             glUseProgram( gl->shader_rect_textured );
-            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-            glDisable( GL_STENCIL_TEST );
-            glEnable( GL_BLEND );
-            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-            glViewport( 0, 0, win_w, win_h );
-            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_rect_textured, "colour" ), 1, dcall.colour );
             glUniform1i( glGetUniformLocation( gl->shader_rect_textured, "src_texture" ), 0 );
             glActiveTexture( GL_TEXTURE0 );
             glBindTexture( GL_TEXTURE_2D, (GLuint) dcall.region );
-            glEnable( GL_FRAMEBUFFER_SRGB );
         }
         else if ( dcall.pass == DEMO_GL_PASS_IMAGE )
         {
             glUseProgram( gl->shader_image );
-            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-            glDisable( GL_STENCIL_TEST );
-            glEnable( GL_BLEND );
-            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-            glViewport( 0, 0, win_w, win_h );
-            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_image, "colour" ), 1, dcall.colour );
             glUniform1i( glGetUniformLocation( gl->shader_image, "src_texture" ), 0 );
             glActiveTexture( GL_TEXTURE0 );
             glBindTexture( GL_TEXTURE_2D, (GLuint) dcall.region );
-            glEnable( GL_FRAMEBUFFER_SRGB );
         }
         else if ( dcall.pass == DEMO_GL_PASS_CRT )
         {
             glUseProgram( gl->shader_crt );
-            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-            glDisable( GL_STENCIL_TEST );
-            glEnable( GL_BLEND );
-            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-            glViewport( 0, 0, win_w, win_h );
-            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_crt, "colour" ), 1, dcall.colour );
             int mi = (int) dcall.region;
             assert( mi >= 0 && mi < gl->material_data_count );
             glUniform4fv( glGetUniformLocation( gl->shader_crt, "mparams" ), 1, gl->material_data[mi].params );
             glUniform1ui( glGetUniformLocation( gl->shader_crt, "mflags" ), gl->material_data[mi].flags );
-            glEnable( GL_FRAMEBUFFER_SRGB );
         }
         else if ( dcall.pass == DEMO_GL_PASS_ROUND )
         {
             glUseProgram( gl->shader_round );
-            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-            glDisable( GL_STENCIL_TEST );
-            glEnable( GL_BLEND );
-            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-            glViewport( 0, 0, win_w, win_h );
-            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_round, "colour" ), 1, dcall.colour );
             int mi = (int) dcall.region;
             assert( mi >= 0 && mi < gl->material_data_count );
             glUniform4fv( glGetUniformLocation( gl->shader_round, "mparams" ), 1, gl->material_data[mi].params );
-            glEnable( GL_FRAMEBUFFER_SRGB );
         }
         else if ( dcall.pass == DEMO_GL_PASS_OUTLINE )
         {
             glUseProgram( gl->shader_outline );
-            glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-            glDisable( GL_STENCIL_TEST );
-            glEnable( GL_BLEND );
-            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-            glViewport( 0, 0, win_w, win_h );
-            glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
             glUniform4fv( glGetUniformLocation( gl->shader_outline, "colour" ), 1, dcall.colour );
             int mi = (int) dcall.region;
             assert( mi >= 0 && mi < gl->material_data_count );
             glUniform4fv( glGetUniformLocation( gl->shader_outline, "mparams" ), 1, gl->material_data[mi].params );
-            glEnable( GL_FRAMEBUFFER_SRGB );
         }
         if ( dcall.clear_before_draw )
         {
@@ -966,6 +922,7 @@ void vxui_gl_render( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h, 
 {
     assert( ctx && ctx->renderer );
     vxui_gl_state* gl = (vxui_gl_state*) ctx->renderer;
+
     vxui_text_state*       st           = (vxui_text_state*) ctx->text;
     ve_fontcache*          cache        = st ? &st->cache : &gl->rect_cache;
     ve_font_id             default_font = st ? st->default_font : -1;
