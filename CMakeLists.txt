@@ -63,7 +63,7 @@ if(VXUI_BUILD_TESTS)
     endforeach()
 
     if(VXUI_BUILD_DEMO)
-        foreach(t test_vefc_backend_gl test_demo_operations)
+        foreach(t test_vefc_backend_gl test_demo_operations test_demo_stage_select)
             add_executable(${t} tests/${t}.cpp)
             target_include_directories(${t} PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/vefc/demo/include
