@@ -197,7 +197,11 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
 {
     demo_resolver_state* st = (demo_resolver_state*) ud;
 
-    if ( st->hud && vxui_hud_resolve( st->hud, c, out ) ) return;
+    if ( st->hud && vxui_hud_resolve( st->hud, c, out ) )
+    {
+        if ( c->type == VXUI_DRAW_RECT && out->texture_id != 0 ) out->material_id = DEMO_MATERIAL_IMAGE;
+        return;
+    }
 
     if ( c->type == VXUI_DRAW_TEXT )
     {
