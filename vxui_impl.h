@@ -169,7 +169,7 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             out.clip              = clip;
             out.focus_offset_y    = 0;
             out.text              = nullptr;
-            out.text_base         = nullptr;
+            out.userdata          = cmd->userData;
             out.text_len          = 0;
             out.font              = 0;
             out.font_px           = 0;
@@ -188,7 +188,7 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             out.clip              = clip;
             out.focus_offset_y    = 0;
             out.text              = t.stringContents.chars;     // points into ctx->text_buf, valid until next vxui_frame
-            out.text_base         = t.stringContents.baseChars;
+            out.userdata          = cmd->userData;
             out.text_len          = t.stringContents.length;
             out.font              = t.fontId;
             out.font_px           = t.fontSize;

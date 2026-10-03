@@ -52,7 +52,7 @@ UTEST(hud_text_box, every_newline_resolves) {
     }
 }
 
-UTEST(hud_text_box, wrapped_lines_resolve_with_their_source_base) {
+UTEST(hud_text_box, wrapped_lines_resolve_with_their_declaration_record) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
     vxui_hud hud = {};
@@ -63,13 +63,12 @@ UTEST(hud_text_box, wrapped_lines_resolve_with_their_source_base) {
     vxui_draw_list dl = vxui_render( &ctx );
 
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 3 );
-    ASSERT_EQ( hud.items[0].text_base, ctx.text_buf );
     const char* words[] = { "alpha", "beta", "gamma" };
     int offsets[] = { 0, 6, 11 };
     for ( int i = 0; i < 3; i++ )
     {
         const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_TEXT, i );
-        ASSERT_EQ( c->text_base, ctx.text_buf );
+        ASSERT_EQ( c->userdata, (const void*) &hud.items[0] );
         ASSERT_EQ( c->text, ctx.text_buf + offsets[i] );
         ASSERT_EQ( c->text_len, (int) strlen( words[i] ) );
         ASSERT_EQ( strncmp( c->text, words[i], c->text_len ), 0 );
@@ -153,9 +152,9 @@ UTEST(hud_text_box, identical_boxes_keep_separate_colours) {
     vxui_draw_list dl = vxui_render( &ctx );
 
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 4 );
-    ASSERT_NE( hud.items[0].text_base, hud.items[1].text_base );
     for ( int i = 0; i < 4; i++ )
     {
+        ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->userdata, (const void*) &hud.items[i < 2 ? 0 : 1] );
         vxui_render_data out = {};
         ASSERT_TRUE( vxui_hud_resolve( &hud, vxui_draw_nth( dl, VXUI_DRAW_TEXT, i ), &out ) );
         ASSERT_EQ( out.colour.r, i < 2 ? 1.0f : 0.0f );
@@ -243,9 +242,9 @@ UTEST(hud_text_box, empty_text_does_not_claim_the_next_source) {
 
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 2 );
     ASSERT_EQ( hud.item_count, 2 );
-    ASSERT_TRUE( hud.items[0].text_base == nullptr );
     for ( int i = 0; i < 2; i++ )
     {
+        ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->userdata, (const void*) &hud.items[1] );
         vxui_render_data out = {};
         ASSERT_TRUE( vxui_hud_resolve( &hud, vxui_draw_nth( dl, VXUI_DRAW_TEXT, i ), &out ) );
         ASSERT_EQ( out.colour.r, 0.0f );
@@ -286,7 +285,7 @@ UTEST(hud_text_box, same_id_rectangle_is_not_text) {
     vxui_render( &ctx );
 
     vxui_draw_cmd c = {};
-    c.id   = hud.items[0].id;
+    c.id   = vxui_text_id( "box" );
     c.type = VXUI_DRAW_RECT;
     vxui_render_data out = {};
     out.texture_id = 99;
@@ -313,23 +312,22 @@ UTEST(hud_text_box, registered_resolver_sees_every_wrapped_line) {
     }
 }
 
-UTEST(hud_text_box, reused_rectangle_slot_clears_both_source_bases) {
+UTEST(hud_text_box, reused_rectangle_slot_has_current_metadata) {
     vxui_ctx ctx = make_ctx();
     vxui_hud hud = {};
     vxui_frame( &ctx, 1.0f / 60.0f );
     vxui_hud_begin( &hud, &ctx, 960, 540 );
     vxui_hud_text_box( &hud, "box", "alpha\nbeta", 200, 100 );
     vxui_draw_list dl = vxui_render( &ctx );
-    ASSERT_EQ( hud.items[0].text_base, ctx.text_buf );
+    ASSERT_EQ( dl.cmds[0].userdata, (const void*) &hud.items[0] );
 
     vxui_frame( &ctx, 1.0f / 60.0f );
     vxui_hud_begin( &hud, &ctx, 960, 540 );
     vxui_hud_image( &hud, "image", 42, 40, 20 );
     dl = vxui_render( &ctx );
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
-    ASSERT_TRUE( hud.items[0].text_base == nullptr );
     const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 );
-    ASSERT_TRUE( c->text_base == nullptr );
+    ASSERT_EQ( c->userdata, (const void*) &hud.items[0] );
     vxui_render_data out = {};
     ASSERT_TRUE( vxui_hud_resolve( &hud, c, &out ) );
     ASSERT_EQ( out.texture_id, (uint32_t) 42 );

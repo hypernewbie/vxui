@@ -35,12 +35,10 @@
 
 struct vxui_hud_item
 {
-    uint32_t    id         = 0;
-    uint32_t    texture_id = 0;
-    const char* text_base  = nullptr;
-    int16_t     z          = 0;
-    glm::vec4   colour     = { 1.0f, 1.0f, 1.0f, 1.0f };
-    glm::vec4   uv         = { 0.0f, 0.0f, 1.0f, 1.0f };
+    uint32_t  texture_id = 0;
+    int16_t   z          = 0;
+    glm::vec4 colour     = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glm::vec4 uv         = { 0.0f, 0.0f, 1.0f, 1.0f };
 };
 
 struct vxui_hud
@@ -84,16 +82,15 @@ bool      vxui_hud_resolve       ( const vxui_hud* hud, const vxui_draw_cmd* cmd
 #include "clay/clay.h"
 #include <cstdio>
 
-static void vxui_hud_record( vxui_hud* hud, uint32_t id, uint32_t texture_id, glm::vec4 uv, const char* text_base = nullptr )
+static vxui_hud_item* vxui_hud_record( vxui_hud* hud, uint32_t texture_id, glm::vec4 uv )
 {
     assert( hud && hud->item_count < VXUI_HUD_MAX_ITEMS );
     int i = hud->item_count++;
-    hud->items[i].id         = id;
     hud->items[i].texture_id = texture_id;
-    hud->items[i].text_base  = text_base;
     hud->items[i].z          = hud->z;
     hud->items[i].colour     = hud->colour;
     hud->items[i].uv         = uv;
+    return &hud->items[i];
 }
 
 static Clay_ElementId vxui_hud_clay_id( const char* id )
@@ -116,11 +113,10 @@ static void vxui_hud_rect_at( vxui_hud* hud, const char* id, float x, float y, f
     decl.floating.offset               = { x, y };
     decl.floating.zIndex               = hud->z;
     decl.backgroundColor               = { 0, 0, 0, 1 };
+    decl.userData                      = vxui_hud_record( hud, texture_id, uv );
 
     Clay__ConfigureOpenElement( decl );
     Clay__CloseElement();
-
-    vxui_hud_record( hud, eid.id, texture_id, uv );
 }
 
 void vxui_hud_begin( vxui_hud* hud, vxui_ctx* ctx, float w, float h )
@@ -351,17 +347,16 @@ void vxui_hud_text( vxui_hud* hud, const char* id, const char* text )
 
     Clay__ConfigureOpenElement( decl );
 
-    int         text_len = (int) strlen( text );
-    const char* stable   = vxui_text_push( hud->ctx, text, text_len );
+    int            text_len = (int) strlen( text );
+    const char*    stable   = vxui_text_push( hud->ctx, text, text_len );
+    vxui_hud_item* item     = vxui_hud_record( hud, 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
     if ( stable )
     {
         Clay_String text_str = { false, (int32_t) text_len, stable };
-        CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontId = hud->font, .fontSize = hud->font_px } ) );
+        CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .userData = item, .fontId = hud->font, .fontSize = hud->font_px } ) );
     }
 
     Clay__CloseElement();
-
-    vxui_hud_record( hud, vxui_text_id( id ), 0, { 0.0f, 0.0f, 1.0f, 1.0f }, text_len > 0 ? stable : nullptr );
 
     hud->y += hud->font_px;
 }
@@ -386,17 +381,16 @@ void vxui_hud_text_box( vxui_hud* hud, const char* id, const char* text, float w
 
     Clay__ConfigureOpenElement( decl );
 
-    int         text_len = (int) strlen( text );
-    const char* stable   = vxui_text_push( hud->ctx, text, text_len );
+    int            text_len = (int) strlen( text );
+    const char*    stable   = vxui_text_push( hud->ctx, text, text_len );
+    vxui_hud_item* item     = vxui_hud_record( hud, 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
     if ( stable )
     {
         Clay_String text_str = { false, (int32_t) text_len, stable };
-        CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontId = hud->font, .fontSize = hud->font_px } ) );
+        CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .userData = item, .fontId = hud->font, .fontSize = hud->font_px } ) );
     }
 
     Clay__CloseElement();
-
-    vxui_hud_record( hud, vxui_text_id( id ), 0, { 0.0f, 0.0f, 1.0f, 1.0f }, text_len > 0 ? stable : nullptr );
 
     hud->y += h;
 }
@@ -406,7 +400,7 @@ bool vxui_hud_resolve( const vxui_hud* hud, const vxui_draw_cmd* cmd, vxui_rende
     assert( hud && cmd && out );
     for ( int i = 0; i < hud->item_count; i++ )
     {
-        if ( hud->items[i].text_base ? hud->items[i].text_base != cmd->text_base : hud->items[i].id != cmd->id ) continue;
+        if ( cmd->userdata != &hud->items[i] ) continue;
         out->texture_id = hud->items[i].texture_id;
         out->uv         = hud->items[i].uv;
         out->colour     = hud->items[i].colour;

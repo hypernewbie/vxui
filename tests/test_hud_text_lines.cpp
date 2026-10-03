@@ -270,7 +270,7 @@ UTEST(hud_text_lines, text_box_newlines_resolve) {
     ASSERT_TRUE( vxui_hud_resolve( &hud, vxui_draw_nth( dl, VXUI_DRAW_TEXT, 1 ), &out ) );
 }
 
-UTEST(hud_text_lines, every_line_carries_the_same_frame_owned_base) {
+UTEST(hud_text_lines, every_line_carries_the_declaration_record) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
     vxui_hud hud = {};
@@ -279,15 +279,14 @@ UTEST(hud_text_lines, every_line_carries_the_same_frame_owned_base) {
     vxui_draw_list dl = vxui_render( &ctx );
 
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 3 );
-    ASSERT_EQ( hud.items[0].text_base, ctx.text_buf );
     for ( int i = 0; i < 3; i++ )
-        ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->text_base, ctx.text_buf );
+        ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->userdata, (const void*) &hud.items[0] );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, 0 )->text, ctx.text_buf );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, 1 )->text, ctx.text_buf + 6 );
     ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, 2 )->text, ctx.text_buf + 11 );
 }
 
-UTEST(hud_text_lines, wrapped_core_text_keeps_its_source_base) {
+UTEST(hud_text_lines, wrapped_core_text_has_no_hud_attachment) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
     vxui_div( &ctx, "wrap", { .width = { VXUI_FIXED, 48 }, .col = true } );
@@ -297,10 +296,10 @@ UTEST(hud_text_lines, wrapped_core_text_keeps_its_source_base) {
 
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 3 );
     for ( int i = 0; i < 3; i++ )
-        ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->text_base, ctx.text_buf );
+        ASSERT_TRUE( vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->userdata == nullptr );
 }
 
-UTEST(hud_text_lines, identical_content_has_distinct_bases) {
+UTEST(hud_text_lines, identical_content_has_distinct_records) {
     vxui_ctx ctx = make_ctx();
     vxui_frame( &ctx, 1.0f / 60.0f );
     vxui_hud hud = {};
@@ -310,10 +309,8 @@ UTEST(hud_text_lines, identical_content_has_distinct_bases) {
     vxui_draw_list dl = vxui_render( &ctx );
 
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 4 );
-    ASSERT_EQ( hud.items[0].text_base, ctx.text_buf );
-    ASSERT_EQ( hud.items[1].text_base, ctx.text_buf + 10 );
     for ( int i = 0; i < 4; i++ )
-        ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->text_base, i < 2 ? ctx.text_buf : ctx.text_buf + 10 );
+        ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->userdata, (const void*) &hud.items[i < 2 ? 0 : 1] );
 }
 
 UTEST(hud_text_lines, empty_text_does_not_claim_the_next_source) {
@@ -329,9 +326,9 @@ UTEST(hud_text_lines, empty_text_does_not_claim_the_next_source) {
 
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_TEXT ), 2 );
     ASSERT_EQ( hud.item_count, 2 );
-    ASSERT_TRUE( hud.items[0].text_base == nullptr );
     for ( int i = 0; i < 2; i++ )
     {
+        ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, i )->userdata, (const void*) &hud.items[1] );
         vxui_render_data out = {};
         ASSERT_TRUE( vxui_hud_resolve( &hud, vxui_draw_nth( dl, VXUI_DRAW_TEXT, i ), &out ) );
         ASSERT_EQ( out.colour.r, 0.0f );
@@ -339,23 +336,22 @@ UTEST(hud_text_lines, empty_text_does_not_claim_the_next_source) {
     }
 }
 
-UTEST(hud_text_lines, reused_rectangle_slot_clears_both_source_bases) {
+UTEST(hud_text_lines, reused_rectangle_slot_has_current_metadata) {
     vxui_ctx ctx = make_ctx();
     vxui_hud hud = {};
     vxui_frame( &ctx, 1.0f / 60.0f );
     vxui_hud_begin( &hud, &ctx, 960, 540 );
     vxui_hud_text( &hud, "label", "alpha\nbeta" );
     vxui_draw_list dl = vxui_render( &ctx );
-    ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, 0 )->text_base, ctx.text_buf );
+    ASSERT_EQ( vxui_draw_nth( dl, VXUI_DRAW_TEXT, 0 )->userdata, (const void*) &hud.items[0] );
 
     vxui_frame( &ctx, 1.0f / 60.0f );
     vxui_hud_begin( &hud, &ctx, 960, 540 );
     vxui_hud_image( &hud, "image", 42, 40, 20 );
     dl = vxui_render( &ctx );
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 1 );
-    ASSERT_TRUE( hud.items[0].text_base == nullptr );
     const vxui_draw_cmd* c = vxui_draw_nth( dl, VXUI_DRAW_RECT, 0 );
-    ASSERT_TRUE( c->text_base == nullptr );
+    ASSERT_EQ( c->userdata, (const void*) &hud.items[0] );
     vxui_render_data out = {};
     ASSERT_TRUE( vxui_hud_resolve( &hud, c, &out ) );
     ASSERT_EQ( out.texture_id, (uint32_t) 42 );
