@@ -203,9 +203,10 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         }
         for ( int j = 0; j < ctx->frame_row_count; j++ )
         {
-            if ( c.id != ctx->frame_row_ids[j] ) continue;
-            c.row_index         = ctx->frame_row_indices[j];
-            c.focused_row_index = (int) ctx->menu_state[ctx->frame_row_menu_indices[j]].y;
+            const glm::uvec3& row = ctx->frame_rows[j];
+            if ( c.id != row.x ) continue;
+            c.row_index         = (int) row.y;
+            c.focused_row_index = (int) ctx->menu_state[row.z].y;
             break;
         }
         if ( vxui_hit_rect( c, ctx->mouse_pos ) ) under_cursor_id = c.id;     // last (topmost) wins for click target
@@ -626,11 +627,8 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, bool has_v
 
     assert( ctx->frame_row_count < VXUI_MAX_MENUS * VXUI_MAX_MENU_ROWS );
     for ( int i = 0; i < ctx->frame_row_count; i++ )
-        assert( ctx->frame_row_ids[i] != eid.id && "menu row hash collision" );
-    int fr = ctx->frame_row_count++;
-    ctx->frame_row_ids            [fr] = eid.id;
-    ctx->frame_row_indices        [fr] = ctx->active_menu_row;
-    ctx->frame_row_menu_indices   [fr] = ctx->active_menu;
+        assert( ctx->frame_rows[i].x != eid.id && "menu row hash collision" );
+    ctx->frame_rows[ctx->frame_row_count++] = { eid.id, (uint32_t) ctx->active_menu_row, (uint32_t) ctx->active_menu };
 
     bool fill = ctx->active_menu_fill;
 

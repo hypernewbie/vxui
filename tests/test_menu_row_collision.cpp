@@ -80,8 +80,8 @@ UTEST(menu_row_collision, distinct_row_kinds_keep_their_seeded_identity_and_skip
     ASSERT_EQ( ctx.menu_state[0].w, (uint32_t) ( ( 1u << 3 ) | ( 1u << 4 ) ) );
     for ( int i = 0; i < 5; i++ )
     {
-        ASSERT_EQ( ctx.frame_row_ids[i], row_id( "mixed", labels[i] ) );
-        const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, ctx.frame_row_ids[i] );
+        ASSERT_EQ( ctx.frame_rows[i].x, row_id( "mixed", labels[i] ) );
+        const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, ctx.frame_rows[i].x );
         ASSERT_TRUE( c );
         ASSERT_EQ( c->row_index, i );
     }
@@ -97,8 +97,8 @@ UTEST(menu_row_collision, colliding_rows_in_different_frames_do_not_share_a_fram
         vxui_menu_end( &ctx );
         vxui_draw_list dl = vxui_render( &ctx );
         ASSERT_EQ( ctx.frame_row_count, 1 );
-        ASSERT_EQ( ctx.frame_row_ids[0], (uint32_t) 2726600868u );
-        const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, ctx.frame_row_ids[0] );
+        ASSERT_EQ( ctx.frame_rows[0].x, (uint32_t) 2726600868u );
+        const vxui_draw_cmd* c = vxui_draw_find( dl, VXUI_DRAW_RECT, ctx.frame_rows[0].x );
         ASSERT_TRUE( c );
         ASSERT_TRUE( c->state & VXUI_DRAW_FOCUSED );
     }
@@ -119,7 +119,7 @@ UTEST(menu_row_collision, colliding_rows_in_different_contexts_have_independent_
     }
     ASSERT_EQ( a.frame_row_count, 1 );
     ASSERT_EQ( b.frame_row_count, 1 );
-    ASSERT_EQ( a.frame_row_ids[0], b.frame_row_ids[0] );
+    ASSERT_EQ( a.frame_rows[0].x, b.frame_rows[0].x );
     ASSERT_NE( a.menu_state[0].x, b.menu_state[0].x );
 }
 
@@ -166,8 +166,8 @@ UTEST(menu_row_collision, every_menu_slot_checks_against_rows_of_earlier_menus) 
     ASSERT_EQ( ctx.frame_row_count, VXUI_MAX_MENUS * 4 );
     for ( int i = 0; i < ctx.frame_row_count; i++ )
     {
-        ASSERT_EQ( ctx.frame_row_ids[i], row_id( names[i / 4], labels[i % 4] ) );
-        ASSERT_TRUE( vxui_draw_find( dl, VXUI_DRAW_RECT, ctx.frame_row_ids[i] ) );
+        ASSERT_EQ( ctx.frame_rows[i].x, row_id( names[i / 4], labels[i % 4] ) );
+        ASSERT_TRUE( vxui_draw_find( dl, VXUI_DRAW_RECT, ctx.frame_rows[i].x ) );
     }
 }
 
