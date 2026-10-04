@@ -99,7 +99,7 @@ static Clay_ElementId vxui_hud_clay_id( const char* id )
 
 static void vxui_hud_rect_at( vxui_hud* hud, const char* id, float x, float y, float w, float h, uint32_t texture_id, glm::vec4 uv )
 {
-    Clay_ElementId eid = vxui_hud_clay_id( id );
+    Clay_ElementId eid = vxui_clay_id( id );
     Clay__OpenElementWithId( eid );
 
     Clay_ElementDeclaration decl       = {};
@@ -330,6 +330,7 @@ static Clay_LayoutAlignmentY vxui_hud_align_y( uint8_t a )
 void vxui_hud_text( vxui_hud* hud, const char* id, const char* text )
 {
     assert( hud && id && text );
+    // TODO: use vxui_clay_id (same pattern as vxui_hud_rect_at).
 
     Clay_ElementId eid = vxui_hud_clay_id( id );
     Clay__OpenElementWithId( eid );
@@ -359,6 +360,7 @@ void vxui_hud_text( vxui_hud* hud, const char* id, const char* text )
 void vxui_hud_text_box( vxui_hud* hud, const char* id, const char* text, float w, float h, uint8_t align_x, uint8_t align_y )
 {
     assert( hud && id && text && w > 0.0f && h > 0.0f );
+    // TODO: use vxui_clay_id (same pattern as vxui_hud_rect_at).
 
     Clay_ElementId eid = vxui_hud_clay_id( id );
     Clay__OpenElementWithId( eid );
