@@ -31,11 +31,21 @@ struct gl_snapshot
     float params[4] = {};
     GLuint flags = 0;
     GLuint downsample = 0;
+    GLuint stencil_write_mask = 0;
+    GLenum stencil_compare = 0;
+    GLint stencil_ref = 0;
+    GLuint stencil_compare_mask = 0;
+    glm::uvec3 stencil_front = {};
+    glm::uvec3 stencil_back = {};
+    GLint stencil_clear_value = -1;
 };
 
 static gl_snapshot s_current;
 static gl_snapshot s_draws[16];
+static gl_snapshot s_clears[16];
+static GLbitfield s_clear_bits[16];
 static int s_draw_count = 0;
+static int s_clear_count = 0;
 static int s_invalid_scissors = 0;
 
 static void APIENTRY bind_vertex_array( GLuint ) {}
@@ -54,16 +64,34 @@ static void APIENTRY scissor( GLint x, GLint y, GLsizei w, GLsizei h )
 }
 static void APIENTRY colour_mask( GLboolean r, GLboolean g, GLboolean b, GLboolean a ) { s_current.colour_mask = { r != 0, g != 0, b != 0, a != 0 }; }
 static void APIENTRY blend_func( GLenum src, GLenum dst ) { s_current.blend_src = src; s_current.blend_dst = dst; }
-static void APIENTRY stencil_mask( GLuint ) {}
-static void APIENTRY stencil_func( GLenum, GLint, GLuint ) {}
-static void APIENTRY stencil_op( GLenum, GLenum, GLenum ) {}
-static void APIENTRY stencil_op_separate( GLenum, GLenum, GLenum, GLenum ) {}
+static void APIENTRY stencil_mask( GLuint mask ) { s_current.stencil_write_mask = mask; }
+static void APIENTRY stencil_func( GLenum func, GLint ref, GLuint mask )
+{
+    s_current.stencil_compare      = func;
+    s_current.stencil_ref          = ref;
+    s_current.stencil_compare_mask = mask;
+}
+static void APIENTRY stencil_op( GLenum fail, GLenum depth_fail, GLenum depth_pass )
+{
+    s_current.stencil_front = { fail, depth_fail, depth_pass };
+    s_current.stencil_back  = { fail, depth_fail, depth_pass };
+}
+static void APIENTRY stencil_op_separate( GLenum face, GLenum fail, GLenum depth_fail, GLenum depth_pass )
+{
+    if ( face == GL_FRONT ) s_current.stencil_front = { fail, depth_fail, depth_pass };
+    if ( face == GL_BACK ) s_current.stencil_back = { fail, depth_fail, depth_pass };
+}
 static void APIENTRY active_texture( GLenum ) {}
 static void APIENTRY bind_texture( GLenum, GLuint texture ) { s_current.texture = texture; }
 static void APIENTRY uniform_int( GLint, GLint ) {}
 static void APIENTRY clear_colour( GLfloat, GLfloat, GLfloat, GLfloat ) {}
-static void APIENTRY clear_stencil( GLint ) {}
-static void APIENTRY clear( GLbitfield ) {}
+static void APIENTRY clear_stencil( GLint value ) { s_current.stencil_clear_value = value; }
+static void APIENTRY clear( GLbitfield bits )
+{
+    assert( s_clear_count < 16 );
+    s_clear_bits[s_clear_count] = bits;
+    s_clears[s_clear_count++] = s_current;
+}
 static void APIENTRY delete_buffers( GLsizei, const GLuint* ) {}
 static GLenum APIENTRY get_error() { return GL_NO_ERROR; }
 
@@ -128,6 +156,7 @@ static void init_gl( vxui_gl_state* gl )
 
     s_current = {};
     s_draw_count = 0;
+    s_clear_count = 0;
     s_invalid_scissors = 0;
     glBindVertexArray = bind_vertex_array;
     glGenBuffers = gen_buffers;

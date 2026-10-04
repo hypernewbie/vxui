@@ -734,31 +734,26 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             scissor = { 0, 0, win_w, win_h };
             glScissor( scissor.x, scissor.y, scissor.z, scissor.w );
         }
-        else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH )
+        else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH || dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH_RESOLVE )
         {
+            bool glyph = dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH;
             glUseProgram( gl->shader_render_glyph );
             glBindFramebuffer( GL_FRAMEBUFFER, gl->fbo[0] );
             glDisable( GL_BLEND );
-            glColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE );
+            glColorMask( !glyph, !glyph, !glyph, !glyph );
             glEnable( GL_STENCIL_TEST );
             glStencilMask( 0xFF );
-            glStencilFunc( GL_ALWAYS, 0, 0xFF );
-            glStencilOpSeparate( GL_FRONT, GL_KEEP, GL_KEEP, GL_INCR_WRAP );
-            glStencilOpSeparate( GL_BACK,  GL_KEEP, GL_KEEP, GL_DECR_WRAP );
-            glViewport( 0, 0, VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH, VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT );
-            glScissor( 0, 0, VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH, VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT );
-            glDisable( GL_FRAMEBUFFER_SRGB );
-        }
-        else if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_GLYPH_RESOLVE )
-        {
-            glUseProgram( gl->shader_render_glyph );
-            glBindFramebuffer( GL_FRAMEBUFFER, gl->fbo[0] );
-            glDisable( GL_BLEND );
-            glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-            glEnable( GL_STENCIL_TEST );
-            glStencilMask( 0xFF );
-            glStencilFunc( GL_NOTEQUAL, 0, 0xFF );
-            glStencilOp( GL_KEEP, GL_KEEP, GL_ZERO );
+            if ( glyph )
+            {
+                glStencilFunc( GL_ALWAYS, 0, 0xFF );
+                glStencilOpSeparate( GL_FRONT, GL_KEEP, GL_KEEP, GL_INCR_WRAP );
+                glStencilOpSeparate( GL_BACK,  GL_KEEP, GL_KEEP, GL_DECR_WRAP );
+            }
+            else
+            {
+                glStencilFunc( GL_NOTEQUAL, 0, 0xFF );
+                glStencilOp( GL_KEEP, GL_KEEP, GL_ZERO );
+            }
             glViewport( 0, 0, VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH, VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT );
             glScissor( 0, 0, VE_FONTCACHE_GLYPHDRAW_BUFFER_WIDTH, VE_FONTCACHE_GLYPHDRAW_BUFFER_HEIGHT );
             glDisable( GL_FRAMEBUFFER_SRGB );
