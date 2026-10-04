@@ -359,7 +359,6 @@ void vxui_hud_text( vxui_hud* hud, const char* id, const char* text )
 void vxui_hud_text_box( vxui_hud* hud, const char* id, const char* text, float w, float h, uint8_t align_x, uint8_t align_y )
 {
     assert( hud && id && text && w > 0.0f && h > 0.0f );
-    // TODO: emit text without a null branch (same pattern as vxui_text).
 
     Clay_ElementId eid = vxui_hud_clay_id( id );
     Clay__OpenElementWithId( eid );
@@ -380,11 +379,8 @@ void vxui_hud_text_box( vxui_hud* hud, const char* id, const char* text, float w
     int            text_len = (int) strlen( text );
     const char*    stable   = vxui_text_push( hud->ctx, text, text_len );
     vxui_hud_item* item     = vxui_hud_record( hud, 0, { 0.0f, 0.0f, 1.0f, 1.0f } );
-    if ( stable )
-    {
-        Clay_String text_str = { false, (int32_t) text_len, stable };
-        CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .userData = item, .fontId = hud->font, .fontSize = hud->font_px } ) );
-    }
+    Clay_String    text_str = { false, (int32_t) text_len, stable };
+    CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .userData = item, .fontId = hud->font, .fontSize = hud->font_px } ) );
 
     Clay__CloseElement();
 
