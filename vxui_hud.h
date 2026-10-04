@@ -330,9 +330,8 @@ static Clay_LayoutAlignmentY vxui_hud_align_y( uint8_t a )
 void vxui_hud_text( vxui_hud* hud, const char* id, const char* text )
 {
     assert( hud && id && text );
-    // TODO: use vxui_clay_id (same pattern as vxui_hud_rect_at).
 
-    Clay_ElementId eid = vxui_hud_clay_id( id );
+    Clay_ElementId eid = vxui_clay_id( id );
     Clay__OpenElementWithId( eid );
 
     Clay_ElementDeclaration decl       = {};
