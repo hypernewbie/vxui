@@ -804,30 +804,16 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glActiveTexture( GL_TEXTURE0 );
             glBindTexture( GL_TEXTURE_2D, (GLuint) dcall.region );
         }
-        else if ( dcall.pass == DEMO_GL_PASS_CRT )
+        else if ( dcall.pass == DEMO_GL_PASS_CRT || dcall.pass == DEMO_GL_PASS_ROUND || dcall.pass == DEMO_GL_PASS_OUTLINE )
         {
-            glUseProgram( gl->shader_crt );
-            glUniform4fv( glGetUniformLocation( gl->shader_crt, "colour" ), 1, dcall.colour );
+            GLuint shader = dcall.pass == DEMO_GL_PASS_CRT ? gl->shader_crt : dcall.pass == DEMO_GL_PASS_ROUND ? gl->shader_round : gl->shader_outline;
+            glUseProgram( shader );
+            glUniform4fv( glGetUniformLocation( shader, "colour" ), 1, dcall.colour );
             int mi = (int) dcall.region;
             assert( mi >= 0 && mi < gl->material_data_count );
-            glUniform4fv( glGetUniformLocation( gl->shader_crt, "mparams" ), 1, gl->material_data[mi].params );
-            glUniform1ui( glGetUniformLocation( gl->shader_crt, "mflags" ), gl->material_data[mi].flags );
-        }
-        else if ( dcall.pass == DEMO_GL_PASS_ROUND )
-        {
-            glUseProgram( gl->shader_round );
-            glUniform4fv( glGetUniformLocation( gl->shader_round, "colour" ), 1, dcall.colour );
-            int mi = (int) dcall.region;
-            assert( mi >= 0 && mi < gl->material_data_count );
-            glUniform4fv( glGetUniformLocation( gl->shader_round, "mparams" ), 1, gl->material_data[mi].params );
-        }
-        else if ( dcall.pass == DEMO_GL_PASS_OUTLINE )
-        {
-            glUseProgram( gl->shader_outline );
-            glUniform4fv( glGetUniformLocation( gl->shader_outline, "colour" ), 1, dcall.colour );
-            int mi = (int) dcall.region;
-            assert( mi >= 0 && mi < gl->material_data_count );
-            glUniform4fv( glGetUniformLocation( gl->shader_outline, "mparams" ), 1, gl->material_data[mi].params );
+            glUniform4fv( glGetUniformLocation( shader, "mparams" ), 1, gl->material_data[mi].params );
+            if ( dcall.pass == DEMO_GL_PASS_CRT )
+                glUniform1ui( glGetUniformLocation( shader, "mflags" ), gl->material_data[mi].flags );
         }
         if ( dcall.clear_before_draw )
         {

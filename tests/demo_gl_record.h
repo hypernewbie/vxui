@@ -29,6 +29,10 @@ struct gl_snapshot
     GLenum blend_src = 0;
     GLenum blend_dst = 0;
     float params[4] = {};
+    glm::vec4 colour = {};
+    int params_uploads = 0;
+    int colour_uploads = 0;
+    int flags_uploads = 0;
     GLuint flags = 0;
     GLuint downsample = 0;
     GLuint stencil_write_mask = 0;
@@ -41,7 +45,7 @@ struct gl_snapshot
 };
 
 static gl_snapshot s_current;
-static gl_snapshot s_draws[16];
+static gl_snapshot s_draws[DEMO_GL_MAX_MATERIAL_DCALLS];
 static gl_snapshot s_clears[16];
 static GLbitfield s_clear_bits[16];
 static int s_draw_count = 0;
@@ -119,18 +123,31 @@ static GLint APIENTRY uniform_location( GLuint, const GLchar* name )
 
 static void APIENTRY uniform_uint( GLint location, GLuint value )
 {
-    if ( location == 2 ) s_current.flags = value;
+    if ( location == 2 )
+    {
+        s_current.flags = value;
+        s_current.flags_uploads++;
+    }
     if ( location == 3 ) s_current.downsample = value;
 }
 
 static void APIENTRY uniform_vec4( GLint location, GLsizei, const GLfloat* value )
 {
-    if ( location == 1 ) memcpy( s_current.params, value, sizeof( s_current.params ) );
+    if ( location == 1 )
+    {
+        memcpy( s_current.params, value, sizeof( s_current.params ) );
+        s_current.params_uploads++;
+    }
+    if ( location == 0 )
+    {
+        s_current.colour = { value[0], value[1], value[2], value[3] };
+        s_current.colour_uploads++;
+    }
 }
 
 static void APIENTRY draw_elements( GLenum, GLsizei, GLenum, const void* )
 {
-    assert( s_draw_count < 16 );
+    assert( s_draw_count < DEMO_GL_MAX_MATERIAL_DCALLS );
     s_draws[s_draw_count++] = s_current;
 }
 
