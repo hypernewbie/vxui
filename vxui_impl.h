@@ -382,10 +382,8 @@ void vxui_text( vxui_ctx* ctx, const char* id, const char* label, uint16_t font_
 void vxui_root( vxui_ctx* ctx, const char* id, float x, float y )
 {
     assert( ctx );
-    // TODO: use vxui_clay_id (same pattern as vxui_div).
 
-    Clay_String clay_id = { false, (int32_t) strlen( id ), id };
-    Clay__OpenElementWithId( Clay__HashString( clay_id, 0 ) );
+    Clay__OpenElementWithId( vxui_clay_id( id ) );
 
     Clay_ElementDeclaration decl       = {};
     decl.layout.sizing.width           = CLAY_SIZING_FIT( 0 );
