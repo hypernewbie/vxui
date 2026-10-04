@@ -230,18 +230,13 @@ void vxui_hud_resource_stock( vxui_hud* hud, const char* id, uint32_t texture_id
     float bh = 0.0f;
     for ( int i = 0; i < count; i++ )
     {
-        glm::vec2 p = vxui_hud_stock_pos( i, w, h, layout, gap );
-        bh = glm::max( bh, p.y + h );
-    }
-
-    for ( int i = 0; i < count; i++ )
-    {
         char slot_id[128];
         int  n = snprintf( slot_id, sizeof( slot_id ), "%s.%d", id, i );
         assert( n > 0 && n < (int) sizeof( slot_id ) );
 
         glm::vec2 p = vxui_hud_stock_pos( i, w, h, layout, gap );
         vxui_hud_rect_at( hud, slot_id, hud->x + p.x, hud->y + p.y, w, h, texture_id, uv );
+        bh = glm::max( bh, p.y + h );
     }
 
     hud->y += bh;
