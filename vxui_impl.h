@@ -714,12 +714,8 @@ static void vxui_menu_close_row( vxui_ctx* ctx, const char* value = nullptr )
         }
 
         const char* stable_value = vxui_text_push( ctx, value, value_len );
-        // TODO: emit text without a null branch (same pattern as vxui_text).
-        if ( stable_value )
-        {
-            Clay_String text_str = { false, (int32_t) value_len, stable_value };
-            CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontSize = (uint16_t) VXUI_FONT_SIZE_DEFAULT } ) );
-        }
+        Clay_String text_str     = { false, (int32_t) value_len, stable_value };
+        CLAY_TEXT( text_str, CLAY_TEXT_CONFIG( { .fontSize = (uint16_t) VXUI_FONT_SIZE_DEFAULT } ) );
     }
 
     Clay__CloseElement();

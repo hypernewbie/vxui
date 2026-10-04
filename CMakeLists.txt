@@ -55,7 +55,7 @@ if(VXUI_BUILD_TESTS)
         test_render_data test_game_menu test_menu_in_div test_root
         test_menu_scroll test_input_just_pressed test_menu_remount
         test_menu_collision test_input_repeated test_menu_input_edge
-        test_menu_text test_menu_label_arena test_mouse test_hud test_hud_z test_hud_text_lines test_hud_text_box test_hud_metadata test_menu_stack test_row_index
+        test_menu_text test_menu_label_arena test_menu_value_arena test_mouse test_hud test_hud_z test_hud_text_lines test_hud_text_box test_hud_metadata test_menu_stack test_row_index
         test_text test_text_arena test_draw_capacity test_vefc_backend)
         add_executable(${t} tests/${t}.cpp)
         target_link_libraries(${t} PRIVATE vxui)
