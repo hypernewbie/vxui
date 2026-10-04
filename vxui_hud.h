@@ -365,15 +365,15 @@ void vxui_hud_text_box( vxui_hud* hud, const char* id, const char* text, float w
 bool vxui_hud_resolve( const vxui_hud* hud, const vxui_draw_cmd* cmd, vxui_render_data* out )
 {
     assert( hud && cmd && out );
-    for ( int i = 0; i < hud->item_count; i++ )
-    {
-        if ( cmd->userdata != &hud->items[i] ) continue;
-        out->texture_id = hud->items[i].texture_id;
-        out->uv         = hud->items[i].uv;
-        out->colour     = hud->items[i].colour;
-        return true;
-    }
-    return false;
+    assert( hud->item_count >= 0 && hud->item_count <= VXUI_HUD_MAX_ITEMS );
+    uintptr_t offset = (uintptr_t) cmd->userdata - (uintptr_t) hud->items;
+    if ( offset >= (uintptr_t) hud->item_count * sizeof( vxui_hud_item ) || offset % sizeof( vxui_hud_item ) != 0 ) return false;
+
+    const vxui_hud_item& item = hud->items[offset / sizeof( vxui_hud_item )];
+    out->texture_id = item.texture_id;
+    out->uv         = item.uv;
+    out->colour     = item.colour;
+    return true;
 }
 
 #endif // #ifdef VXUI_HUD_IMPL
