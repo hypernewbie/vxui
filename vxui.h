@@ -218,9 +218,6 @@ struct vxui_ctx
     uint32_t active_menu_focus_id                    = 0;       // Clay id of focused row this frame, 0 = none
     bool     active_menu_fill                        = false;   // rows fill the menu column width (set by vxui_menu)
 
-    uint32_t focused_row_ids[VXUI_MAX_MENUS] = {};   // per-frame, count = focused_row_count
-    float    focus_offsets  [VXUI_MAX_MENUS] = {};   // parallel to focused_row_ids
-    int      focused_row_count               = 0;
     uint32_t pressed_row_ids[VXUI_MAX_MENUS] = {};   // per-frame, count = pressed_row_count
     int      pressed_row_count               = 0;
 

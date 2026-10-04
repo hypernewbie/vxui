@@ -407,7 +407,6 @@ UTEST(row_index, all_skipped_rows_remain_unfocused) {
     }
     vxui_draw_list dl = vxui_render( &ctx );
 
-    ASSERT_EQ( ctx.focused_row_count, 0 );
     ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), 2 );
     for ( int i = 0; i < 2; i++ )
     {

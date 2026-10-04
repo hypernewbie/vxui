@@ -76,7 +76,6 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
     ctx->frame_active           = true;
     ctx->inputs_committed       = false;
     ctx->text_offset            = 0;
-    ctx->focused_row_count      = 0;
     ctx->pressed_row_count      = 0;
     ctx->frame_row_count        = 0;
     if ( ctx->clay )
@@ -190,13 +189,6 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
     {
         vxui_draw_cmd& c = ctx->draw_buf[i];
         if ( c.type != VXUI_DRAW_RECT ) continue;
-        for ( int j = 0; j < ctx->focused_row_count; j++ )
-        {
-            if ( c.id != ctx->focused_row_ids[j] ) continue;
-            c.state          |= VXUI_DRAW_FOCUSED;
-            c.focus_offset_y  = ctx->focus_offsets[j];
-            break;
-        }
         for ( int j = 0; j < ctx->pressed_row_count; j++ )
         {
             if ( c.id == ctx->pressed_row_ids[j] ) { c.state |= VXUI_DRAW_PRESSED; break; }
@@ -205,8 +197,14 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         {
             const glm::uvec3& row = ctx->frame_rows[j];
             if ( c.id != row.x ) continue;
+            const glm::uvec4& menu = ctx->menu_state[row.z];
             c.row_index         = (int) row.y;
-            c.focused_row_index = (int) ctx->menu_state[row.z].y;
+            c.focused_row_index = (int) menu.y;
+            if ( row.y == menu.y && !( menu.w & ( 1u << row.y ) ) )
+            {
+                c.state          |= VXUI_DRAW_FOCUSED;
+                c.focus_offset_y  = ctx->menu_focus_spring[row.z].x;
+            }
             break;
         }
         if ( vxui_hit_rect( c, ctx->mouse_pos ) ) under_cursor_id = c.id;     // last (topmost) wins for click target
@@ -828,13 +826,6 @@ void vxui_menu_end( vxui_ctx* ctx )
         vxui_spring_update( s, 0.0f, 12.0f, ctx->dt > 0.0f ? ctx->dt : 1.0f / 60.0f );
         offset_y   = s.x;
         velocity_y = s.y;
-
-        if ( ctx->focused_row_count < VXUI_MAX_MENUS )
-        {
-            ctx->focused_row_ids[ctx->focused_row_count] = ctx->active_menu_focus_id;
-            ctx->focus_offsets  [ctx->focused_row_count] = offset_y;
-            ctx->focused_row_count++;
-        }
     }
 
     Clay__CloseElement();
