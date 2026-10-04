@@ -161,18 +161,18 @@ void vxui_hud_set_z( vxui_hud* hud, int16_t z )
 
 glm::vec4 vxui_hud_tile( int tex_w, int tex_h, int tile_w, int tile_h, int idx )
 {
-    int tilesX = tex_w / tile_w;
-    int tilesY = tex_h / tile_h;
-    if ( tilesX <= 0 ) tilesX = 1;
-    if ( tilesY <= 0 ) tilesY = 1;
+    assert( tex_w > 0 && tex_h > 0 && tile_w > 0 && tile_h > 0 && "invalid tile dimensions" );
+    assert( tile_w <= tex_w && tile_h <= tex_h && "tile larger than texture" );
 
-    int tileX = idx % tilesX;
-    int tileY = idx / tilesX;
+    int tiles_x = tex_w / tile_w;
+    assert( idx >= 0 && idx / tiles_x < tex_h / tile_h && "tile index out of range" );
+    int tile_x = idx % tiles_x;
+    int tile_y = idx / tiles_x;
 
-    float u0 = (float)( tileX * tile_w ) / (float) tex_w;
-    float v0 = (float)( tileY * tile_h ) / (float) tex_h;
-    float u1 = (float)( ( tileX + 1 ) * tile_w ) / (float) tex_w;
-    float v1 = (float)( ( tileY + 1 ) * tile_h ) / (float) tex_h;
+    float u0 = (float) ( tile_x * tile_w ) / (float) tex_w;
+    float v0 = (float) ( tile_y * tile_h ) / (float) tex_h;
+    float u1 = (float) ( ( tile_x + 1 ) * tile_w ) / (float) tex_w;
+    float v1 = (float) ( ( tile_y + 1 ) * tile_h ) / (float) tex_h;
 
     return { u0, v0, u1, v1 };
 }
