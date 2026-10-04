@@ -184,6 +184,8 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         }
     }
 
+    ctx->mouse_click_row_id = 0;
+    uint32_t under_cursor_id = 0;
     for ( int i = 0; i < count; i++ )
     {
         vxui_draw_cmd& c = ctx->draw_buf[i];
@@ -199,12 +201,6 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         {
             if ( c.id == ctx->pressed_row_ids[j] ) { c.state |= VXUI_DRAW_PRESSED; break; }
         }
-    }
-
-    for ( int i = 0; i < count; i++ )
-    {
-        vxui_draw_cmd& c = ctx->draw_buf[i];
-        if ( c.type != VXUI_DRAW_RECT ) continue;
         for ( int j = 0; j < ctx->frame_row_count; j++ )
         {
             if ( c.id != ctx->frame_row_ids[j] ) continue;
@@ -212,22 +208,10 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             c.focused_row_index = (int) ctx->menu_state[ctx->frame_row_menu_indices[j]].y;
             break;
         }
-    }
-
-    // Mouse hit test runs in two passes so press_row_id is settled before
-    // PRESSED stamping. Pass 1 finds the deepest rect under the cursor; the
-    // edge logic latches press/click; pass 2 stamps HOVERED on every containing
-    // rect (truth, not topmost) and PRESSED on the press rect when the cursor
-    // is still over it.
-    ctx->mouse_click_row_id = 0;
-    uint32_t under_cursor_id = 0;
-    for ( int i = 0; i < count; i++ )
-    {
-        vxui_draw_cmd& c = ctx->draw_buf[i];
-        if ( c.type != VXUI_DRAW_RECT ) continue;
         if ( vxui_hit_rect( c, ctx->mouse_pos ) ) under_cursor_id = c.id;     // last (topmost) wins for click target
     }
 
+    // Settle the mouse edge before stamping HOVERED/PRESSED on containing rects.
     bool btn_now  = ( ctx->mouse_buttons      & VXUI_MOUSE_LEFT ) != 0;
     bool btn_prev = ( ctx->prev_mouse_buttons & VXUI_MOUSE_LEFT ) != 0;
     if ( btn_now && !btn_prev )
