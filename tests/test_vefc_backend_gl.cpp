@@ -288,7 +288,7 @@ UTEST(vefc_backend_gl, full_suite_passes) {
     glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
     glClearColor( 0, 0, 0, 0 );
     glClear( GL_COLOR_BUFFER_BIT );
-    vxui_gl_push_solid_quad( &cache.drawlist, 0.25f, 0.25f, 0.75f, 0.75f, { 1, 0, 0, 1 } );
+    vxui_gl_push_quad( &cache.drawlist, DEMO_GL_PASS_RECT, 0.25f, 0.25f, 0.75f, 0.75f, {}, 0, { 1, 0, 0, 1 } );
     vxui_gl_execute( gl, &cache, win_w, win_h );
     uint8_t pixel[4] = {};
     glReadBuffer( GL_BACK );

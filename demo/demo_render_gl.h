@@ -481,34 +481,7 @@ void vxui_gl_init( vxui_ctx* ctx )
     vxui_gl_setup_fbo( gl );
 }
 
-static void vxui_gl_push_solid_quad( ve_fontcache_drawlist* dl, float x0, float y0, float x1, float y1, const glm::vec4& colour )
-{
-    uint32_t base = (uint32_t) dl->vertices.size();
-    dl->vertices.push_back( { x0, y0, 0.0f, 0.0f } );
-    dl->vertices.push_back( { x1, y0, 0.0f, 0.0f } );
-    dl->vertices.push_back( { x1, y1, 0.0f, 0.0f } );
-    dl->vertices.push_back( { x0, y1, 0.0f, 0.0f } );
-
-    uint32_t idx_start = (uint32_t) dl->indices.size();
-    dl->indices.push_back( base + 0 );
-    dl->indices.push_back( base + 1 );
-    dl->indices.push_back( base + 2 );
-    dl->indices.push_back( base + 0 );
-    dl->indices.push_back( base + 2 );
-    dl->indices.push_back( base + 3 );
-
-    ve_fontcache_draw dcall;
-    dcall.pass        = DEMO_GL_PASS_RECT;
-    dcall.start_index = idx_start;
-    dcall.end_index   = (uint32_t) dl->indices.size();
-    dcall.colour[0]   = colour.x;
-    dcall.colour[1]   = colour.y;
-    dcall.colour[2]   = colour.z;
-    dcall.colour[3]   = colour.w;
-    dl->dcalls.push_back( dcall );
-}
-
-static void vxui_gl_push_textured_quad( ve_fontcache_drawlist* dl, uint32_t pass, float x0, float y0, float x1, float y1, const glm::vec4& uv, uint32_t texture_id, const glm::vec4& colour )
+static void vxui_gl_push_quad( ve_fontcache_drawlist* dl, uint32_t pass, float x0, float y0, float x1, float y1, const glm::vec4& uv, uint32_t region, const glm::vec4& colour )
 {
     float u0 = uv.x, v0 = uv.y, u1 = uv.z, v1 = uv.w;
 
@@ -534,46 +507,18 @@ static void vxui_gl_push_textured_quad( ve_fontcache_drawlist* dl, uint32_t pass
     dcall.colour[1]   = colour.y;
     dcall.colour[2]   = colour.z;
     dcall.colour[3]   = colour.w;
-    dcall.region      = texture_id;
+    dcall.region      = region;
     dl->dcalls.push_back( dcall );
 }
 
-// Material-driven push: single quad, dcall.region indexes into material_data[].
-// All material passes share this shape; only pass id and material_data semantics differ.
-static void vxui_gl_push_material_quad( ve_fontcache_drawlist* dl, vxui_gl_state* gl, uint32_t pass,
-                                        float x0, float y0, float x1, float y1,
-                                        const float params[8], uint32_t flags,
-                                        const glm::vec4& colour )
+// dcall.region indexes into material_data[] for material passes.
+static void vxui_gl_push_material_quad( ve_fontcache_drawlist* dl, vxui_gl_state* gl, uint32_t pass, float x0, float y0, float x1, float y1, const float params[8], uint32_t flags, const glm::vec4& colour )
 {
-    uint32_t base = (uint32_t) dl->vertices.size();
-    dl->vertices.push_back( { x0, y0, 0.0f, 0.0f } );
-    dl->vertices.push_back( { x1, y0, 1.0f, 0.0f } );
-    dl->vertices.push_back( { x1, y1, 1.0f, 1.0f } );
-    dl->vertices.push_back( { x0, y1, 0.0f, 1.0f } );
-
-    uint32_t idx_start = (uint32_t) dl->indices.size();
-    dl->indices.push_back( base + 0 );
-    dl->indices.push_back( base + 1 );
-    dl->indices.push_back( base + 2 );
-    dl->indices.push_back( base + 0 );
-    dl->indices.push_back( base + 2 );
-    dl->indices.push_back( base + 3 );
-
     assert( gl->material_data_count < DEMO_GL_MAX_MATERIAL_DCALLS );
     int mat_idx = gl->material_data_count++;
     memcpy( gl->material_data[mat_idx].params, params, sizeof( gl->material_data[mat_idx].params ) );
     gl->material_data[mat_idx].flags = flags;
-
-    ve_fontcache_draw dcall;
-    dcall.pass        = pass;
-    dcall.start_index = idx_start;
-    dcall.end_index   = (uint32_t) dl->indices.size();
-    dcall.colour[0]   = colour.x;
-    dcall.colour[1]   = colour.y;
-    dcall.colour[2]   = colour.z;
-    dcall.colour[3]   = colour.w;
-    dcall.region      = (uint32_t) mat_idx;
-    dl->dcalls.push_back( dcall );
+    vxui_gl_push_quad( dl, pass, x0, y0, x1, y1, { 0, 0, 1, 1 }, (uint32_t) mat_idx, colour );
 }
 
 static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, const vxui_draw_cmd* c, float px, float py, float fb_w, float fb_h, vxui_gl_xform xf )
@@ -589,7 +534,7 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
     switch ( c->render.material_id )
     {
         case 0:
-            vxui_gl_push_solid_quad( fdl, x0, y0, x1, y1, c->render.colour );
+            vxui_gl_push_quad( fdl, DEMO_GL_PASS_RECT, x0, y0, x1, y1, {}, 0, c->render.colour );
             break;
         case DEMO_MATERIAL_CRT:
             // Caller-supplied params pass through unchanged: time/intensity/curve/aberration.
@@ -615,12 +560,12 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
             if ( uv.z <= 0.0f && uv.w <= 0.0f ) uv = { 0.0f, 0.0f, 1.0f, 1.0f };
             glm::vec4 tint = c->render.colour;
             if ( tint.r == 0 && tint.g == 0 && tint.b == 0 && tint.a == 0 ) tint = { 1.0f, 1.0f, 1.0f, 1.0f };
-            vxui_gl_push_textured_quad( fdl, DEMO_GL_PASS_IMAGE, x0, y0, x1, y1, uv, c->render.texture_id, tint );
+            vxui_gl_push_quad( fdl, DEMO_GL_PASS_IMAGE, x0, y0, x1, y1, uv, c->render.texture_id, tint );
             break;
         }
         default:
             assert( !"unknown material_id" );
-            vxui_gl_push_solid_quad( fdl, x0, y0, x1, y1, c->render.colour );
+            vxui_gl_push_quad( fdl, DEMO_GL_PASS_RECT, x0, y0, x1, y1, {}, 0, c->render.colour );
             break;
     }
 
@@ -648,7 +593,7 @@ static void vxui_gl_emit_one_rect( ve_fontcache_drawlist* fdl, vxui_gl_state* gl
         float ix1 = ( icon_px + icon_w ) / fb_w;
         float iy0 = 1.0f - icon_py / fb_h;
         float iy1 = 1.0f - ( icon_py + icon_h ) / fb_h;
-        vxui_gl_push_textured_quad( fdl, DEMO_GL_PASS_RECT_TEXTURED, ix0, iy0, ix1, iy1, c->render.uv, c->render.texture_id, c->render.colour );
+        vxui_gl_push_quad( fdl, DEMO_GL_PASS_RECT_TEXTURED, ix0, iy0, ix1, iy1, c->render.uv, c->render.texture_id, c->render.colour );
     }
 }
 
