@@ -158,42 +158,29 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
         glm::vec4 clip    = clip_depth > 0 ? clip_stack[clip_depth - 1] : glm::vec4{};
         bool      clipped = clip_depth > 0;
 
-        if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_RECTANGLE )
-        {
-            vxui_draw_cmd& out = ctx->draw_buf[count++];
-            out.id                = cmd->id;
-            out.type              = VXUI_DRAW_RECT;
-            out.state             = 0;
-            out.clipped           = clipped;
-            out.rect              = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
-            out.clip              = clip;
-            out.focus_offset_y    = 0;
-            out.text              = nullptr;
-            out.userdata          = cmd->userData;
-            out.text_len          = 0;
-            out.font              = 0;
-            out.font_px           = 0;
-            out.row_index         = -1;
-            out.focused_row_index = -1;
-        }
-        else if ( cmd->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT )
+        vxui_draw_cmd& out = ctx->draw_buf[count++];
+        out.id                = cmd->id;
+        out.type              = cmd->commandType == CLAY_RENDER_COMMAND_TYPE_RECTANGLE ? VXUI_DRAW_RECT : VXUI_DRAW_TEXT;
+        out.state             = 0;
+        out.clipped           = clipped;
+        out.rect              = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
+        out.clip              = clip;
+        out.focus_offset_y    = 0;
+        out.text              = nullptr;
+        out.userdata          = cmd->userData;
+        out.text_len          = 0;
+        out.font              = 0;
+        out.font_px           = 0;
+        out.row_index         = -1;
+        out.focused_row_index = -1;
+
+        if ( out.type == VXUI_DRAW_TEXT )
         {
             const Clay_TextRenderData& t = cmd->renderData.text;
-            vxui_draw_cmd& out = ctx->draw_buf[count++];
-            out.id                = cmd->id;
-            out.type              = VXUI_DRAW_TEXT;
-            out.state             = 0;
-            out.clipped           = clipped;
-            out.rect              = { cmd->boundingBox.x, cmd->boundingBox.y, cmd->boundingBox.width, cmd->boundingBox.height };
-            out.clip              = clip;
-            out.focus_offset_y    = 0;
-            out.text              = t.stringContents.chars;     // points into ctx->text_buf, valid until next vxui_frame
-            out.userdata          = cmd->userData;
-            out.text_len          = t.stringContents.length;
-            out.font              = t.fontId;
-            out.font_px           = t.fontSize;
-            out.row_index         = -1;
-            out.focused_row_index = -1;
+            out.text     = t.stringContents.chars;     // points into ctx->text_buf, valid until next vxui_frame
+            out.text_len = t.stringContents.length;
+            out.font     = t.fontId;
+            out.font_px  = t.fontSize;
         }
     }
 
