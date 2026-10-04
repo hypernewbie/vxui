@@ -308,12 +308,18 @@ const vxui_draw_cmd* vxui_draw_find( const vxui_draw_list& dl, uint8_t type, uin
     return nullptr;
 }
 
+static Clay_ElementId vxui_clay_id( const char* id )
+{
+    assert( id );
+    Clay_String clay_id = { false, (int32_t) strlen( id ), id };
+    return Clay__HashString( clay_id, 0 );
+}
+
 void vxui_div( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg )
 {
     assert( ctx );
 
-    Clay_String clay_id = { false, (int32_t) strlen( id ), id };
-    Clay__OpenElementWithId( Clay__HashString( clay_id, 0 ) );
+    Clay__OpenElementWithId( vxui_clay_id( id ) );
 
     Clay_ElementDeclaration decl = {};
     decl.layout.sizing.width     = vxui_sizing_to_clay( cfg.width );
@@ -336,6 +342,7 @@ void vxui_div_end( vxui_ctx* ctx )
 void vxui_rect( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg )
 {
     assert( ctx );
+    // TODO: use vxui_clay_id (same pattern as vxui_div).
 
     Clay_String clay_id = { false, (int32_t) strlen( id ), id };
     Clay__OpenElementWithId( Clay__HashString( clay_id, 0 ) );
@@ -356,6 +363,7 @@ void vxui_rect( vxui_ctx* ctx, const char* id, vxui_div_cfg cfg )
 void vxui_text( vxui_ctx* ctx, const char* id, const char* label, uint16_t font_px )
 {
     assert( ctx );
+    // TODO: use vxui_clay_id (same pattern as vxui_div).
     if ( font_px == 0 ) font_px = (uint16_t) VXUI_FONT_SIZE_DEFAULT;
 
     Clay_String clay_id = { false, (int32_t) strlen( id ), id };
@@ -378,6 +386,7 @@ void vxui_text( vxui_ctx* ctx, const char* id, const char* label, uint16_t font_
 void vxui_root( vxui_ctx* ctx, const char* id, float x, float y )
 {
     assert( ctx );
+    // TODO: use vxui_clay_id (same pattern as vxui_div).
 
     Clay_String clay_id = { false, (int32_t) strlen( id ), id };
     Clay__OpenElementWithId( Clay__HashString( clay_id, 0 ) );
@@ -397,13 +406,6 @@ void vxui_root_end( vxui_ctx* ctx )
 {
     assert( ctx );
     Clay__CloseElement();
-}
-
-static Clay_ElementId vxui_clay_id( const char* id )
-{
-    assert( id );
-    Clay_String clay_id = { false, (int32_t) strlen( id ), id };
-    return Clay__HashString( clay_id, 0 );
 }
 
 uint32_t vxui_id( const char* id )

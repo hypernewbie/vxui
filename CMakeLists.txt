@@ -52,7 +52,7 @@ if(VXUI_BUILD_TESTS)
     foreach(t
         test_util test_pages test_menu test_menu_option test_menu_slider
         test_menu_noninteractive test_frame test_integration test_menu_draw
-        test_render_data test_game_menu test_menu_in_div test_root
+        test_render_data test_game_menu test_menu_in_div test_div_id test_root
         test_menu_scroll test_input_just_pressed test_menu_remount
         test_menu_collision test_input_repeated test_menu_input_edge
         test_menu_text test_menu_label_arena test_menu_value_arena test_mouse test_hud test_hud_stock test_hud_tile test_hud_rect_id test_hud_align_x test_hud_align_y test_hud_z test_hud_text_id test_hud_text_lines test_hud_text_arena test_hud_text_box test_hud_text_box_id test_hud_text_box_arena test_hud_metadata test_menu_stack test_row_index
