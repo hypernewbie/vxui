@@ -302,13 +302,7 @@ void vxui_hud_health_bar( vxui_hud* hud, const char* id, uint32_t texture_id, fl
     hud->y = base_y + h;
 }
 
-static Clay_LayoutAlignmentX vxui_hud_align_x( uint8_t a )
-{
-    if ( a == 1 ) return CLAY_ALIGN_X_CENTER;
-    if ( a == 2 ) return CLAY_ALIGN_X_RIGHT;
-    return CLAY_ALIGN_X_LEFT;
-}
-
+// TODO: use vxui_align_y_to_clay (same pattern as vxui_hud_text_box's x alignment).
 static Clay_LayoutAlignmentY vxui_hud_align_y( uint8_t a )
 {
     if ( a == 1 ) return CLAY_ALIGN_Y_CENTER;
@@ -355,7 +349,7 @@ void vxui_hud_text_box( vxui_hud* hud, const char* id, const char* text, float w
     Clay_ElementDeclaration decl       = {};
     decl.layout.sizing.width           = CLAY_SIZING_FIXED( w );
     decl.layout.sizing.height          = CLAY_SIZING_FIXED( h );
-    decl.layout.childAlignment.x       = vxui_hud_align_x( align_x );
+    decl.layout.childAlignment.x       = vxui_align_x_to_clay( align_x );
     decl.layout.childAlignment.y       = vxui_hud_align_y( align_y );
     decl.floating.attachTo             = CLAY_ATTACH_TO_ROOT;
     decl.floating.attachPoints.element = CLAY_ATTACH_POINT_LEFT_TOP;
