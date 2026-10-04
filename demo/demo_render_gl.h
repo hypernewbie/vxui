@@ -643,34 +643,34 @@ static void vxui_gl_emit( ve_fontcache_drawlist* fdl, vxui_gl_state* gl, ve_font
     {
         const vxui_draw_cmd* c = &dl.cmds[i];
 
-        if ( c->type == VXUI_DRAW_RECT )
+        bool rect = c->type == VXUI_DRAW_RECT;
+        ve_font_id font = -1;
+        if ( !rect )
         {
-            float px = xf.offset.x + c->rect.x * xf.scale;
-            float py = xf.offset.y + ( c->rect.y + ( ( c->state & VXUI_DRAW_FOCUSED ) ? c->focus_offset_y : 0.0f ) ) * xf.scale;
-            if ( c->clipped ) vxui_gl_push_scissor_set( fdl, gl, vxui_gl_scissor_rect( c, w, h, xf ) );
-            vxui_gl_emit_one_rect( fdl, gl, c, px, py, w, h, xf );
-            if ( c->clipped ) vxui_gl_push_scissor_reset( fdl );
-            continue;
+            font = ( c->font != 0 ) ? (ve_font_id) c->font : default_font;
+            if ( cache->entry.empty() || font < 0 || c->text_len <= 0 ) continue;
         }
 
-        ve_font_id font = ( c->font != 0 ) ? (ve_font_id) c->font : default_font;
-        if ( cache->entry.empty() || font < 0 || c->text_len <= 0 ) continue;
-
-        glm::vec4 col = c->render.colour;
-        if ( col.a <= 0.0f ) col = { 0.95f, 0.95f, 0.95f, 1.0f };
-        float text_colour[4] = { col.r, col.g, col.b, col.a };
-
-        float font_px = (float) c->font_px * xf.scale;
-        ve_fontcache_set_colour   ( cache, text_colour );
-        ve_fontcache_set_font_size( cache, font, font_px );
-
-        std::u8string text( (const char8_t*) c->text, (size_t) c->text_len );
-        float sx   = xf.offset.x + c->rect.x * xf.scale;
-        float sy   = xf.offset.y + c->rect.y * xf.scale;
-        float posx = sx * inv_w;
-        float posy = 1.0f - ( sy + font_px ) * inv_h;   // VEFC pen = baseline, y-up
+        float px = xf.offset.x + c->rect.x * xf.scale;
+        float py = xf.offset.y + ( c->rect.y + ( ( rect && ( c->state & VXUI_DRAW_FOCUSED ) ) ? c->focus_offset_y : 0.0f ) ) * xf.scale;
         if ( c->clipped ) vxui_gl_push_scissor_set( fdl, gl, vxui_gl_scissor_rect( c, w, h, xf ) );
-        ve_fontcache_draw_text( cache, font, text, posx, posy, inv_w, inv_h );
+        if ( rect )
+            vxui_gl_emit_one_rect( fdl, gl, c, px, py, w, h, xf );
+        else
+        {
+            glm::vec4 col = c->render.colour;
+            if ( col.a <= 0.0f ) col = { 0.95f, 0.95f, 0.95f, 1.0f };
+            float text_colour[4] = { col.r, col.g, col.b, col.a };
+
+            float font_px = (float) c->font_px * xf.scale;
+            ve_fontcache_set_colour   ( cache, text_colour );
+            ve_fontcache_set_font_size( cache, font, font_px );
+
+            std::u8string text( (const char8_t*) c->text, (size_t) c->text_len );
+            float posx = px * inv_w;
+            float posy = 1.0f - ( py + font_px ) * inv_h;   // VEFC pen = baseline, y-up
+            ve_fontcache_draw_text( cache, font, text, posx, posy, inv_w, inv_h );
+        }
         if ( c->clipped ) vxui_gl_push_scissor_reset( fdl );
     }
 }
@@ -740,17 +740,18 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glUseProgram( gl->shader_render_glyph );
             glBindFramebuffer( GL_FRAMEBUFFER, gl->fbo[0] );
             glDisable( GL_BLEND );
-            glColorMask( !glyph, !glyph, !glyph, !glyph );
             glEnable( GL_STENCIL_TEST );
             glStencilMask( 0xFF );
             if ( glyph )
             {
+                glColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE );
                 glStencilFunc( GL_ALWAYS, 0, 0xFF );
                 glStencilOpSeparate( GL_FRONT, GL_KEEP, GL_KEEP, GL_INCR_WRAP );
                 glStencilOpSeparate( GL_BACK,  GL_KEEP, GL_KEEP, GL_DECR_WRAP );
             }
             else
             {
+                glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
                 glStencilFunc( GL_NOTEQUAL, 0, 0xFF );
                 glStencilOp( GL_KEEP, GL_KEEP, GL_ZERO );
             }
