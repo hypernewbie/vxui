@@ -76,8 +76,8 @@ void vxui_frame( vxui_ctx* ctx, float dt, float w, float h )
     ctx->frame_active           = true;
     ctx->inputs_committed       = false;
     ctx->text_offset            = 0;
-    ctx->pressed_row_count      = 0;
     ctx->frame_row_count        = 0;
+    memset( ctx->menu_pressed_rows, 0, sizeof( ctx->menu_pressed_rows ) );
     if ( ctx->clay )
     {
         Clay_SetCurrentContext( (Clay_Context*) ctx->clay );
@@ -189,10 +189,6 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
     {
         vxui_draw_cmd& c = ctx->draw_buf[i];
         if ( c.type != VXUI_DRAW_RECT ) continue;
-        for ( int j = 0; j < ctx->pressed_row_count; j++ )
-        {
-            if ( c.id == ctx->pressed_row_ids[j] ) { c.state |= VXUI_DRAW_PRESSED; break; }
-        }
         for ( int j = 0; j < ctx->frame_row_count; j++ )
         {
             const glm::uvec3& row = ctx->frame_rows[j];
@@ -200,6 +196,7 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             const glm::uvec4& menu = ctx->menu_state[row.z];
             c.row_index         = (int) row.y;
             c.focused_row_index = (int) menu.y;
+            if ( ctx->menu_pressed_rows[row.z] & ( 1u << row.y ) ) c.state |= VXUI_DRAW_PRESSED;
             if ( row.y == menu.y && !( menu.w & ( 1u << row.y ) ) )
             {
                 c.state          |= VXUI_DRAW_FOCUSED;
@@ -724,8 +721,8 @@ bool vxui_menu_action( vxui_ctx* ctx, const char* label )
     bool mouse_fire = ( ctx->mouse_click_row_id == ctx->active_menu_focus_id );
     if ( mouse_fire ) ctx->mouse_click_row_id = 0;
 
-    if ( ( kbd_held || mouse_fire ) && ctx->pressed_row_count < VXUI_MAX_MENUS )
-        ctx->pressed_row_ids[ctx->pressed_row_count++] = ctx->active_menu_focus_id;
+    if ( kbd_held || mouse_fire )
+        ctx->menu_pressed_rows[ctx->active_menu] |= 1u << ( ctx->active_menu_row - 1 );
 
     // Edge-triggered: holding confirm or holding the mouse button fires once, not every frame.
     return kbd_fire || mouse_fire;

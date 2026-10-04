@@ -238,7 +238,7 @@ UTEST(draw_state, every_menu_resolves_both_rows_at_menu_capacity) {
         vxui_draw_list dl = vxui_render( &ctx );
 
         ASSERT_EQ( vxui_draw_count( dl, VXUI_DRAW_RECT ), VXUI_MAX_MENUS * 2 );
-        ASSERT_EQ( ctx.pressed_row_count, VXUI_MAX_MENUS );
+        for ( int m = 0; m < VXUI_MAX_MENUS; m++ ) ASSERT_EQ( ctx.menu_pressed_rows[m], 1u << frame );
         for ( int m = 0; m < VXUI_MAX_MENUS; m++ )
         {
             for ( int row = 0; row < 2; row++ )

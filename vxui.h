@@ -209,6 +209,7 @@ struct vxui_ctx
     glm::uvec4  menu_state       [VXUI_MAX_MENUS]    = {};   // { hash_id, current_row, num_rows, skip_mask }
     glm::vec4   menu_focus_spring[VXUI_MAX_MENUS]    = {};   // { offset_y, velocity_y, prev_row, _ }, prev_row -1 = unset
     int         menu_scroll_top  [VXUI_MAX_MENUS]    = {};   // topmost visible row index when max_visible > 0
+    uint32_t    menu_pressed_rows[VXUI_MAX_MENUS]    = {};   // per-frame bit i = action row i was pressed
     const char* menu_names       [VXUI_MAX_MENUS]    = {};   // literal pointer for hash-collision detection
     uint32_t active_menu_row_ids[VXUI_MAX_MENU_ROWS] = {};   // Clay ids of rows declared this frame, for dup detection
     int      menu_count                              = 0;
@@ -217,9 +218,6 @@ struct vxui_ctx
     uint32_t active_menu_skip                        = 0;       // bitmask, accumulated during declaration
     uint32_t active_menu_focus_id                    = 0;       // Clay id of focused row this frame, 0 = none
     bool     active_menu_fill                        = false;   // rows fill the menu column width (set by vxui_menu)
-
-    uint32_t pressed_row_ids[VXUI_MAX_MENUS] = {};   // per-frame, count = pressed_row_count
-    int      pressed_row_count               = 0;
 
     glm::uvec3 frame_rows[VXUI_MAX_MENUS * VXUI_MAX_MENU_ROWS] = {};   // { id, row index, menu index }
     int        frame_row_count                               = 0;
