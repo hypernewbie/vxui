@@ -320,6 +320,24 @@ UTEST(vefc_backend_gl, full_suite_passes) {
     glReadPixels( 300, win_h - 100, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, outside );
     EXPECT_TRUE( outside[3] < 10 );
 
+    glm::vec4 empty_clips[] = { { 200, 0, -20, 400 }, { 0, 200, 400, -20 }, { 200, 200, -20, -20 }, { 0, 0, 0, 400 }, { 0, 0, 400, 0 } };
+    for ( int i = 0; i < 5; i++ )
+    {
+        glClear( GL_COLOR_BUFFER_BIT );
+        clipped.clip = empty_clips[i];
+        gl->scissor_data_count = 0;
+        vxui_gl_emit( ve_fontcache_get_drawlist( &cache ), gl, &cache, -1, dl, win_w, win_h, {} );
+        vxui_gl_execute( gl, &cache, win_w, win_h );
+        glReadPixels( 100, win_h - 100, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, inside );
+        EXPECT_TRUE( inside[0] < 10 && inside[1] < 10 && inside[2] < 10 && inside[3] < 10 );
+        EXPECT_EQ( glGetError(), (GLenum) GL_NO_ERROR );
+    }
+    clipped.clipped = false;
+    vxui_gl_emit( ve_fontcache_get_drawlist( &cache ), gl, &cache, -1, dl, win_w, win_h, {} );
+    vxui_gl_execute( gl, &cache, win_w, win_h );
+    glReadPixels( 100, win_h - 100, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, inside );
+    EXPECT_TRUE( inside[1] > 200 && inside[0] < 10 );
+
     glClear( GL_COLOR_BUFFER_BIT );
 
     // Producer order survives the walk: red is focused and declared first, green second.

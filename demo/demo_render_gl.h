@@ -604,7 +604,7 @@ static glm::vec4 vxui_gl_scissor_rect( const vxui_draw_cmd* c, float w, float h,
     float y0 = xf.offset.y + c->clip.y * xf.scale;
     float x1 = x0 + c->clip.z * xf.scale;
     float y1 = y0 + c->clip.w * xf.scale;
-    return { x0 / w, 1.0f - y1 / h, ( x1 - x0 ) / w, ( y1 - y0 ) / h };
+    return { x0 / w, 1.0f - y1 / h, glm::max( x1 - x0, 0.0f ) / w, glm::max( y1 - y0, 0.0f ) / h };
 }
 
 // Zero-index markers: the dispatcher applies scissor state, so clipped rects
