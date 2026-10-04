@@ -625,6 +625,8 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, bool has_v
     ctx->active_menu_row_ids[ctx->active_menu_row] = eid.id;
 
     assert( ctx->frame_row_count < VXUI_MAX_MENUS * VXUI_MAX_MENU_ROWS );
+    for ( int i = 0; i < ctx->frame_row_count; i++ )
+        assert( ctx->frame_row_ids[i] != eid.id && "menu row hash collision" );
     int fr = ctx->frame_row_count++;
     ctx->frame_row_ids            [fr] = eid.id;
     ctx->frame_row_indices        [fr] = ctx->active_menu_row;
