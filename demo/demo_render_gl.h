@@ -789,19 +789,12 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
             glUseProgram( gl->shader_rect );
             glUniform4fv( glGetUniformLocation( gl->shader_rect, "colour" ), 1, dcall.colour );
         }
-        else if ( dcall.pass == DEMO_GL_PASS_RECT_TEXTURED )
+        else if ( dcall.pass == DEMO_GL_PASS_RECT_TEXTURED || dcall.pass == DEMO_GL_PASS_IMAGE )
         {
-            glUseProgram( gl->shader_rect_textured );
-            glUniform4fv( glGetUniformLocation( gl->shader_rect_textured, "colour" ), 1, dcall.colour );
-            glUniform1i( glGetUniformLocation( gl->shader_rect_textured, "src_texture" ), 0 );
-            glActiveTexture( GL_TEXTURE0 );
-            glBindTexture( GL_TEXTURE_2D, (GLuint) dcall.region );
-        }
-        else if ( dcall.pass == DEMO_GL_PASS_IMAGE )
-        {
-            glUseProgram( gl->shader_image );
-            glUniform4fv( glGetUniformLocation( gl->shader_image, "colour" ), 1, dcall.colour );
-            glUniform1i( glGetUniformLocation( gl->shader_image, "src_texture" ), 0 );
+            GLuint shader = dcall.pass == DEMO_GL_PASS_IMAGE ? gl->shader_image : gl->shader_rect_textured;
+            glUseProgram( shader );
+            glUniform4fv( glGetUniformLocation( shader, "colour" ), 1, dcall.colour );
+            glUniform1i( glGetUniformLocation( shader, "src_texture" ), 0 );
             glActiveTexture( GL_TEXTURE0 );
             glBindTexture( GL_TEXTURE_2D, (GLuint) dcall.region );
         }
