@@ -35,6 +35,8 @@ struct gl_snapshot
     int flags_uploads = 0;
     GLuint flags = 0;
     GLuint downsample = 0;
+    GLsizei index_count = 0;
+    uintptr_t index_offset = 0;
     GLuint stencil_write_mask = 0;
     GLenum stencil_compare = 0;
     GLint stencil_ref = 0;
@@ -145,9 +147,11 @@ static void APIENTRY uniform_vec4( GLint location, GLsizei, const GLfloat* value
     }
 }
 
-static void APIENTRY draw_elements( GLenum, GLsizei, GLenum, const void* )
+static void APIENTRY draw_elements( GLenum, GLsizei count, GLenum, const void* offset )
 {
     assert( s_draw_count < DEMO_GL_MAX_MATERIAL_DCALLS );
+    s_current.index_count = count;
+    s_current.index_offset = (uintptr_t) offset;
     s_draws[s_draw_count++] = s_current;
 }
 

@@ -709,6 +709,7 @@ static void vxui_gl_execute( vxui_gl_state* gl, ve_fontcache* cache, int win_w, 
 
     for ( ve_fontcache_draw& dcall : drawlist->dcalls )
     {
+        assert( dcall.start_index <= dcall.end_index && dcall.end_index <= drawlist->indices.size() && "invalid draw index span" );
         if ( dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET || dcall.pass == VE_FONTCACHE_FRAMEBUFFER_PASS_TARGET_UNCACHED || ( dcall.pass >= DEMO_GL_PASS_RECT && dcall.pass <= DEMO_GL_PASS_IMAGE ) )
         {
             glBindFramebuffer( GL_FRAMEBUFFER, 0 );
