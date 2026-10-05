@@ -122,6 +122,8 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
     glm::vec4 clip_stack[VXUI_MAX_CLIP_STACK] = {};
     int       clip_depth                     = 0;
 
+    ctx->mouse_click_row_id = 0;
+    uint32_t under_cursor_id = 0;
     int count = 0;
     for ( int i = 0; i < cmds.length; i++ )
     {
@@ -181,14 +183,9 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             out.font     = t.fontId;
             out.font_px  = t.fontSize;
         }
-    }
 
-    ctx->mouse_click_row_id = 0;
-    uint32_t under_cursor_id = 0;
-    for ( int i = 0; i < count; i++ )
-    {
-        vxui_draw_cmd& c = ctx->draw_buf[i];
-        if ( c.type != VXUI_DRAW_RECT ) continue;
+        if ( out.type != VXUI_DRAW_RECT ) continue;
+        vxui_draw_cmd& c = out;
         for ( int j = 0; j < ctx->frame_row_count; j++ )
         {
             const glm::uvec3& row = ctx->frame_rows[j];
