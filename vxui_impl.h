@@ -204,10 +204,14 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
             }
             break;
         }
-        if ( vxui_hit_rect( c, ctx->mouse_pos ) ) under_cursor_id = c.id;     // last (topmost) wins for click target
+        if ( vxui_hit_rect( c, ctx->mouse_pos ) )
+        {
+            c.state |= VXUI_DRAW_HOVERED;
+            under_cursor_id = c.id;     // last (topmost) wins for click target
+        }
     }
 
-    // Settle the mouse edge before stamping HOVERED/PRESSED on containing rects.
+    // Settle the mouse edge before stamping PRESSED on hovered rects.
     bool btn_now  = ( ctx->mouse_buttons      & VXUI_MOUSE_LEFT ) != 0;
     bool btn_prev = ( ctx->prev_mouse_buttons & VXUI_MOUSE_LEFT ) != 0;
     if ( btn_now && !btn_prev )
@@ -222,10 +226,7 @@ vxui_draw_list vxui_render( vxui_ctx* ctx )
     for ( int i = 0; i < count; i++ )
     {
         vxui_draw_cmd& c = ctx->draw_buf[i];
-        if ( c.type != VXUI_DRAW_RECT ) continue;
-        if ( !vxui_hit_rect( c, ctx->mouse_pos ) ) continue;
-        c.state |= VXUI_DRAW_HOVERED;
-        if ( c.id == ctx->mouse_press_row_id ) c.state |= VXUI_DRAW_PRESSED;
+        if ( ( c.state & VXUI_DRAW_HOVERED ) && c.id == ctx->mouse_press_row_id ) c.state |= VXUI_DRAW_PRESSED;
     }
 
     for ( int i = 0; i < count; i++ )
