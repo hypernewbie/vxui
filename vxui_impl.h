@@ -407,42 +407,34 @@ static constexpr uint32_t s_vxui_inputs[] =
 static constexpr size_t s_vxui_inputs_n = sizeof( s_vxui_inputs ) / sizeof( s_vxui_inputs[0] );
 static_assert( s_vxui_inputs_n == 6, "outdated vxui_input_action." );
 
-void vxui_input( vxui_ctx* ctx, const char* action, bool pressed )
+static uint32_t vxui_input_bit( const char* action, bool required = true )
 {
+    assert( action );
     uint32_t hash = vxui_hash( action );
     for ( int i = 0; i < (int) s_vxui_inputs_n; i++ )
-    {
-        if ( hash != s_vxui_inputs[i] ) continue;
-        if ( pressed )
-            ctx->input |= ( 1 << i );
-        else
-            ctx->input &= ~( 1 << i );
-        break;
-    }
+        if ( hash == s_vxui_inputs[i] ) return 1u << i;
+    assert( !required && "invalid input action" );
+    return 0;
+}
+
+void vxui_input( vxui_ctx* ctx, const char* action, bool pressed )
+{
+    assert( ctx );
+    uint32_t bit = vxui_input_bit( action, false );
+    if ( pressed ) ctx->input |= bit;
+    else           ctx->input &= ~bit;
 }
 
 bool vxui_input_pressed( vxui_ctx* ctx, const char* action )
 {
-    uint32_t hash = vxui_hash( action );
-    for ( int i = 0; i < (int) s_vxui_inputs_n; i++ )
-    {
-        if ( hash != s_vxui_inputs[i] ) continue;
-        return ( ctx->input & ( 1 << i ) ) != 0;
-    }
-    assert( !"invalid input action" );
-    return false;
+    assert( ctx );
+    return ( ctx->input & vxui_input_bit( action ) ) != 0;
 }
 
 bool vxui_input_just_pressed( vxui_ctx* ctx, const char* action )
 {
-    uint32_t hash = vxui_hash( action );
-    for ( int i = 0; i < (int) s_vxui_inputs_n; i++ )
-    {
-        if ( hash != s_vxui_inputs[i] ) continue;
-        return ( ctx->input & ~ctx->prev_input & ( 1 << i ) ) != 0;
-    }
-    assert( !"invalid input action" );
-    return false;
+    assert( ctx );
+    return ( ctx->input & ~ctx->prev_input & vxui_input_bit( action ) ) != 0;
 }
 
 static void vxui_commit_inputs( vxui_ctx* ctx )
@@ -480,15 +472,9 @@ static void vxui_commit_inputs( vxui_ctx* ctx )
 
 bool vxui_input_repeated( vxui_ctx* ctx, const char* action )
 {
+    assert( ctx );
     vxui_commit_inputs( ctx );
-    uint32_t hash = vxui_hash( action );
-    for ( int i = 0; i < (int) s_vxui_inputs_n; i++ )
-    {
-        if ( hash != s_vxui_inputs[i] ) continue;
-        return ( ctx->input_repeated & ( 1 << i ) ) != 0;
-    }
-    assert( !"invalid input action" );
-    return false;
+    return ( ctx->input_repeated & vxui_input_bit( action ) ) != 0;
 }
 
 void vxui_mouse( vxui_ctx* ctx, float x, float y, uint32_t buttons )
