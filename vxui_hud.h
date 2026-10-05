@@ -271,18 +271,14 @@ void vxui_hud_health_bar( vxui_hud* hud, const char* id, uint32_t texture_id, fl
 {
     assert( hud && id && w > 0.0f && h > 0.0f );
 
-    float t = max_hp > 0.0f ? glm::clamp( hp / max_hp, 0.0f, 1.0f ) : 0.0f;
+    float t = max_hp > 0.0f ? hp / max_hp : 0.0f;
 
     char fill_id[128];
     int  n = snprintf( fill_id, sizeof( fill_id ), "%s.fill", id );
     assert( n > 0 && n < (int) sizeof( fill_id ) );
 
-    float base_x  = hud->x;
-    float base_y  = hud->y;
-    glm::vec4 fuv = uv;
-    fuv.z         = uv.x + ( uv.z - uv.x ) * t;
-
-    vxui_hud_rect_at( hud, fill_id, base_x, base_y, w * t, h, texture_id, fuv );
+    float base_y = hud->y;
+    vxui_hud_resource_bar( hud, fill_id, texture_id, t, w, h, uv );
 
     if ( text )
     {
@@ -293,13 +289,9 @@ void vxui_hud_health_bar( vxui_hud* hud, const char* id, uint32_t texture_id, fl
         n = snprintf( text_id, sizeof( text_id ), "%s.text", id );
         assert( n > 0 && n < (int) sizeof( text_id ) );
 
-        hud->x = base_x;
         hud->y = base_y;
         vxui_hud_text_box( hud, text_id, label, w, h );
     }
-
-    hud->x = base_x;
-    hud->y = base_y + h;
 }
 
 void vxui_hud_text( vxui_hud* hud, const char* id, const char* text )
