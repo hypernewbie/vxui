@@ -505,10 +505,14 @@ static int vxui_menu_get( vxui_ctx* ctx, const char* name )
 
 static uint32_t vxui_menu_next_row( uint32_t from, uint32_t num_rows, uint32_t skip_mask, int step, bool wrap )
 {
-    // step: +1 forward, -1 backward.
+    // step: +1 forward, -1 backward. from == num_rows is the backward shrink search.
+    assert( num_rows <= VXUI_MAX_MENU_ROWS && ( step == 1 || step == -1 ) );
+    assert( from < num_rows || ( from == num_rows && ( step < 0 || num_rows == 0 ) ) );
+    uint32_t next = from;
     for ( uint32_t i = 0; i < num_rows; i++ )
     {
-        uint32_t next = ( from + ( i + 1 ) * step + num_rows * num_rows ) % num_rows;
+        if ( step > 0 ) next = next == num_rows - 1 ? 0 : next + 1;
+        else            next = next == 0 ? num_rows - 1 : next - 1;
         if ( !wrap && ( ( step > 0 && next <= from ) || ( step < 0 && next >= from ) ) )
             return from;
         if ( !( skip_mask & ( 1u << next ) ) )

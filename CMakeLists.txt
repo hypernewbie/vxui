@@ -51,7 +51,7 @@ if(VXUI_BUILD_TESTS)
     enable_testing()
     foreach(t
         test_util test_pages test_menu test_menu_option test_menu_slider
-        test_menu_noninteractive test_frame test_integration test_menu_draw
+        test_menu_noninteractive test_menu_navigation test_frame test_integration test_menu_draw
         test_render_data test_game_menu test_menu_in_div test_div_id test_rect_id test_root test_root_id
         test_menu_scroll test_input_just_pressed test_menu_remount
         test_menu_collision test_menu_row_collision test_menu_row_guard test_menu_row_records test_menu_focus_owner test_menu_press_owner test_input_repeated test_input_lookup test_menu_input_edge
