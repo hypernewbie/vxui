@@ -616,13 +616,13 @@ static uint32_t vxui_menu_open_row( vxui_ctx* ctx, const char* label, bool has_v
     Clay_ElementId   eid       = Clay__HashString( cs, ctx->menu_state[ctx->active_menu].x );
 
     assert( ctx->active_menu_row < VXUI_MAX_MENU_ROWS );
-    for ( int i = 0; i < ctx->active_menu_row; i++ )
-        assert( ctx->active_menu_row_ids[i] != eid.id && "duplicate label in same menu" );
-    ctx->active_menu_row_ids[ctx->active_menu_row] = eid.id;
-
     assert( ctx->frame_row_count < VXUI_MAX_MENUS * VXUI_MAX_MENU_ROWS );
     for ( int i = 0; i < ctx->frame_row_count; i++ )
-        assert( ctx->frame_rows[i].x != eid.id && "menu row hash collision" );
+    {
+        const glm::uvec3& row = ctx->frame_rows[i];
+        assert( ( row.z != (uint32_t) ctx->active_menu || row.x != eid.id ) && "duplicate label in same menu" );
+        assert( row.x != eid.id && "menu row hash collision" );
+    }
     ctx->frame_rows[ctx->frame_row_count++] = { eid.id, (uint32_t) ctx->active_menu_row, (uint32_t) ctx->active_menu };
 
     bool fill = ctx->active_menu_fill;

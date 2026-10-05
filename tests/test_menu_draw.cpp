@@ -976,11 +976,11 @@ UTEST(menu_draw, all_five_row_types_with_distinct_labels) {
     }
     vxui_render( &ctx );
 
-    ASSERT_EQ( ctx.active_menu_row_ids[0], row_id( "m", "Top"  ) );
-    ASSERT_EQ( ctx.active_menu_row_ids[1], row_id( "m", "Info" ) );
-    ASSERT_EQ( ctx.active_menu_row_ids[2], row_id( "m", "Play" ) );
-    ASSERT_EQ( ctx.active_menu_row_ids[3], row_id( "m", "Diff" ) );
-    ASSERT_EQ( ctx.active_menu_row_ids[4], row_id( "m", "Vol"  ) );
+    ASSERT_EQ( ctx.frame_rows[0].x, row_id( "m", "Top"  ) );
+    ASSERT_EQ( ctx.frame_rows[1].x, row_id( "m", "Info" ) );
+    ASSERT_EQ( ctx.frame_rows[2].x, row_id( "m", "Play" ) );
+    ASSERT_EQ( ctx.frame_rows[3].x, row_id( "m", "Diff" ) );
+    ASSERT_EQ( ctx.frame_rows[4].x, row_id( "m", "Vol"  ) );
 }
 
 UTEST(menu_draw, row_ids_reset_between_frames) {
@@ -1004,8 +1004,8 @@ UTEST(menu_draw, row_ids_reset_between_frames) {
     }
     vxui_render( &ctx );
 
-    ASSERT_EQ( ctx.active_menu_row_ids[0], row_id( "m", "Play" ) );
-    ASSERT_EQ( ctx.active_menu_row_ids[1], row_id( "m", "Quit" ) );
+    ASSERT_EQ( ctx.frame_rows[0].x, row_id( "m", "Play" ) );
+    ASSERT_EQ( ctx.frame_rows[1].x, row_id( "m", "Quit" ) );
 }
 
 UTEST(menu_draw, row_ids_isolated_across_two_menus) {
@@ -1024,7 +1024,8 @@ UTEST(menu_draw, row_ids_isolated_across_two_menus) {
     }
     vxui_render( &ctx );
 
-    ASSERT_EQ( ctx.active_menu_row_ids[0], row_id( "right", "Back" ) );
+    ASSERT_EQ( ctx.frame_rows[0].x, row_id( "left", "Back" ) );
+    ASSERT_EQ( ctx.frame_rows[1].x, row_id( "right", "Back" ) );
 }
 
 UTEST(menu_draw, empty_menu_emits_no_rects) {

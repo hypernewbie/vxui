@@ -211,7 +211,6 @@ struct vxui_ctx
     int         menu_scroll_top  [VXUI_MAX_MENUS]    = {};   // topmost visible row index when max_visible > 0
     uint32_t    menu_pressed_rows[VXUI_MAX_MENUS]    = {};   // per-frame bit i = action row i was pressed
     const char* menu_names       [VXUI_MAX_MENUS]    = {};   // literal pointer for hash-collision detection
-    uint32_t active_menu_row_ids[VXUI_MAX_MENU_ROWS] = {};   // Clay ids of rows declared this frame, for dup detection
     int      menu_count                              = 0;
     int      active_menu                             = -1;      // index into menus[], -1 = none
     int      active_menu_row                         = 0;       // current row being declared
