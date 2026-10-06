@@ -121,7 +121,7 @@ UTEST(menu_press_owner, 32_menus_plus_a_second_activation_do_not_drop_the_last_m
     }
 }
 
-UTEST(menu_press_owner, focused_options_sliders_and_skip_rows_do_not_gain_action_press_policy) {
+UTEST(menu_press_owner, focused_options_and_sliders_mirror_action_press_policy) {
     vxui_ctx ctx = make_ctx();
     const char* options[] = { "Off", "On" };
     int index = 0;
@@ -139,7 +139,8 @@ UTEST(menu_press_owner, focused_options_sliders_and_skip_rows_do_not_gain_action
         vxui_menu_action( &ctx, "action" );
         vxui_menu_end( &ctx );
         vxui_draw_list dl = vxui_render( &ctx );
-        ASSERT_EQ( pressed_count( dl ), 0 );
+        ASSERT_EQ( pressed_count( dl ), 1 );
+        ASSERT_TRUE( vxui_draw_find( dl, VXUI_DRAW_RECT, row_id( "mixed", frame == 0 ? "option" : "slider" ) )->state & VXUI_DRAW_PRESSED );
         ASSERT_EQ( index, 0 );
         ASSERT_EQ( value, 0.5f );
     }

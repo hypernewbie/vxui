@@ -723,11 +723,17 @@ bool vxui_menu_option( vxui_ctx* ctx, const char* label, int* index, const char*
     assert( *index >= 0 && *index < count );
 
     bool focused = vxui_menu_row_interactive( ctx, label, true );
-    // TODO: PRESSED state on confirm-held mirror, see vxui_menu_action.
 
     int prev = *index;
     if ( focused )
     {
+        bool kbd_held   = ( ctx->input & VXUI_INPUT_CONFIRM ) != 0;
+        bool mouse_fire = ( ctx->mouse_click_row_id == ctx->active_menu_focus_id );
+        if ( mouse_fire ) ctx->mouse_click_row_id = 0;
+
+        if ( kbd_held || mouse_fire )
+            ctx->menu_pressed_rows[ctx->active_menu] |= 1u << ( ctx->active_menu_row - 1 );
+
         // DAS-repeat: hold cycles at VXUI_INPUT_DELAY/REPEAT, not every frame.
         if ( ctx->input_repeated & VXUI_INPUT_RIGHT )
             *index = ( *index + 1 ) % count;
@@ -749,7 +755,13 @@ bool vxui_menu_slider( vxui_ctx* ctx, const char* label, float* value, float mn,
     bool focused = vxui_menu_row_interactive( ctx, label );
     vxui_menu_close_row( ctx );
     if ( !focused ) return false;
-    // TODO: PRESSED state on confirm-held mirror, see vxui_menu_action.
+
+    bool kbd_held   = ( ctx->input & VXUI_INPUT_CONFIRM ) != 0;
+    bool mouse_fire = ( ctx->mouse_click_row_id == ctx->active_menu_focus_id );
+    if ( mouse_fire ) ctx->mouse_click_row_id = 0;
+
+    if ( kbd_held || mouse_fire )
+        ctx->menu_pressed_rows[ctx->active_menu] |= 1u << ( ctx->active_menu_row - 1 );
 
     float prev = *value;
 
