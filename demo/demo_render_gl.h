@@ -25,9 +25,6 @@ struct vxui_gl_xform
 void     vxui_gl_init    ( vxui_ctx* ctx );
 void     vxui_gl_render  ( vxui_ctx* ctx, const vxui_draw_list& dl, float w, float h, vxui_gl_xform xf = {} );
 void     vxui_gl_shutdown( vxui_ctx* ctx );
-uint32_t vxui_gl_create_chevron_texture();
-uint32_t vxui_gl_create_lock_texture();
-uint32_t vxui_gl_create_warning_texture();
 
 #endif // VXUI_DEMO_RENDER_GL_H
 
@@ -340,92 +337,6 @@ static void vxui_gl_setup_fbo( vxui_gl_state* gl )
     glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gl->fbo_texture[1], 0 );
 
     glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-}
-
-uint32_t vxui_gl_create_chevron_texture()
-{
-    uint8_t pixels[32 * 32] = {};
-    for ( int y = 0; y < 32; y++ )
-    {
-        int tip_x = 22 - ( y < 16 ? y : 31 - y );
-        int base_x = tip_x - 6;
-        if ( base_x < 0 ) base_x = 0;
-        for ( int x = base_x; x <= tip_x && x < 32; x++ )
-            pixels[y * 32 + x] = 255;
-    }
-
-    GLuint tex = 0;
-    glGenTextures( 1, &tex );
-    glBindTexture( GL_TEXTURE_2D, tex );
-    glTexImage2D( GL_TEXTURE_2D, 0, GL_R8, 32, 32, 0, GL_RED, GL_UNSIGNED_BYTE, pixels );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-    glBindTexture( GL_TEXTURE_2D, 0 );
-    return (uint32_t) tex;
-}
-
-uint32_t vxui_gl_create_lock_texture()
-{
-    uint8_t pixels[32 * 32] = {};
-
-    // Body: filled square.
-    for ( int y = 14; y < 28; y++ )
-        for ( int x = 7; x < 25; x++ )
-            pixels[y * 32 + x] = 255;
-
-    // Shackle: two posts capped by a bar.
-    for ( int y = 5; y < 16; y++ )
-    {
-        pixels[y * 32 + 11] = 255; pixels[y * 32 + 12] = 255;
-        pixels[y * 32 + 19] = 255; pixels[y * 32 + 20] = 255;
-    }
-    for ( int x = 11; x <= 20; x++ )
-    {
-        pixels[5 * 32 + x] = 255;
-        pixels[6 * 32 + x] = 255;
-    }
-
-    GLuint tex = 0;
-    glGenTextures( 1, &tex );
-    glBindTexture( GL_TEXTURE_2D, tex );
-    glTexImage2D( GL_TEXTURE_2D, 0, GL_R8, 32, 32, 0, GL_RED, GL_UNSIGNED_BYTE, pixels );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-    glBindTexture( GL_TEXTURE_2D, 0 );
-    return (uint32_t) tex;
-}
-
-uint32_t vxui_gl_create_warning_texture()
-{
-    uint8_t pixels[32 * 32] = {};
-
-    // Outlined triangle, apex at top, 2px stroke, plus an exclamation mark.
-    for ( int y = 3; y < 28; y++ )
-    {
-        int half  = ( y - 3 ) * 13 / 24;
-        int left  = 15 - half;
-        int right = 16 + half;
-        for ( int x = left; x <= right; x++ )
-            if ( x <= left + 1 || x >= right - 1 || y >= 26 )
-                pixels[y * 32 + x] = 255;
-    }
-    for ( int y = 9; y < 19; y++ ) { pixels[y * 32 + 15] = 255; pixels[y * 32 + 16] = 255; }
-    for ( int y = 22; y < 24; y++ ) { pixels[y * 32 + 15] = 255; pixels[y * 32 + 16] = 255; }
-
-    GLuint tex = 0;
-    glGenTextures( 1, &tex );
-    glBindTexture( GL_TEXTURE_2D, tex );
-    glTexImage2D( GL_TEXTURE_2D, 0, GL_R8, 32, 32, 0, GL_RED, GL_UNSIGNED_BYTE, pixels );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-    glBindTexture( GL_TEXTURE_2D, 0 );
-    return (uint32_t) tex;
 }
 
 void vxui_gl_init( vxui_ctx* ctx )

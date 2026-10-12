@@ -155,18 +155,18 @@ UTEST(demo_hud_image, resource_bar_keeps_partial_width_and_uv) {
     EXPECT_NEAR( cache.drawlist.vertices[2].u, 0.5f, 1e-6f );
 }
 
-UTEST(demo_hud_image, menu_texture_keeps_marker_semantics) {
-    vxui_ctx ctx;
-    vxui_hud hud = {};
-    demo_resolver_state resolver;
-    init_ctx( &ctx, &hud, &resolver, 0 );
-    resolver.focus_icon_texture = 42;
-    if ( vxui_menu( &ctx, "menu" ) )
-    {
-        vxui_menu_action( &ctx, "Play" );
-        vxui_menu_end( &ctx );
-    }
-    vxui_draw_list dl = vxui_render( &ctx );
+UTEST(demo_hud_image, caller_supplied_texture_keeps_marker_semantics) {
+    vxui_draw_cmd marker = {};
+    marker.type                       = VXUI_DRAW_RECT;
+    marker.rect                       = { 20, 30, 80, 32 };
+    marker.render.material_id         = DEMO_MATERIAL_ROUND;
+    marker.render.texture_id          = 42;
+    marker.render.colour              = { 0.1f, 0.2f, 0.3f, 1.0f };
+    marker.render.outline_colour      = { 0.5f, 0.6f, 0.7f, 1.0f };
+    marker.render.outline_thickness   = 2.0f;
+    marker.render.params[0]           = 4.0f;
+    marker.render.params[1]           = 1.0f;
+    vxui_draw_list dl                 = { &marker, 1 };
 
     ve_fontcache cache = {};
     vxui_gl_state gl = {};

@@ -106,7 +106,7 @@ static const char* s_sector_short[] = {
     "Helix Foundry", "Null Cathedral", "Boss Rush",
 };
 
-// Per-sector tint for the procedural test-card thumb, parallel to s_sector_short.
+// Per-sector tint for the Operations and Stage Select samples.
 static const glm::vec4 s_sector_tint[] = {
     { 1.00f, 0.55f, 0.35f, 1.0f },
     { 0.40f, 0.85f, 1.00f, 1.0f },
@@ -114,12 +114,6 @@ static const glm::vec4 s_sector_tint[] = {
     { 1.00f, 0.85f, 0.30f, 1.0f },
     { 0.75f, 0.40f, 1.00f, 1.0f },
     { 1.00f, 0.30f, 0.35f, 1.0f },
-};
-
-struct demo_assets
-{
-    uint32_t lock    = 0;
-    uint32_t warning = 0;
 };
 
 struct demo_screen_state
@@ -178,15 +172,11 @@ struct demo_resolver_state
     uint32_t        bg_id               = 0;
     uint32_t        logo_id             = 0;
     uint32_t        splash_prompt_id    = 0;
-    uint32_t        focus_icon_texture  = 0;
-    uint32_t        ops_icon[DEMO_MISSION_COUNT] = {};  // texture per ops row; 0 = none
     uint32_t        ops_thumb_id        = 0;
     glm::vec4       ops_thumb_tint      = { 1.0f, 1.0f, 1.0f, 1.0f };
     uint32_t        stg_thumb_id        = 0;
     glm::vec4       stg_thumb_tint      = { 1.0f, 1.0f, 1.0f, 1.0f };
     float           time_seconds        = 0;
-    const demo_assets* assets           = nullptr;
-    const demo_screen_state* screen     = nullptr;
     vxui_hud*       hud                 = nullptr;
 };
 
@@ -254,8 +244,6 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         out->colour            = { 0.10f, 0.40f, 0.85f, 0.85f };
         out->outline_colour    = { 0.55f, 0.95f, 1.00f, 1.00f };
         out->outline_thickness = 2.0f;
-        out->texture_id        = st->focus_icon_texture;
-        out->uv                = { 0.0f, 0.0f, 1.0f, 1.0f };
         return;
     }
     if ( c->state & VXUI_DRAW_HOVERED ) { out->colour = { 0.16f, 0.24f, 0.36f, 0.80f }; return; }
@@ -274,12 +262,6 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         };
         int idx = d > 3 ? 3 : d;
         out->colour = s_ramp[idx];
-
-        const demo_screen_state* s = st->screen;
-        bool on_ops = s && s->depth > 0 && strcmp( s->stack[s->depth - 1], "operations" ) == 0;
-        if ( on_ops && c->row_index < DEMO_MISSION_COUNT && st->ops_icon[c->row_index] != 0 )
-            out->texture_id = st->ops_icon[c->row_index];
-
         return;
     }
 
@@ -626,10 +608,6 @@ int main( int /*argc*/, char** /*argv*/ )
 
     vxui_gl_init( &ctx );
 
-    demo_assets assets = {};
-    assets.lock    = vxui_gl_create_lock_texture();
-    assets.warning = vxui_gl_create_warning_texture();
-
     demo_screen_state   screen_state;
     demo_resolver_state resolver_state;
     vxui_hud            hud = {};
@@ -638,17 +616,8 @@ int main( int /*argc*/, char** /*argv*/ )
     resolver_state.bg_id              = vxui_id( "demo_bg"       );
     resolver_state.logo_id            = vxui_text_id( "demo_logo" );
     resolver_state.splash_prompt_id   = vxui_text_id( "splash_prompt" );
-    resolver_state.focus_icon_texture = vxui_gl_create_chevron_texture();
-    resolver_state.ops_thumb_id       = vxui_id( "ops_thumb" );
-    resolver_state.stg_thumb_id       = vxui_id( "stg_thumb" );
-    resolver_state.assets             = &assets;
-    resolver_state.screen             = &screen_state;
-    for ( int i = 0; i < DEMO_MISSION_COUNT; i++ )
-    {
-        if      ( s_demo_missions[i].status == DEMO_MISSION_LOCKED ) resolver_state.ops_icon[i] = assets.lock;
-        else if ( s_demo_missions[i].status == DEMO_MISSION_OPEN   ) resolver_state.ops_icon[i] = assets.warning;
-        else                                                          resolver_state.ops_icon[i] = 0;
-    }
+    resolver_state.ops_thumb_id = vxui_id( "ops_thumb" );
+    resolver_state.stg_thumb_id = vxui_id( "stg_thumb" );
     resolver_state.hud                = &hud;
     vxui_set_render_data_fn( &ctx, demo_render_data, &resolver_state );
 

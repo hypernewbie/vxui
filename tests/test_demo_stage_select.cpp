@@ -27,7 +27,6 @@ static void init_ctx( vxui_ctx* ctx, demo_screen_state* screen, demo_resolver_st
     *screen = {};
     screen->stack[0] = "stageselect";
     *resolver = {};
-    resolver->screen       = screen;
     resolver->stg_thumb_id = vxui_id( "stg_thumb" );
     vxui_set_render_data_fn( ctx, demo_render_data, resolver );
 }
