@@ -1,9 +1,7 @@
-// VXUI demo: portrait sci-fi mock menu (BR-shaped, not BR-labelled).
+// VXUI demo: layout, materials, and movement.
 
 #include <cstdio>
-#include <cstdlib>
 #include <cmath>
-#include <cstring>
 #include <filesystem>
 #include <vector>
 #include <glad/glad.h>
@@ -38,76 +36,20 @@ static std::vector< uint8_t > load_file( const char* path )
 
 static uint8_t s_clay_mem[16 * 1024 * 1024];
 
-// Portrait viewport. The window is landscape; we letterbox a portrait UI.
-#define DEMO_PORTRAIT_W   480
-#define DEMO_PORTRAIT_H   640
-#define DEMO_WINDOW_W     1280
-#define DEMO_WINDOW_H     720
+#define DEMO_PORTRAIT_W 480
+#define DEMO_PORTRAIT_H 640
+#define DEMO_WINDOW_W   1280
+#define DEMO_WINDOW_H   720
 
-#define DEMO_MAX_STACK    8
-#define DEMO_MISSION_COUNT 18
+#define DEMO_SHOWCASE_CONTROL_COUNT 4
 
-// Mission unlock states. Drives the ops row icon and the LOCKED/OPEN/CLEARED/PERFECT tag text.
-#define DEMO_MISSION_LOCKED   0
-#define DEMO_MISSION_OPEN     1
-#define DEMO_MISSION_CLEARED  2
-#define DEMO_MISSION_APLUS    3
-
-struct demo_mission
-{
-    const char* id;
-    const char* name;
-    int         sector;        // 0..4 stage index, 5 = boss-rush, etc.
-    int         status;
-    const char* description;
+static const char* s_demo_materials[] = { "Solid", "Rounded", "Scanlines" };
+static const char* s_demo_motion[]    = { "Off", "On" };
+static const char* s_demo_items[] = {
+    "Item 01", "Item 02", "Item 03", "Item 04", "Item 05", "Item 06", "Item 07",
+    "Item 08", "Item 09", "Item 10", "Item 11", "Item 12", "Item 13", "Item 14",
 };
-
-static const demo_mission s_demo_missions[DEMO_MISSION_COUNT] = {
-    { "op01", "Debris Baptism",   0, DEMO_MISSION_APLUS,   "Opening sortie through the outer debris cloud. Light contact." },
-    { "op02", "Signal Bloom",     1, DEMO_MISSION_CLEARED, "Decode the relay before the carrier wave collapses." },
-    { "op03", "Glass Reactor",    2, DEMO_MISSION_CLEARED, "Penetrate the resonance grid and disable core lockout." },
-    { "op04", "Iron Weather",     3, DEMO_MISSION_OPEN,    "Hostile shipyard. Heavy turrets, dense flak corridor." },
-    { "op05", "Helix Foundry",    3, DEMO_MISSION_OPEN,    "Reactor coil ignition run, expect rotating beams." },
-    { "op06", "Static Choir",     4, DEMO_MISSION_LOCKED,  "Saturation field. Clear three drone choirs to advance." },
-    { "op07", "Blackbox Dive",    4, DEMO_MISSION_LOCKED,  "Recover encrypted blackbox before scuttling deadline." },
-    { "op08", "Pale Vector",      4, DEMO_MISSION_LOCKED,  "Solo intercept against the pale vector squadron." },
-    { "op09", "Moonbreaker",      5, DEMO_MISSION_LOCKED,  "Splinter the lunar harvester before it reseats." },
-    { "op10", "Null Cathedral",   5, DEMO_MISSION_LOCKED,  "Final mission. Survive the cathedral's last hymn." },
-    { "op11", "Neon Undertow",    1, DEMO_MISSION_LOCKED,  "Stealth gauntlet through the neon undertow current." },
-    { "op12", "Starfall Engine",  2, DEMO_MISSION_LOCKED,  "Defend the starfall engine against a saturation strike." },
-    { "op13", "Ghost Relay",      3, DEMO_MISSION_LOCKED,  "Trace the ghost relay broadcasting in dead frequencies." },
-    { "op14", "Dead Orbit",       4, DEMO_MISSION_LOCKED,  "Recover survivors from the dead-orbit derelict ring." },
-    { "op15", "Terminal Bloom",   5, DEMO_MISSION_LOCKED,  "Race against the terminal bloom expansion event." },
-    { "br01", "Boss Rush",        5, DEMO_MISSION_LOCKED,  "All five sector commanders, back to back, no rest." },
-    { "sv01", "Survival Protocol",5, DEMO_MISSION_LOCKED,  "Endless waves. How long can you stay aboard?" },
-    { "ol01", "One-Life Trial",   5, DEMO_MISSION_LOCKED,  "One ship. One life. No continues. No mercy." },
-};
-
-struct demo_sector
-{
-    const char* name;
-    const char* tagline;
-    int         status;        // reuse mission status enum
-};
-
-static const demo_sector s_demo_sectors[] = {
-    { "Sector 1: Debris Belt",   "Asteroid scatter and salvage convoys",      DEMO_MISSION_APLUS   },
-    { "Sector 2: Signal Array",  "Long-range comms graveyard",                DEMO_MISSION_CLEARED },
-    { "Sector 3: Glass Reactor", "Resonant core, mirrored coils",             DEMO_MISSION_CLEARED },
-    { "Sector 4: Helix Foundry", "Industrial spiral, hot machinery",          DEMO_MISSION_OPEN    },
-    { "Sector 5: Null Cathedral","Gothic deepspace cathedral",                DEMO_MISSION_LOCKED  },
-    { "Boss Rush",               "Five sector commanders. No rest.",          DEMO_MISSION_LOCKED  },
-};
-#define DEMO_SECTOR_COUNT ( (int) ( sizeof( s_demo_sectors ) / sizeof( s_demo_sectors[0] ) ) )
-
-// Short sector identifiers for ops_preview header. Always fit in 158px content at 22px font.
-static const char* s_sector_short[] = {
-    "Debris Belt", "Signal Array", "Glass Reactor",
-    "Helix Foundry", "Null Cathedral", "Boss Rush",
-};
-
-// Per-sector tint for the Operations and Stage Select samples.
-static const glm::vec4 s_sector_tint[] = {
+static const glm::vec4 s_demo_colours[] = {
     { 1.00f, 0.55f, 0.35f, 1.0f },
     { 0.40f, 0.85f, 1.00f, 1.0f },
     { 0.55f, 1.00f, 0.60f, 1.0f },
@@ -115,69 +57,24 @@ static const glm::vec4 s_sector_tint[] = {
     { 0.75f, 0.40f, 1.00f, 1.0f },
     { 1.00f, 0.30f, 0.35f, 1.0f },
 };
-
-struct demo_screen_state
-{
-    const char*  stack[DEMO_MAX_STACK]   = { "main" };
-    int          depth                   = 1;
-
-    float        master_volume = 0.8f;
-    float        music_volume  = 0.6f;
-    float        sfx_volume    = 0.7f;
-    float        voice_volume  = 0.5f;
-    int          ruleset       = 1;
-    int          ship_speed    = 1;
-    int          score_tips    = 1;
-    int          window_mode   = 0;
-    int          resolution    = 0;
-    int          vsync         = 1;
-    int          crt_curve     = 1;
-    int          filter        = 0;
-    int          rotation      = 0;
-    int          scaling       = 0;
-    int          show_fps      = 0;
-    int          controller    = 0;
-    int          input_icons   = 1;
-    int          freeplay      = 0;
-    int          infinite_ammo = 0;
-    int          reduce_bullet = 0;
-    int          slow_bullet   = 0;
-    int          auto_shield   = 0;
-};
-
-static void demo_push( demo_screen_state* s, const char* name )
-{
-    assert( s && s->depth < DEMO_MAX_STACK );
-    s->stack[s->depth++] = name;
-}
-
-static void demo_pop( demo_screen_state* s )
-{
-    assert( s && s->depth >= 1 );
-    if ( s->depth > 1 ) s->depth--;
-}
-
-static int demo_menu_focused( vxui_ctx* ctx, const char* name )
-{
-    uint32_t h = vxui_hash( name );
-    for ( int i = 0; i < VXUI_MAX_MENUS; i++ )
-        if ( ctx->menu_state[i].x == h ) return (int) ctx->menu_state[i].y;
-    return 0;
-}
+static constexpr int s_demo_item_count   = (int) ( sizeof( s_demo_items ) / sizeof( s_demo_items[0] ) );
+static constexpr int s_demo_colour_count = (int) ( sizeof( s_demo_colours ) / sizeof( s_demo_colours[0] ) );
+static_assert( DEMO_SHOWCASE_CONTROL_COUNT + s_demo_item_count <= VXUI_MAX_MENU_ROWS, "showcase rows exceed VXUI menu capacity" );
 
 struct demo_resolver_state
 {
-    uint32_t        panel_id            = 0;
-    uint32_t        frame_id            = 0;
-    uint32_t        bg_id               = 0;
-    uint32_t        logo_id             = 0;
-    uint32_t        splash_prompt_id    = 0;
-    uint32_t        ops_thumb_id        = 0;
-    glm::vec4       ops_thumb_tint      = { 1.0f, 1.0f, 1.0f, 1.0f };
-    uint32_t        stg_thumb_id        = 0;
-    glm::vec4       stg_thumb_tint      = { 1.0f, 1.0f, 1.0f, 1.0f };
-    float           time_seconds        = 0;
-    vxui_hud*       hud                 = nullptr;
+    uint32_t  panel_id       = 0;
+    uint32_t  frame_id       = 0;
+    uint32_t  bg_id          = 0;
+    uint32_t  sample_id      = 0;
+    int       material_index = 1;
+    float     radius         = 4.0f;
+    float     intensity      = 0.35f;
+    int       motion_index   = 1;
+    int       selected       = 0;
+    glm::vec4 sample_colour  = { 1.00f, 0.55f, 0.35f, 1.0f };
+    float     time_seconds   = 0.0f;
+    vxui_hud* hud            = nullptr;
 };
 
 static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, void* ud )
@@ -192,18 +89,6 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
 
     if ( c->type == VXUI_DRAW_TEXT )
     {
-        if ( c->id == st->splash_prompt_id )
-        {
-            float pulse = 0.55f + 0.35f * sinf( st->time_seconds * 3.0f );
-            out->colour = { pulse, pulse * 0.95f, pulse * 0.8f, 1.0f };
-            return;
-        }
-        if ( c->id == st->logo_id )
-        {
-            out->colour = { 0.55f, 0.95f, 1.00f, 1.0f };
-            return;
-        }
-        // Pale blue-white reads as "panel readout" against the cyan accents.
         out->colour = { 0.85f, 0.92f, 1.00f, 1.0f };
         return;
     }
@@ -214,12 +99,24 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         return;
     }
 
-    if ( c->id == st->ops_thumb_id || c->id == st->stg_thumb_id )
+    if ( c->id == st->sample_id )
     {
-        out->material_id = DEMO_MATERIAL_ROUND;
-        out->params[0]   = 4.0f;
-        out->params[1]   = 1.0f;
-        out->colour      = c->id == st->ops_thumb_id ? st->ops_thumb_tint : st->stg_thumb_tint;
+        out->colour = st->sample_colour;
+        if ( st->material_index == 1 )
+        {
+            out->material_id = DEMO_MATERIAL_ROUND;
+            out->params[0]   = st->radius;
+            out->params[1]   = 1.0f;
+        }
+        else if ( st->material_index == 2 )
+        {
+            out->material_id = DEMO_MATERIAL_CRT;
+            out->flags       = DEMO_MATERIAL_FLAG_SCANLINES;
+            out->params[0]   = st->time_seconds;
+            out->params[1]   = st->intensity;
+        }
+        else
+            assert( st->material_index == 0 );
         return;
     }
 
@@ -227,7 +124,6 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
 
     if ( c->id == st->frame_id )
     {
-        // Outline only: the BG rect is the background, no dark fill.
         out->colour            = { 0.0f, 0.0f, 0.0f, 0.0f };
         out->outline_colour    = { 0.30f, 0.70f, 0.95f, 1.0f };
         out->outline_thickness = 2.0f;
@@ -250,8 +146,6 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
 
     if ( c->row_index >= 0 && c->focused_row_index >= 0 )
     {
-        // Distance-from-focus ramp: closer rows brighter, further rows fade
-        // toward the background so the column reads as a stack of glowing strips.
         int d = c->row_index - c->focused_row_index;
         if ( d < 0 ) d = -d;
         static const glm::vec4 s_ramp[4] = {
@@ -260,303 +154,74 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
             { 0.04f, 0.11f, 0.22f, 0.55f },
             { 0.03f, 0.07f, 0.14f, 0.40f },
         };
-        int idx = d > 3 ? 3 : d;
-        out->colour = s_ramp[idx];
+        out->colour = s_ramp[d > 3 ? 3 : d];
         return;
     }
 
     out->colour = { 0.10f, 0.12f, 0.16f, 0.0f };
 }
 
-static const char* s_demo_off_on[]      = { "Off", "On" };
-static const char* s_demo_rulesets[]    = { "Standard", "Arcade", "Practice" };
-static const char* s_demo_ship_speed[]  = { "Slow", "Normal", "Fast" };
-static const char* s_demo_window_mode[] = { "Windowed", "Borderless", "Fullscreen" };
-static const char* s_demo_resolution[]  = { "1280x720", "1920x1080", "2560x1440" };
-static const char* s_demo_vsync[]       = { "Off", "On", "Adaptive" };
-static const char* s_demo_curve[]       = { "Off", "Low", "High" };
-static const char* s_demo_filter[]      = { "None", "Soft CRT", "LCD Grid", "Neon" };
-static const char* s_demo_rotation[]    = { "None", "Clockwise", "Counter" };
-static const char* s_demo_scaling[]     = { "Pixel Perfect", "Fit", "Stretch" };
-static const char* s_demo_controller[]  = { "Keyboard", "Gamepad 1", "All" };
-static const char* s_demo_icons[]       = { "Keyboard", "Xbox", "PlayStation", "Arcade" };
-
-static void demo_splash( vxui_ctx* ctx, GLFWwindow* window )
+static int demo_menu_focused( vxui_ctx* ctx, const char* name )
 {
-    if ( ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CONFIRM ) != 0 ) vxui_switch( ctx, "menu" );
-    if ( ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CANCEL  ) != 0 ) glfwSetWindowShouldClose( window, GLFW_TRUE );
-
-    vxui_div ( ctx, "splash_col", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .align_x = 1 } );
-
-        vxui_div ( ctx, "splash_pad_top", { .height = { VXUI_FIXED, 64 } } );
-        vxui_div_end( ctx );
-
-        vxui_text( ctx, "demo_logo", "VXUI", 96 );
-
-        vxui_div ( ctx, "splash_pad_mid", { .height = { VXUI_GROW, 0 } } );
-        vxui_div_end( ctx );
-
-        vxui_div ( ctx, "splash_prompt_row", { .width = { VXUI_GROW, 0 }, .align_x = 1 } );
-        vxui_text( ctx, "splash_prompt", "PRESS ENTER TO START", 22 );
-        vxui_div_end( ctx );
-
-        vxui_div ( ctx, "splash_pad_bot", { .height = { VXUI_FIXED, 64 } } );
-        vxui_div_end( ctx );
-
-    vxui_div_end( ctx );
+    uint32_t h = vxui_hash( name );
+    for ( int i = 0; i < VXUI_MAX_MENUS; i++ )
+        if ( ctx->menu_state[i].x == h ) return (int) ctx->menu_state[i].y;
+    return 0;
 }
 
-static void demo_main_menu( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window )
+static bool demo_showcase( vxui_ctx* ctx, demo_resolver_state* st )
 {
-    if ( !vxui_menu( ctx, "main", true, 0, true ) ) return;
-    if ( vxui_menu_action( ctx, "Start"        ) ) vxui_switch( ctx, "gameplay" );
-    if ( vxui_menu_action( ctx, "Operations"   ) ) demo_push( s, "operations" );
-    if ( vxui_menu_action( ctx, "Stage Select" ) ) demo_push( s, "stageselect" );
-    if ( vxui_menu_action( ctx, "Settings"     ) ) demo_push( s, "settings" );
-    if ( vxui_menu_action( ctx, "Archives"     ) ) demo_push( s, "archives" );
-    if ( vxui_menu_action( ctx, "Extras"       ) ) demo_push( s, "extras" );
-    if ( vxui_menu_action( ctx, "Exit"         ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
-    if ( vxui_menu_cancelled( ctx )              ) vxui_switch( ctx, "splash" );
-    vxui_menu_end( ctx );
-}
+    bool close = false;
 
-static void demo_operations_menu( vxui_ctx* ctx, demo_screen_state* s )
-{
-    vxui_div ( ctx, "ops_row", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .gap = 6 } );
-
-        vxui_div ( ctx, "ops_left", { .width = { VXUI_FIXED, 240 }, .height = { VXUI_GROW, 0 }, .col = true } );
-        if ( vxui_menu( ctx, "operations", true, 9, true ) )
-        {
-            for ( int i = 0; i < DEMO_MISSION_COUNT; i++ )
+    vxui_div( ctx, "showcase_body", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .gap = 6 } );
+        vxui_div( ctx, "showcase_menu_column", { .width = { VXUI_FIXED, 240 }, .height = { VXUI_GROW, 0 }, .col = true } );
+            vxui_text( ctx, "showcase_menu_heading", "LAYOUT / UI", 18 );
+            if ( vxui_menu( ctx, "showcase", true, 9, true ) )
             {
-                const demo_mission& m = s_demo_missions[i];
-                if ( vxui_menu_action( ctx, m.name ) )
-                {
-                    if ( m.status == DEMO_MISSION_LOCKED ) printf( "locked: %s\n", m.name );
-                    else                                   vxui_switch( ctx, "gameplay" );
-                }
+                vxui_menu_option( ctx, "Material", &st->material_index, s_demo_materials, 3 );
+                vxui_menu_slider( ctx, "Radius", &st->radius, 1.0f, 32.0f, 1.0f );
+                vxui_menu_slider( ctx, "Intensity", &st->intensity, 0.0f, 1.0f, 0.05f );
+                vxui_menu_option( ctx, "Motion", &st->motion_index, s_demo_motion, 2 );
+                for ( int i = 0; i < s_demo_item_count; i++ ) vxui_menu_action( ctx, s_demo_items[i] );
+                close = vxui_menu_cancelled( ctx );
+                vxui_menu_end( ctx );
             }
-            if ( vxui_menu_cancelled( ctx ) ) demo_pop( s );
-            vxui_menu_end( ctx );
-        }
         vxui_div_end( ctx );
 
-        int focused = demo_menu_focused( ctx, "operations" );
-        if ( focused < 0 || focused >= DEMO_MISSION_COUNT ) focused = 0;
-        const demo_mission& sel = s_demo_missions[focused];
+        int focused = demo_menu_focused( ctx, "showcase" );
+        st->selected = focused >= DEMO_SHOWCASE_CONTROL_COUNT ? focused - DEMO_SHOWCASE_CONTROL_COUNT : 0;
+        st->sample_colour = s_demo_colours[st->selected % s_demo_colour_count];
 
-        vxui_rect( ctx, "ops_preview", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 6, 6, 6, 6 }, .gap = 8 } );
-
-            vxui_rect( ctx, "ops_thumb", { .width = { VXUI_GROW, 0 }, .height = { VXUI_FIXED, 200 } } );
+        vxui_div( ctx, "showcase_readout", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .gap = 6 } );
+            vxui_text( ctx, "showcase_material_heading", "MATERIAL SAMPLE", 18 );
+            vxui_rect( ctx, "showcase_sample", { .width = { VXUI_GROW, 0 }, .height = { VXUI_FIXED, 200 } } );
             vxui_div_end( ctx );
-
-            vxui_text( ctx, "ops_sector", sel.status == DEMO_MISSION_LOCKED ? "?????" : s_sector_short[sel.sector], 22 );
-
-            const char* tag = sel.status == DEMO_MISSION_LOCKED  ? "LOCKED"
-                            : sel.status == DEMO_MISSION_APLUS   ? "PERFECT"
-                            : sel.status == DEMO_MISSION_CLEARED ? "CLEARED"
-                                                                 : "OPEN";
-            vxui_text( ctx, "ops_status", tag, 22 );
-
+            vxui_text( ctx, "showcase_selected", s_demo_items[st->selected], 16 );
+            vxui_text( ctx, "showcase_layout", "240px FIXED + GROW", 13 );
         vxui_div_end( ctx );
-
     vxui_div_end( ctx );
-}
 
-static void demo_stage_select( vxui_ctx* ctx, demo_screen_state* s )
-{
-    vxui_div ( ctx, "stg_row", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .gap = 6 } );
-
-        vxui_div ( ctx, "stg_left", { .width = { VXUI_FIXED, 240 }, .height = { VXUI_GROW, 0 }, .col = true } );
-        if ( vxui_menu( ctx, "stageselect", true, 0, true ) )
-        {
-            for ( int i = 0; i < DEMO_SECTOR_COUNT; i++ )
-                if ( vxui_menu_action( ctx, s_sector_short[i] ) ) printf( "select: %s\n", s_sector_short[i] );
-            if ( vxui_menu_cancelled( ctx ) ) demo_pop( s );
-            vxui_menu_end( ctx );
-        }
-        vxui_div_end( ctx );
-
-        int focused = demo_menu_focused( ctx, "stageselect" );
-        if ( focused < 0 || focused >= DEMO_SECTOR_COUNT ) focused = 0;
-        const demo_sector& sel = s_demo_sectors[focused];
-
-        vxui_rect( ctx, "stg_preview", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 6, 6, 6, 6 }, .gap = 8 } );
-            vxui_rect( ctx, "stg_thumb", { .width = { VXUI_GROW, 0 }, .height = { VXUI_FIXED, 200 } } );
-            vxui_div_end( ctx );
-            vxui_text( ctx, "stg_sector", s_sector_short[focused], 22 );
-            vxui_text( ctx, "stg_status", sel.status == DEMO_MISSION_LOCKED  ? "LOCKED"
-                                        : sel.status == DEMO_MISSION_APLUS   ? "PERFECT"
-                                        : sel.status == DEMO_MISSION_CLEARED ? "CLEARED"
-                                                                             : "OPEN", 22 );
-        vxui_div_end( ctx );
-
+    vxui_div( ctx, "showcase_footer", { .width = { VXUI_GROW, 0 }, .height = { VXUI_FIXED, 80 }, .col = true } );
     vxui_div_end( ctx );
-}
 
-static void demo_settings_hub( vxui_ctx* ctx, demo_screen_state* s )
-{
-    if ( !vxui_menu( ctx, "settings", true, 0, true ) ) return;
-    if ( vxui_menu_action( ctx, "Gameplay"     ) ) demo_push( s, "settings_gameplay" );
-    if ( vxui_menu_action( ctx, "Display"      ) ) demo_push( s, "settings_display"  );
-    if ( vxui_menu_action( ctx, "Video Filter" ) ) demo_push( s, "settings_video"    );
-    if ( vxui_menu_action( ctx, "Audio"        ) ) demo_push( s, "settings_audio"    );
-    if ( vxui_menu_action( ctx, "Controls"     ) ) demo_push( s, "settings_controls" );
-    if ( vxui_menu_action( ctx, "Assist"       ) ) demo_push( s, "settings_assist"   );
-    if ( vxui_menu_action( ctx, "Back"         ) ) demo_pop ( s );
-    if ( vxui_menu_cancelled( ctx )              ) demo_pop ( s );
-    vxui_menu_end( ctx );
-}
+    vxui_hud_set_font( st->hud, 0, 14 );
+    vxui_hud_set_pos( st->hud, 20, 538 );
+    vxui_hud_set_colour( st->hud, { 0.85f, 0.92f, 1.00f, 1.0f } );
+    vxui_hud_text_box( st->hud, "showcase_fill_label", "GEOMETRIC MOTION", 440, 18, 0, 1 );
 
-static void demo_settings_gameplay( vxui_ctx* ctx, demo_screen_state* s )
-{
-    if ( !vxui_menu( ctx, "settings_gameplay", true, 0, true ) ) return;
-    vxui_menu_option( ctx, "Ruleset",         &s->ruleset,    s_demo_rulesets,   3 );
-    vxui_menu_option( ctx, "Ship Speed",      &s->ship_speed, s_demo_ship_speed, 3 );
-    vxui_menu_option( ctx, "Score Tips",      &s->score_tips, s_demo_off_on,     2 );
-    if ( vxui_menu_action( ctx, "Back" ) ) demo_pop( s );
-    if ( vxui_menu_cancelled( ctx )      ) demo_pop( s );
-    vxui_menu_end( ctx );
-}
+    vxui_hud_set_pos( st->hud, 20, 560 );
+    vxui_hud_set_colour( st->hud, { 0.10f, 0.18f, 0.26f, 1.0f } );
+    vxui_hud_resource_bar( st->hud, "showcase_fill_track", 0, 1.0f, 440, 14, {} );
 
-static void demo_settings_display( vxui_ctx* ctx, demo_screen_state* s )
-{
-    if ( !vxui_menu( ctx, "settings_display", true, 0, true ) ) return;
-    vxui_menu_option( ctx, "Window Mode", &s->window_mode, s_demo_window_mode, 3 );
-    vxui_menu_option( ctx, "Resolution",  &s->resolution,  s_demo_resolution,  3 );
-    vxui_menu_option( ctx, "VSync",       &s->vsync,       s_demo_vsync,       3 );
-    vxui_menu_option( ctx, "CRT Curve",   &s->crt_curve,   s_demo_curve,       3 );
-    if ( vxui_menu_action( ctx, "Apply Display" ) ) printf( "Apply display\n" );
-    if ( vxui_menu_action( ctx, "Back"          ) ) demo_pop( s );
-    if ( vxui_menu_cancelled( ctx )               ) demo_pop( s );
-    vxui_menu_end( ctx );
-}
+    vxui_hud_set_pos( st->hud, 20, 560 );
+    vxui_hud_set_colour( st->hud, { 0.25f, 0.80f, 1.00f, 1.0f } );
+    vxui_hud_resource_bar( st->hud, "showcase_fill", 0, 0.5f + 0.5f * sinf( st->time_seconds ), 440, 14, {} );
 
-static void demo_settings_video( vxui_ctx* ctx, demo_screen_state* s )
-{
-    if ( !vxui_menu( ctx, "settings_video", true, 0, true ) ) return;
-    vxui_menu_option( ctx, "Rotation", &s->rotation, s_demo_rotation, 3 );
-    vxui_menu_option( ctx, "Scaling",  &s->scaling,  s_demo_scaling,  3 );
-    vxui_menu_option( ctx, "Filter",   &s->filter,   s_demo_filter,   4 );
-    vxui_menu_option( ctx, "Show FPS", &s->show_fps, s_demo_off_on,   2 );
-    if ( vxui_menu_action( ctx, "Back" ) ) demo_pop( s );
-    if ( vxui_menu_cancelled( ctx )      ) demo_pop( s );
-    vxui_menu_end( ctx );
-}
+    vxui_hud_set_pos( st->hud, 20, 585 );
+    vxui_hud_set_colour( st->hud, { 0.85f, 0.92f, 1.00f, 1.0f } );
+    vxui_hud_text_box( st->hud, "showcase_hint", "ESC EXIT  UP/DOWN SELECT  LEFT/RIGHT EDIT", 440, 20, 0, 1 );
 
-static void demo_settings_audio( vxui_ctx* ctx, demo_screen_state* s )
-{
-    if ( !vxui_menu( ctx, "settings_audio", true, 0, true ) ) return;
-    vxui_menu_slider( ctx, "Master Volume", &s->master_volume );
-    vxui_menu_slider( ctx, "Music Volume",  &s->music_volume  );
-    vxui_menu_slider( ctx, "SFX Volume",    &s->sfx_volume    );
-    vxui_menu_slider( ctx, "Voice Volume",  &s->voice_volume  );
-    if ( vxui_menu_action( ctx, "Back" ) ) demo_pop( s );
-    if ( vxui_menu_cancelled( ctx )      ) demo_pop( s );
-    vxui_menu_end( ctx );
-}
-
-static void demo_settings_controls( vxui_ctx* ctx, demo_screen_state* s )
-{
-    if ( !vxui_menu( ctx, "settings_controls", true, 0, true ) ) return;
-    vxui_menu_option( ctx, "Controller",   &s->controller,  s_demo_controller, 3 );
-    if ( vxui_menu_action( ctx, "Rebind Controls" ) ) printf( "Rebind\n" );
-    if ( vxui_menu_action( ctx, "Reset Controls"  ) ) printf( "Reset\n"  );
-    vxui_menu_option( ctx, "Input Icons",  &s->input_icons, s_demo_icons,      4 );
-    if ( vxui_menu_action( ctx, "Back" ) ) demo_pop( s );
-    if ( vxui_menu_cancelled( ctx )      ) demo_pop( s );
-    vxui_menu_end( ctx );
-}
-
-static void demo_settings_assist( vxui_ctx* ctx, demo_screen_state* s )
-{
-    if ( !vxui_menu( ctx, "settings_assist", true, 0, true ) ) return;
-    vxui_menu_option( ctx, "Freeplay",       &s->freeplay,      s_demo_off_on, 2 );
-    vxui_menu_option( ctx, "Infinite Ammo",  &s->infinite_ammo, s_demo_off_on, 2 );
-    vxui_menu_option( ctx, "Reduce Bullets", &s->reduce_bullet, s_demo_off_on, 2 );
-    vxui_menu_option( ctx, "Slow Bullets",   &s->slow_bullet,   s_demo_off_on, 2 );
-    vxui_menu_option( ctx, "Auto Shield",    &s->auto_shield,   s_demo_off_on, 2 );
-    if ( vxui_menu_action( ctx, "Back" ) ) demo_pop( s );
-    if ( vxui_menu_cancelled( ctx )      ) demo_pop( s );
-    vxui_menu_end( ctx );
-}
-
-static void demo_archives_menu( vxui_ctx* ctx, demo_screen_state* s )
-{
-    if ( !vxui_menu( ctx, "archives", true, 0, true ) ) return;
-    if ( vxui_menu_action( ctx, "Combat Records"    ) ) printf( "Records\n"   );
-    if ( vxui_menu_action( ctx, "Ship Database"     ) ) printf( "Ships\n"     );
-    if ( vxui_menu_action( ctx, "Enemy Index"       ) ) printf( "Enemies\n"   );
-    if ( vxui_menu_action( ctx, "Music Test"        ) ) printf( "Music\n"     );
-    if ( vxui_menu_action( ctx, "Development Notes" ) ) printf( "Devnotes\n"  );
-    if ( vxui_menu_action( ctx, "Back" ) ) demo_pop( s );
-    if ( vxui_menu_cancelled( ctx )      ) demo_pop( s );
-    vxui_menu_end( ctx );
-}
-
-static void demo_extras_menu( vxui_ctx* ctx, demo_screen_state* s )
-{
-    if ( !vxui_menu( ctx, "extras", true, 0, true ) ) return;
-    if ( vxui_menu_action( ctx, "Credits"         ) ) printf( "Credits\n"     );
-    if ( vxui_menu_action( ctx, "Attract Loop"    ) ) printf( "Attract\n"     );
-    if ( vxui_menu_action( ctx, "Diagnostics"     ) ) printf( "Diagnostics\n" );
-    if ( vxui_menu_action( ctx, "Benchmark Scene" ) ) printf( "Benchmark\n"   );
-    if ( vxui_menu_action( ctx, "Back" ) ) demo_pop( s );
-    if ( vxui_menu_cancelled( ctx )      ) demo_pop( s );
-    vxui_menu_end( ctx );
-}
-
-static void demo_hud( vxui_ctx* ctx, vxui_hud* hud, float t )
-{
-    if ( ( ctx->input & ~ctx->prev_input & VXUI_INPUT_CANCEL ) != 0 ) { vxui_switch( ctx, "menu" ); return; }
-
-    float hp    = 50.0f + 50.0f * sinf( t * 0.5f );
-    int   bombs = ( (int)( t * 0.5f ) ) % 4;
-    int   lives = 3;
-
-    vxui_hud_set_pos     ( hud, 20, 20 );
-    vxui_hud_set_colour  ( hud, { 0.20f, 0.25f, 0.30f, 1.0f } );
-    vxui_hud_resource_bar( hud, "boss_track", 0, 1.0f, 440, 14, {} );
-
-    vxui_hud_set_pos     ( hud, 20, 20 );
-    vxui_hud_set_colour  ( hud, { 0.95f, 0.30f, 0.40f, 1.0f } );
-    vxui_hud_health_bar  ( hud, "boss", 0, hp, 100.0f, 440, 14, {}, true );
-
-    vxui_hud_set_pos       ( hud, 20, 60 );
-    vxui_hud_set_colour    ( hud, { 0.25f, 0.25f, 0.30f, 1.0f } );
-    vxui_hud_resource_stock( hud, "bombs_bg", 0, 3, 32, 32, VXUI_HUD_STOCK_HEX_COL, {}, 4 );
-
-    vxui_hud_set_pos       ( hud, 20, 60 );
-    vxui_hud_set_colour    ( hud, { 0.30f, 0.95f, 1.00f, 1.0f } );
-    vxui_hud_resource_stock( hud, "bombs", 0, bombs, 32, 32, VXUI_HUD_STOCK_HEX_COL, {}, 4 );
-
-    vxui_hud_set_pos       ( hud, 20, 560 );
-    vxui_hud_set_colour    ( hud, { 0.95f, 0.95f, 0.95f, 1.0f } );
-    vxui_hud_resource_stock( hud, "lives", 0, lives, 36, 36, VXUI_HUD_STOCK_ROW, {}, 4 );
-
-    vxui_hud_set_pos   ( hud, 280, 560 );
-    vxui_hud_set_colour( hud, { 0.85f, 0.92f, 1.00f, 1.0f } );
-    vxui_hud_text_box  ( hud, "score", "SCORE 000000", 180, 30, 2, 1 );
-
-    vxui_hud_set_pos   ( hud, 0, 610 );
-    vxui_hud_text_box  ( hud, "exit_hint", "ESC TO EXIT", 480, 20, 1, 1 );
-}
-
-static void demo_dispatch_screen( vxui_ctx* ctx, demo_screen_state* s, GLFWwindow* window )
-{
-    const char* active = s->stack[s->depth - 1];
-    if      ( strcmp( active, "main"              ) == 0 ) demo_main_menu        ( ctx, s, window );
-    else if ( strcmp( active, "operations"        ) == 0 ) demo_operations_menu  ( ctx, s );
-    else if ( strcmp( active, "stageselect"       ) == 0 ) demo_stage_select     ( ctx, s );
-    else if ( strcmp( active, "settings"          ) == 0 ) demo_settings_hub     ( ctx, s );
-    else if ( strcmp( active, "settings_gameplay" ) == 0 ) demo_settings_gameplay( ctx, s );
-    else if ( strcmp( active, "settings_display"  ) == 0 ) demo_settings_display ( ctx, s );
-    else if ( strcmp( active, "settings_video"    ) == 0 ) demo_settings_video   ( ctx, s );
-    else if ( strcmp( active, "settings_audio"    ) == 0 ) demo_settings_audio   ( ctx, s );
-    else if ( strcmp( active, "settings_controls" ) == 0 ) demo_settings_controls( ctx, s );
-    else if ( strcmp( active, "settings_assist"   ) == 0 ) demo_settings_assist  ( ctx, s );
-    else if ( strcmp( active, "archives"          ) == 0 ) demo_archives_menu    ( ctx, s );
-    else if ( strcmp( active, "extras"            ) == 0 ) demo_extras_menu      ( ctx, s );
+    return close;
 }
 
 int main( int /*argc*/, char** /*argv*/ )
@@ -572,7 +237,7 @@ int main( int /*argc*/, char** /*argv*/ )
     glfwWindowHint( GLFW_OPENGL_PROFILE,        GLFW_OPENGL_CORE_PROFILE );
     glfwWindowHint( GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE );
 
-    GLFWwindow* window = glfwCreateWindow( DEMO_WINDOW_W, DEMO_WINDOW_H, "VXUI Demo", nullptr, nullptr );
+    GLFWwindow* window = glfwCreateWindow( DEMO_WINDOW_W, DEMO_WINDOW_H, "VXUI Layout Showcase", nullptr, nullptr );
     if ( !window )
     {
         fprintf( stderr, "demo: glfwCreateWindow failed\n" );
@@ -593,8 +258,7 @@ int main( int /*argc*/, char** /*argv*/ )
     glfwGetFramebufferSize( window, &fb_w, &fb_h );
 
     vxui_ctx ctx = {};
-    vxui_init  ( &ctx, (float) fb_w, (float) fb_h, s_clay_mem, sizeof( s_clay_mem ) );
-    vxui_switch( &ctx, "splash" );
+    vxui_init( &ctx, (float) fb_w, (float) fb_h, s_clay_mem, sizeof( s_clay_mem ) );
 
     std::filesystem::path src_dir   = VXUI_SOURCE_DIR;
     std::filesystem::path font_path = src_dir / "fonts" / "Roboto-Regular.ttf";
@@ -608,18 +272,14 @@ int main( int /*argc*/, char** /*argv*/ )
 
     vxui_gl_init( &ctx );
 
-    demo_screen_state   screen_state;
-    demo_resolver_state resolver_state;
-    vxui_hud            hud = {};
-    resolver_state.panel_id           = vxui_id( "demo_panel"    );
-    resolver_state.frame_id           = vxui_id( "demo_frame"    );
-    resolver_state.bg_id              = vxui_id( "demo_bg"       );
-    resolver_state.logo_id            = vxui_text_id( "demo_logo" );
-    resolver_state.splash_prompt_id   = vxui_text_id( "splash_prompt" );
-    resolver_state.ops_thumb_id = vxui_id( "ops_thumb" );
-    resolver_state.stg_thumb_id = vxui_id( "stg_thumb" );
-    resolver_state.hud                = &hud;
-    vxui_set_render_data_fn( &ctx, demo_render_data, &resolver_state );
+    demo_resolver_state state;
+    vxui_hud hud = {};
+    state.panel_id  = vxui_id( "demo_panel" );
+    state.frame_id  = vxui_id( "demo_frame" );
+    state.bg_id     = vxui_id( "demo_bg" );
+    state.sample_id = vxui_id( "showcase_sample" );
+    state.hud       = &hud;
+    vxui_set_render_data_fn( &ctx, demo_render_data, &state );
 
     static const struct { int key; const char* action; } s_keymap[] = {
         { GLFW_KEY_UP,     "up"      },
@@ -644,14 +304,14 @@ int main( int /*argc*/, char** /*argv*/ )
         glClearColor( 0.02f, 0.02f, 0.03f, 1.0f );
         glClear     ( GL_COLOR_BUFFER_BIT );
 
-        vxui_frame    ( &ctx, 1.0f / 60.0f, (float) DEMO_PORTRAIT_W, (float) DEMO_PORTRAIT_H );
-        vxui_hud_begin( &hud, &ctx,          (float) DEMO_PORTRAIT_W, (float) DEMO_PORTRAIT_H );
+        vxui_frame( &ctx, 1.0f / 60.0f, (float) DEMO_PORTRAIT_W, (float) DEMO_PORTRAIT_H );
+        vxui_hud_begin( &hud, &ctx, (float) DEMO_PORTRAIT_W, (float) DEMO_PORTRAIT_H );
 
         for ( auto& m : s_keymap )
             if ( glfwGetKey( window, m.key ) == GLFW_PRESS )
                 vxui_input( &ctx, m.action );
 
-        resolver_state.time_seconds += 1.0f / 60.0f;
+        if ( state.motion_index ) state.time_seconds += 1.0f / 60.0f;
 
         float scale    = glm::min( (float) fb_w / (float) DEMO_PORTRAIT_W, (float) fb_h / (float) DEMO_PORTRAIT_H );
         float origin_x = ( (float) fb_w - (float) DEMO_PORTRAIT_W * scale ) * 0.5f;
@@ -673,58 +333,26 @@ int main( int /*argc*/, char** /*argv*/ )
         else
             vxui_mouse( &ctx, FLT_MAX, FLT_MAX, 0 );
 
-        if ( vxui_page( &ctx, "gameplay" ) )
-        {
-            demo_hud( &ctx, &hud, resolver_state.time_seconds );
-        }
-        else
-        {
-            vxui_root( &ctx, "demo_root", 0.0f, 0.0f );
-                vxui_rect( &ctx, "demo_bg", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H } } );
+        vxui_root( &ctx, "demo_root", 0.0f, 0.0f );
+            vxui_rect( &ctx, "demo_bg", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H } } );
+            vxui_div_end( &ctx );
+        vxui_root_end( &ctx );
+
+        vxui_root( &ctx, "demo_root2", 0.0f, 0.0f );
+            vxui_rect( &ctx, "demo_frame", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H }, .col = true, .padding = { 18, 18, 18, 18 }, .gap = 8 } );
+                vxui_rect( &ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 14, 14, 14, 14 }, .gap = 6 } );
+                    if ( demo_showcase( &ctx, &state ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
                 vxui_div_end( &ctx );
-            vxui_root_end( &ctx );
-
-            vxui_root( &ctx, "demo_root2", 0.0f, 0.0f );
-                vxui_rect( &ctx, "demo_frame", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H }, .col = true, .padding = { 18, 18, 18, 18 }, .gap = 8 } );
-
-                    if ( vxui_page( &ctx, "splash" ) )
-                    {
-                        demo_splash( &ctx, window );
-                    }
-                    else
-                    {
-                        vxui_rect( &ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 14, 14, 14, 14 }, .gap = 6 } );
-                            demo_dispatch_screen( &ctx, &screen_state, window );
-                        vxui_div_end( &ctx );
-
-                        const char* screen_top = screen_state.depth > 0 ? screen_state.stack[screen_state.depth - 1] : "";
-                        if ( strcmp( screen_top, "operations" ) == 0 )
-                        {
-                            int f = demo_menu_focused( &ctx, "operations" );
-                            if ( f < 0 || f >= DEMO_MISSION_COUNT ) f = 0;
-                            resolver_state.ops_thumb_tint = s_sector_tint[s_demo_missions[f].sector];
-                        }
-
-                        if ( strcmp( screen_top, "stageselect" ) == 0 )
-                        {
-                            int f = demo_menu_focused( &ctx, "stageselect" );
-                            if ( f < 0 || f >= DEMO_SECTOR_COUNT ) f = 0;
-                            resolver_state.stg_thumb_tint = s_sector_tint[f];
-                        }
-                    }
-
-                vxui_div_end( &ctx );
-            vxui_root_end( &ctx );
-        }
+            vxui_div_end( &ctx );
+        vxui_root_end( &ctx );
 
         vxui_draw_list dl = vxui_render( &ctx );
         vxui_gl_render( &ctx, dl, (float) fb_w, (float) fb_h, xf );
-
         glfwSwapBuffers( window );
     }
 
     vxui_gl_shutdown( &ctx );
-    vxui_shutdown   ( &ctx );
+    vxui_shutdown( &ctx );
     glfwDestroyWindow( window );
     glfwTerminate();
     return 0;
