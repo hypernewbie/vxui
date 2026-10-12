@@ -182,7 +182,6 @@ struct demo_resolver_state
     uint32_t        focus_icon_texture  = 0;
     uint32_t        ops_icon[DEMO_MISSION_COUNT] = {};  // texture per ops row; 0 = none
     uint32_t        ops_thumb_id        = 0;
-    uint32_t        ops_thumb_texture   = 0;
     glm::vec4       ops_thumb_tint      = { 1.0f, 1.0f, 1.0f, 1.0f };
     uint32_t        stg_thumb_id        = 0;
     uint32_t        stg_thumb_texture   = 0;
@@ -227,8 +226,16 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         return;
     }
 
-    if ( ( c->id == st->ops_thumb_id && st->ops_thumb_texture != 0 ) ||
-         ( c->id == st->stg_thumb_id && st->stg_thumb_texture != 0 ) )
+    if ( c->id == st->ops_thumb_id )
+    {
+        out->material_id = DEMO_MATERIAL_ROUND;
+        out->params[0]   = 4.0f;
+        out->params[1]   = 1.0f;
+        out->colour      = st->ops_thumb_tint;
+        return;
+    }
+
+    if ( c->id == st->stg_thumb_id && st->stg_thumb_texture != 0 )
     {
         // Center-crop the square test-card texture into the portrait rect.
         // crop_x clips equal amounts from both sides so the image fills
@@ -237,9 +244,9 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         if ( c->rect.z < c->rect.w )
             crop_x = ( 1.0f - c->rect.z / c->rect.w ) * 0.5f;
         out->material_id = DEMO_MATERIAL_IMAGE;
-        out->texture_id  = ( c->id == st->ops_thumb_id ) ? st->ops_thumb_texture : st->stg_thumb_texture;
+        out->texture_id  = st->stg_thumb_texture;
         out->uv          = { crop_x, 0.0f, 1.0f - crop_x, 1.0f };
-        out->colour      = ( c->id == st->ops_thumb_id ) ? st->ops_thumb_tint : st->stg_thumb_tint;
+        out->colour      = st->stg_thumb_tint;
         return;
     }
 
@@ -718,7 +725,6 @@ int main( int /*argc*/, char** /*argv*/ )
         if ( vxui_page( &ctx, "gameplay" ) )
         {
             demo_hud( &ctx, &hud, resolver_state.time_seconds );
-            resolver_state.ops_thumb_texture = 0;
             resolver_state.stg_thumb_texture = 0;
         }
         else
@@ -746,11 +752,8 @@ int main( int /*argc*/, char** /*argv*/ )
                         {
                             int f = demo_menu_focused( &ctx, "operations" );
                             if ( f < 0 || f >= DEMO_MISSION_COUNT ) f = 0;
-                            resolver_state.ops_thumb_texture = assets.testcard;
-                            resolver_state.ops_thumb_tint    = s_sector_tint[s_demo_missions[f].sector];
+                            resolver_state.ops_thumb_tint = s_sector_tint[s_demo_missions[f].sector];
                         }
-                        else
-                            resolver_state.ops_thumb_texture = 0;
 
                         if ( strcmp( screen_top, "stageselect" ) == 0 )
                         {

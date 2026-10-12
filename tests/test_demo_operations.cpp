@@ -44,8 +44,7 @@ static vxui_draw_list operations_frame( vxui_ctx* ctx, demo_screen_state* screen
 
     int focused = demo_menu_focused( ctx, "operations" );
     assert( focused >= 0 && focused < DEMO_MISSION_COUNT );
-    resolver->ops_thumb_texture = 42;
-    resolver->ops_thumb_tint    = s_sector_tint[s_demo_missions[focused].sector];
+    resolver->ops_thumb_tint = s_sector_tint[s_demo_missions[focused].sector];
     return vxui_render( ctx );
 }
 
@@ -67,12 +66,54 @@ UTEST(demo_operations, first_frame_preview_matches_initial_focus) {
     ASSERT_TRUE( text_is( dl, "ops_status", "PERFECT" ) );
     const vxui_draw_cmd* thumb = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "ops_thumb" ) );
     ASSERT_TRUE( thumb );
-    ASSERT_EQ( thumb->render.material_id, (uint32_t) DEMO_MATERIAL_IMAGE );
-    ASSERT_EQ( thumb->render.texture_id, (uint32_t) 42 );
+    ASSERT_EQ( thumb->render.material_id, (uint32_t) DEMO_MATERIAL_ROUND );
+    ASSERT_EQ( thumb->render.texture_id, (uint32_t) 0 );
     ASSERT_EQ( thumb->render.colour.r, s_sector_tint[0].r );
     ASSERT_EQ( thumb->render.colour.g, s_sector_tint[0].g );
     ASSERT_EQ( thumb->render.colour.b, s_sector_tint[0].b );
     ASSERT_EQ( thumb->render.colour.a, s_sector_tint[0].a );
+}
+
+UTEST(demo_operations, every_mission_keeps_the_preview_opaque_and_texture_free) {
+    vxui_ctx ctx;
+    demo_screen_state screen;
+    demo_resolver_state resolver;
+    init_ctx( &ctx, &screen, &resolver );
+    operations_frame( &ctx, &screen, &resolver, 0 );
+
+    for ( int i = 0; i < DEMO_MISSION_COUNT; i++ )
+    {
+        ctx.menu_state[0].y = (uint32_t) i;
+        vxui_draw_list dl = operations_frame( &ctx, &screen, &resolver, 0 );
+        const vxui_draw_cmd* thumb = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "ops_thumb" ) );
+        ASSERT_TRUE( thumb );
+        ASSERT_EQ( thumb->render.material_id, (uint32_t) DEMO_MATERIAL_ROUND );
+        ASSERT_EQ( thumb->render.texture_id, (uint32_t) 0 );
+        ASSERT_EQ( thumb->render.params[0], 4.0f );
+        ASSERT_EQ( thumb->render.params[1], 1.0f );
+        ASSERT_EQ( thumb->render.colour.r, s_sector_tint[s_demo_missions[i].sector].r );
+        ASSERT_EQ( thumb->render.colour.g, s_sector_tint[s_demo_missions[i].sector].g );
+        ASSERT_EQ( thumb->render.colour.b, s_sector_tint[s_demo_missions[i].sector].b );
+        ASSERT_EQ( thumb->render.colour.a, 1.0f );
+        ASSERT_EQ( thumb->rect.x, 284.0f );
+        ASSERT_EQ( thumb->rect.y, 38.0f );
+        ASSERT_EQ( thumb->rect.z, 158.0f );
+        ASSERT_EQ( thumb->rect.w, 200.0f );
+
+        if ( i == 0 )
+        {
+            ve_fontcache_drawlist fdl = {};
+            vxui_gl_state gl = {};
+            vxui_gl_emit_one_rect( &fdl, &gl, thumb, thumb->rect.x, thumb->rect.y, DEMO_PORTRAIT_W, DEMO_PORTRAIT_H, {} );
+            ASSERT_EQ( fdl.dcalls.size(), (size_t) 1 );
+            ASSERT_EQ( fdl.dcalls[0].pass, DEMO_GL_PASS_ROUND );
+            ASSERT_EQ( gl.material_data_count, 1 );
+            ASSERT_EQ( gl.material_data[0].params[0], 4.0f );
+            ASSERT_EQ( gl.material_data[0].params[1], 158.0f );
+            ASSERT_EQ( gl.material_data[0].params[2], 200.0f );
+            ASSERT_EQ( gl.material_data[0].params[3], 1.0f );
+        }
+    }
 }
 
 UTEST(demo_operations, first_frame_down_does_not_navigate_without_row_count) {
@@ -106,8 +147,8 @@ UTEST(demo_operations, down_updates_preview_text_and_tint_in_same_frame) {
     ASSERT_TRUE( text_is( dl, "ops_status", "CLEARED" ) );
     const vxui_draw_cmd* thumb = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "ops_thumb" ) );
     ASSERT_TRUE( thumb );
-    ASSERT_EQ( thumb->render.material_id, (uint32_t) DEMO_MATERIAL_IMAGE );
-    ASSERT_EQ( thumb->render.texture_id, (uint32_t) 42 );
+    ASSERT_EQ( thumb->render.material_id, (uint32_t) DEMO_MATERIAL_ROUND );
+    ASSERT_EQ( thumb->render.texture_id, (uint32_t) 0 );
     ASSERT_EQ( thumb->render.colour.r, s_sector_tint[1].r );
     ASSERT_EQ( thumb->render.colour.g, s_sector_tint[1].g );
     ASSERT_EQ( thumb->render.colour.b, s_sector_tint[1].b );
