@@ -28,7 +28,6 @@ void     vxui_gl_shutdown( vxui_ctx* ctx );
 uint32_t vxui_gl_create_chevron_texture();
 uint32_t vxui_gl_create_lock_texture();
 uint32_t vxui_gl_create_warning_texture();
-uint32_t vxui_gl_create_testcard_texture();
 
 #endif // VXUI_DEMO_RENDER_GL_H
 
@@ -421,36 +420,6 @@ uint32_t vxui_gl_create_warning_texture()
     glGenTextures( 1, &tex );
     glBindTexture( GL_TEXTURE_2D, tex );
     glTexImage2D( GL_TEXTURE_2D, 0, GL_R8, 32, 32, 0, GL_RED, GL_UNSIGNED_BYTE, pixels );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-    glBindTexture( GL_TEXTURE_2D, 0 );
-    return (uint32_t) tex;
-}
-
-uint32_t vxui_gl_create_testcard_texture()
-{
-    uint8_t pixels[64 * 64 * 4] = {};
-    for ( int y = 0; y < 64; y++ )
-    {
-        for ( int x = 0; x < 64; x++ )
-        {
-            float   g    = ( x + y ) / 126.0f;                    // diagonal gradient, 0..1
-            bool    grid = ( x % 8 == 0 ) || ( y % 8 == 0 );      // 8px grid lines
-            uint8_t v    = grid ? 255 : (uint8_t) ( 40.0f + g * 180.0f );
-            int     i    = ( y * 64 + x ) * 4;
-            pixels[i + 0] = v;
-            pixels[i + 1] = v;
-            pixels[i + 2] = v;
-            pixels[i + 3] = 255;
-        }
-    }
-
-    GLuint tex = 0;
-    glGenTextures( 1, &tex );
-    glBindTexture( GL_TEXTURE_2D, tex );
-    glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels );
     glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE );
     glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE );
     glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );

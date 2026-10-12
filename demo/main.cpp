@@ -118,9 +118,8 @@ static const glm::vec4 s_sector_tint[] = {
 
 struct demo_assets
 {
-    uint32_t lock     = 0;
-    uint32_t warning  = 0;
-    uint32_t testcard = 0;
+    uint32_t lock    = 0;
+    uint32_t warning = 0;
 };
 
 struct demo_screen_state
@@ -184,7 +183,6 @@ struct demo_resolver_state
     uint32_t        ops_thumb_id        = 0;
     glm::vec4       ops_thumb_tint      = { 1.0f, 1.0f, 1.0f, 1.0f };
     uint32_t        stg_thumb_id        = 0;
-    uint32_t        stg_thumb_texture   = 0;
     glm::vec4       stg_thumb_tint      = { 1.0f, 1.0f, 1.0f, 1.0f };
     float           time_seconds        = 0;
     const demo_assets* assets           = nullptr;
@@ -226,27 +224,12 @@ static void demo_render_data( const vxui_draw_cmd* c, vxui_render_data* out, voi
         return;
     }
 
-    if ( c->id == st->ops_thumb_id )
+    if ( c->id == st->ops_thumb_id || c->id == st->stg_thumb_id )
     {
         out->material_id = DEMO_MATERIAL_ROUND;
         out->params[0]   = 4.0f;
         out->params[1]   = 1.0f;
-        out->colour      = st->ops_thumb_tint;
-        return;
-    }
-
-    if ( c->id == st->stg_thumb_id && st->stg_thumb_texture != 0 )
-    {
-        // Center-crop the square test-card texture into the portrait rect.
-        // crop_x clips equal amounts from both sides so the image fills
-        // the rect without stretching.
-        float crop_x = 0.0f;
-        if ( c->rect.z < c->rect.w )
-            crop_x = ( 1.0f - c->rect.z / c->rect.w ) * 0.5f;
-        out->material_id = DEMO_MATERIAL_IMAGE;
-        out->texture_id  = st->stg_thumb_texture;
-        out->uv          = { crop_x, 0.0f, 1.0f - crop_x, 1.0f };
-        out->colour      = st->stg_thumb_tint;
+        out->colour      = c->id == st->ops_thumb_id ? st->ops_thumb_tint : st->stg_thumb_tint;
         return;
     }
 
@@ -644,9 +627,8 @@ int main( int /*argc*/, char** /*argv*/ )
     vxui_gl_init( &ctx );
 
     demo_assets assets = {};
-    assets.lock     = vxui_gl_create_lock_texture();
-    assets.warning  = vxui_gl_create_warning_texture();
-    assets.testcard = vxui_gl_create_testcard_texture();
+    assets.lock    = vxui_gl_create_lock_texture();
+    assets.warning = vxui_gl_create_warning_texture();
 
     demo_screen_state   screen_state;
     demo_resolver_state resolver_state;
@@ -725,7 +707,6 @@ int main( int /*argc*/, char** /*argv*/ )
         if ( vxui_page( &ctx, "gameplay" ) )
         {
             demo_hud( &ctx, &hud, resolver_state.time_seconds );
-            resolver_state.stg_thumb_texture = 0;
         }
         else
         {
@@ -759,11 +740,8 @@ int main( int /*argc*/, char** /*argv*/ )
                         {
                             int f = demo_menu_focused( &ctx, "stageselect" );
                             if ( f < 0 || f >= DEMO_SECTOR_COUNT ) f = 0;
-                            resolver_state.stg_thumb_texture = assets.testcard;
-                            resolver_state.stg_thumb_tint    = s_sector_tint[f];
+                            resolver_state.stg_thumb_tint = s_sector_tint[f];
                         }
-                        else
-                            resolver_state.stg_thumb_texture = 0;
                     }
 
                 vxui_div_end( &ctx );
