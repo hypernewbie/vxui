@@ -169,7 +169,7 @@ static int demo_menu_focused( vxui_ctx* ctx, const char* name )
     return 0;
 }
 
-static bool demo_showcase( vxui_ctx* ctx, demo_resolver_state* st )
+static bool demo_showcase( vxui_ctx* ctx, demo_resolver_state* st, float dt )
 {
     bool close = false;
 
@@ -187,6 +187,8 @@ static bool demo_showcase( vxui_ctx* ctx, demo_resolver_state* st )
                 vxui_menu_end( ctx );
             }
         vxui_div_end( ctx );
+
+        if ( st->motion_index ) st->time_seconds += dt;
 
         int focused = demo_menu_focused( ctx, "showcase" );
         st->selected = focused >= DEMO_SHOWCASE_CONTROL_COUNT ? focused - DEMO_SHOWCASE_CONTROL_COUNT : 0;
@@ -295,23 +297,25 @@ int main( int /*argc*/, char** /*argv*/ )
         { GLFW_KEY_ESCAPE, "cancel"  },
     };
 
+    double previous_time = glfwGetTime();
     while ( !glfwWindowShouldClose( window ) )
     {
         glfwPollEvents();
+        double now        = glfwGetTime();
+        float  dt         = (float) ( now - previous_time );
+        previous_time     = now;
         glfwGetFramebufferSize( window, &fb_w, &fb_h );
 
         glViewport  ( 0, 0, fb_w, fb_h );
         glClearColor( 0.02f, 0.02f, 0.03f, 1.0f );
         glClear     ( GL_COLOR_BUFFER_BIT );
 
-        vxui_frame( &ctx, 1.0f / 60.0f, (float) DEMO_PORTRAIT_W, (float) DEMO_PORTRAIT_H );
+        vxui_frame( &ctx, dt, (float) DEMO_PORTRAIT_W, (float) DEMO_PORTRAIT_H );
         vxui_hud_begin( &hud, &ctx, (float) DEMO_PORTRAIT_W, (float) DEMO_PORTRAIT_H );
 
         for ( auto& m : s_keymap )
             if ( glfwGetKey( window, m.key ) == GLFW_PRESS )
                 vxui_input( &ctx, m.action );
-
-        if ( state.motion_index ) state.time_seconds += 1.0f / 60.0f;
 
         float scale    = glm::min( (float) fb_w / (float) DEMO_PORTRAIT_W, (float) fb_h / (float) DEMO_PORTRAIT_H );
         float origin_x = ( (float) fb_w - (float) DEMO_PORTRAIT_W * scale ) * 0.5f;
@@ -341,7 +345,7 @@ int main( int /*argc*/, char** /*argv*/ )
         vxui_root( &ctx, "demo_root2", 0.0f, 0.0f );
             vxui_rect( &ctx, "demo_frame", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H }, .col = true, .padding = { 18, 18, 18, 18 }, .gap = 8 } );
                 vxui_rect( &ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 14, 14, 14, 14 }, .gap = 6 } );
-                    if ( demo_showcase( &ctx, &state ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
+                    if ( demo_showcase( &ctx, &state, dt ) ) glfwSetWindowShouldClose( window, GLFW_TRUE );
                 vxui_div_end( &ctx );
             vxui_div_end( &ctx );
         vxui_root_end( &ctx );

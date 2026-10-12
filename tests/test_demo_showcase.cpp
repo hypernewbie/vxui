@@ -41,7 +41,7 @@ static bool showcase_frame( vxui_ctx* ctx, demo_resolver_state* state, uint32_t 
     vxui_hud_begin( state->hud, ctx, (float) DEMO_PORTRAIT_W, (float) DEMO_PORTRAIT_H );
     vxui_rect( ctx, "demo_frame", { .width = { VXUI_FIXED, DEMO_PORTRAIT_W }, .height = { VXUI_FIXED, DEMO_PORTRAIT_H }, .col = true, .padding = { 18, 18, 18, 18 }, .gap = 8 } );
         vxui_rect( ctx, "demo_panel", { .width = { VXUI_GROW, 0 }, .height = { VXUI_GROW, 0 }, .col = true, .padding = { 14, 14, 14, 14 }, .gap = 6 } );
-            bool close = demo_showcase( ctx, state );
+            bool close = demo_showcase( ctx, state, dt );
         vxui_div_end( ctx );
     vxui_div_end( ctx );
     *dl = vxui_render( ctx );
@@ -337,6 +337,96 @@ UTEST(demo_showcase, intensity_slider_changes_the_crt_sample) {
     ASSERT_TRUE( sample );
     ASSERT_NEAR( state.intensity, 0.40f, 1e-6f );
     ASSERT_NEAR( sample->render.params[1], 0.40f, 1e-6f );
+}
+
+UTEST(demo_showcase, equal_elapsed_time_matches_at_30_60_and_120_hz) {
+    vxui_ctx ctx;
+    demo_resolver_state state;
+    vxui_hud hud;
+    init_ctx( &ctx, &state, &hud );
+    vxui_draw_list dl = {};
+    for ( int i = 0; i < 30; i++ ) showcase_frame( &ctx, &state, 0, 1.0f / 30.0f, &dl );
+    float at_30 = state.time_seconds;
+
+    init_ctx( &ctx, &state, &hud );
+    for ( int i = 0; i < 60; i++ ) showcase_frame( &ctx, &state, 0, 1.0f / 60.0f, &dl );
+    float at_60 = state.time_seconds;
+
+    init_ctx( &ctx, &state, &hud );
+    for ( int i = 0; i < 120; i++ ) showcase_frame( &ctx, &state, 0, 1.0f / 120.0f, &dl );
+    float at_120 = state.time_seconds;
+
+    ASSERT_NEAR( at_30, 1.0f, 1e-5f );
+    ASSERT_NEAR( at_60, 1.0f, 1e-5f );
+    ASSERT_NEAR( at_120, 1.0f, 1e-5f );
+}
+
+UTEST(demo_showcase, motion_off_freezes_crt_time_and_geometric_fill) {
+    vxui_ctx ctx;
+    demo_resolver_state state;
+    vxui_hud hud;
+    init_ctx( &ctx, &state, &hud );
+    state.motion_index  = 0;
+    state.material_index = 2;
+    state.time_seconds   = 0.75f;
+    vxui_draw_list dl = {};
+    showcase_frame( &ctx, &state, 0, 0.25f, &dl );
+    const vxui_draw_cmd* sample = vxui_draw_find( dl, VXUI_DRAW_RECT, state.sample_id );
+    const vxui_draw_cmd* fill = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "showcase_fill" ) );
+    ASSERT_TRUE( sample && fill );
+    ASSERT_EQ( state.time_seconds, 0.75f );
+    ASSERT_EQ( sample->render.params[0], 0.75f );
+    ASSERT_NEAR( fill->rect.z, 440.0f * ( 0.5f + 0.5f * sinf( 0.75f ) ), 1e-4f );
+    ASSERT_EQ( fill->rect.w, 14.0f );
+    ASSERT_EQ( fill->render.texture_id, (uint32_t) 0 );
+
+    float width = fill->rect.z;
+    showcase_frame( &ctx, &state, 0, 0.5f, &dl );
+    fill = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "showcase_fill" ) );
+    ASSERT_TRUE( fill );
+    ASSERT_EQ( state.time_seconds, 0.75f );
+    ASSERT_EQ( fill->rect.z, width );
+}
+
+UTEST(demo_showcase, motion_off_keeps_menu_input_and_focus_spring_active) {
+    vxui_ctx ctx;
+    demo_resolver_state state;
+    vxui_hud hud;
+    init_ctx( &ctx, &state, &hud );
+    state.motion_index = 0;
+    vxui_draw_list dl = {};
+    showcase_frame( &ctx, &state, 0, 1.0f / 60.0f, &dl );
+    showcase_frame( &ctx, &state, VXUI_INPUT_DOWN, 1.0f / 60.0f, &dl );
+    const vxui_draw_cmd* row = menu_row( dl, 1 );
+    ASSERT_TRUE( row );
+    float offset = row->focus_offset_y;
+    ASSERT_NE( offset, 0.0f );
+
+    for ( int i = 0; i < 8; i++ ) showcase_frame( &ctx, &state, 0, 0.1f, &dl );
+    row = menu_row( dl, 1 );
+    ASSERT_TRUE( row );
+    ASSERT_EQ( ctx.menu_state[0].y, (uint32_t) 1 );
+    ASSERT_LT( fabsf( row->focus_offset_y ), fabsf( offset ) );
+    ASSERT_EQ( state.time_seconds, 0.0f );
+}
+
+UTEST(demo_showcase, motion_time_reaches_crt_and_the_fill_in_the_same_frame) {
+    vxui_ctx ctx;
+    demo_resolver_state state;
+    vxui_hud hud;
+    init_ctx( &ctx, &state, &hud );
+    state.material_index = 2;
+    vxui_draw_list dl = {};
+    showcase_frame( &ctx, &state, 0, 0.25f, &dl );
+
+    const vxui_draw_cmd* sample = vxui_draw_find( dl, VXUI_DRAW_RECT, state.sample_id );
+    const vxui_draw_cmd* fill = vxui_draw_find( dl, VXUI_DRAW_RECT, vxui_id( "showcase_fill" ) );
+    ASSERT_TRUE( sample && fill );
+    ASSERT_EQ( state.time_seconds, 0.25f );
+    ASSERT_EQ( sample->render.params[0], 0.25f );
+    ASSERT_NEAR( fill->rect.z, 440.0f * ( 0.5f + 0.5f * sinf( 0.25f ) ), 1e-4f );
+    ASSERT_GE( fill->rect.z, 0.0f );
+    ASSERT_LE( fill->rect.z, 440.0f );
 }
 
 UTEST(demo_showcase, cancel_requests_application_close) {
